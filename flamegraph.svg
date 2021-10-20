@@ -1,0 +1,419 @@
+<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg version="1.1" width="1200" height="678" onload="init(evt)" viewBox="0 0 1200 678" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><!--Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples.--><!--NOTES: --><defs><linearGradient id="background" y1="0" y2="1" x1="0" x2="0"><stop stop-color="#eeeeee" offset="5%"/><stop stop-color="#eeeeb0" offset="95%"/></linearGradient></defs><style type="text/css">
+text { font-family:"Verdana"; font-size:12px; fill:rgb(0,0,0); }
+#title { text-anchor:middle; font-size:17px; }
+#search { opacity:0.1; cursor:pointer; }
+#search:hover, #search.show { opacity:1; }
+#subtitle { text-anchor:middle; font-color:rgb(160,160,160); }
+#unzoom { cursor:pointer; }
+#frames > *:hover { stroke:black; stroke-width:0.5; cursor:pointer; }
+.hide { display:none; }
+.parent { opacity:0.5; }
+</style><script type="text/ecmascript"><![CDATA[var nametype = 'Function:';
+var fontsize = 12;
+var fontwidth = 0.59;
+var xpad = 10;
+var inverted = false;
+var searchcolor = 'rgb(230,0,230)';
+var fluiddrawing = true;
+var truncate_text_right = false;]]><![CDATA["use strict";
+var details, searchbtn, unzoombtn, matchedtxt, svg, searching, frames;
+function init(evt) {
+    details = document.getElementById("details").firstChild;
+    searchbtn = document.getElementById("search");
+    unzoombtn = document.getElementById("unzoom");
+    matchedtxt = document.getElementById("matched");
+    svg = document.getElementsByTagName("svg")[0];
+    frames = document.getElementById("frames");
+    searching = 0;
+
+    // Use GET parameters to restore a flamegraph's state.
+    var restore_state = function() {
+        var params = get_params();
+        if (params.x && params.y)
+            zoom(find_group(document.querySelector('[x="' + params.x + '"][y="' + params.y + '"]')));
+        if (params.s)
+            search(params.s);
+    };
+
+    if (fluiddrawing) {
+        // Make width dynamic so the SVG fits its parent's width.
+        svg.removeAttribute("width");
+        // Edge requires us to have a viewBox that gets updated with size changes.
+        var isEdge = /Edge\/\d./i.test(navigator.userAgent);
+        if (!isEdge) {
+          svg.removeAttribute("viewBox");
+        }
+        var update_for_width_change = function() {
+            if (isEdge) {
+                svg.attributes.viewBox.value = "0 0 " + svg.width.baseVal.value + " " + svg.height.baseVal.value;
+            }
+
+            // Keep consistent padding on left and right of frames container.
+            frames.attributes.width.value = svg.width.baseVal.value - xpad * 2;
+
+            // Text truncation needs to be adjusted for the current width.
+            var el = frames.children;
+            for(var i = 0; i < el.length; i++) {
+                update_text(el[i]);
+            }
+
+            // Keep search elements at a fixed distance from right edge.
+            var svgWidth = svg.width.baseVal.value;
+            searchbtn.attributes.x.value = svgWidth - xpad - 100;
+            matchedtxt.attributes.x.value = svgWidth - xpad - 100;
+        };
+        window.addEventListener('resize', function() {
+            update_for_width_change();
+        });
+        // This needs to be done asynchronously for Safari to work.
+        setTimeout(function() {
+            unzoom();
+            update_for_width_change();
+            restore_state();
+        }, 0);
+    } else {
+        restore_state();
+    }
+}
+// event listeners
+window.addEventListener("click", function(e) {
+    var target = find_group(e.target);
+    if (target) {
+        if (target.nodeName == "a") {
+            if (e.ctrlKey === false) return;
+            e.preventDefault();
+        }
+        if (target.classList.contains("parent")) unzoom();
+        zoom(target);
+
+        // set parameters for zoom state
+        var el = target.querySelector("rect");
+        if (el && el.attributes && el.attributes.y && el.attributes._orig_x) {
+            var params = get_params()
+            params.x = el.attributes._orig_x.value;
+            params.y = el.attributes.y.value;
+            history.replaceState(null, null, parse_params(params));
+        }
+    }
+    else if (e.target.id == "unzoom") {
+        unzoom();
+
+        // remove zoom state
+        var params = get_params();
+        if (params.x) delete params.x;
+        if (params.y) delete params.y;
+        history.replaceState(null, null, parse_params(params));
+    }
+    else if (e.target.id == "search") search_prompt();
+}, false)
+// mouse-over for info
+// show
+window.addEventListener("mouseover", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = nametype + " " + g_to_text(target);
+}, false)
+// clear
+window.addEventListener("mouseout", function(e) {
+    var target = find_group(e.target);
+    if (target) details.nodeValue = ' ';
+}, false)
+// ctrl-F for search
+window.addEventListener("keydown",function (e) {
+    if (e.keyCode === 114 || (e.ctrlKey && e.keyCode === 70)) {
+        e.preventDefault();
+        search_prompt();
+    }
+}, false)
+// functions
+function get_params() {
+    var params = {};
+    var paramsarr = window.location.search.substr(1).split('&');
+    for (var i = 0; i < paramsarr.length; ++i) {
+        var tmp = paramsarr[i].split("=");
+        if (!tmp[0] || !tmp[1]) continue;
+        params[tmp[0]]  = decodeURIComponent(tmp[1]);
+    }
+    return params;
+}
+function parse_params(params) {
+    var uri = "?";
+    for (var key in params) {
+        uri += key + '=' + encodeURIComponent(params[key]) + '&';
+    }
+    if (uri.slice(-1) == "&")
+        uri = uri.substring(0, uri.length - 1);
+    if (uri == '?')
+        uri = window.location.href.split('?')[0];
+    return uri;
+}
+function find_child(node, selector) {
+    var children = node.querySelectorAll(selector);
+    if (children.length) return children[0];
+    return;
+}
+function find_group(node) {
+    var parent = node.parentElement;
+    if (!parent) return;
+    if (parent.id == "frames") return node;
+    return find_group(parent);
+}
+function orig_save(e, attr, val) {
+    if (e.attributes["_orig_" + attr] != undefined) return;
+    if (e.attributes[attr] == undefined) return;
+    if (val == undefined) val = e.attributes[attr].value;
+    e.setAttribute("_orig_" + attr, val);
+}
+function orig_load(e, attr) {
+    if (e.attributes["_orig_"+attr] == undefined) return;
+    e.attributes[attr].value = e.attributes["_orig_" + attr].value;
+    e.removeAttribute("_orig_" + attr);
+}
+function g_to_text(e) {
+    var text = find_child(e, "title").firstChild.nodeValue;
+    return (text)
+}
+function g_to_func(e) {
+    var func = g_to_text(e);
+    // if there's any manipulation we want to do to the function
+    // name before it's searched, do it here before returning.
+    return (func);
+}
+function update_text(e) {
+    var r = find_child(e, "rect");
+    var t = find_child(e, "text");
+    var w = parseFloat(r.attributes.width.value) * frames.attributes.width.value / 100 - 3;
+    var txt = find_child(e, "title").textContent.replace(/\([^(]*\)$/,"");
+    t.attributes.x.value = format_percent((parseFloat(r.attributes.x.value) + (100 * 3 / frames.attributes.width.value)));
+    // Smaller than this size won't fit anything
+    if (w < 2 * fontsize * fontwidth) {
+        t.textContent = "";
+        return;
+    }
+    t.textContent = txt;
+    // Fit in full text width
+    if (/^ *\$/.test(txt) || t.getComputedTextLength() < w)
+        return;
+    if (truncate_text_right) {
+        // Truncate the right side of the text.
+        for (var x = txt.length - 2; x > 0; x--) {
+            if (t.getSubStringLength(0, x + 2) <= w) {
+                t.textContent = txt.substring(0, x) + "..";
+                return;
+            }
+        }
+    } else {
+        // Truncate the left side of the text.
+        for (var x = 2; x < txt.length; x++) {
+            if (t.getSubStringLength(x - 2, txt.length) <= w) {
+                t.textContent = ".." + txt.substring(x, txt.length);
+                return;
+            }
+        }
+    }
+    t.textContent = "";
+}
+// zoom
+function zoom_reset(e) {
+    if (e.attributes != undefined) {
+        orig_load(e, "x");
+        orig_load(e, "width");
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_reset(c[i]);
+    }
+}
+function zoom_child(e, x, ratio) {
+    if (e.attributes != undefined) {
+        if (e.attributes.x != undefined) {
+            orig_save(e, "x");
+            e.attributes.x.value = format_percent((parseFloat(e.attributes.x.value) - x) * ratio);
+            if (e.tagName == "text") {
+                e.attributes.x.value = format_percent(parseFloat(find_child(e.parentNode, "rect[x]").attributes.x.value) + (100 * 3 / frames.attributes.width.value));
+            }
+        }
+        if (e.attributes.width != undefined) {
+            orig_save(e, "width");
+            e.attributes.width.value = format_percent(parseFloat(e.attributes.width.value) * ratio);
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_child(c[i], x, ratio);
+    }
+}
+function zoom_parent(e) {
+    if (e.attributes) {
+        if (e.attributes.x != undefined) {
+            orig_save(e, "x");
+            e.attributes.x.value = "0.0%";
+        }
+        if (e.attributes.width != undefined) {
+            orig_save(e, "width");
+            e.attributes.width.value = "100.0%";
+        }
+    }
+    if (e.childNodes == undefined) return;
+    for(var i = 0, c = e.childNodes; i < c.length; i++) {
+        zoom_parent(c[i]);
+    }
+}
+function zoom(node) {
+    var attr = find_child(node, "rect").attributes;
+    var width = parseFloat(attr.width.value);
+    var xmin = parseFloat(attr.x.value);
+    var xmax = xmin + width;
+    var ymin = parseFloat(attr.y.value);
+    var ratio = 100 / width;
+    // XXX: Workaround for JavaScript float issues (fix me)
+    var fudge = 0.001;
+    unzoombtn.classList.remove("hide");
+    var el = frames.children;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var a = find_child(e, "rect").attributes;
+        var ex = parseFloat(a.x.value);
+        var ew = parseFloat(a.width.value);
+        // Is it an ancestor
+        if (!inverted) {
+            var upstack = parseFloat(a.y.value) > ymin;
+        } else {
+            var upstack = parseFloat(a.y.value) < ymin;
+        }
+        if (upstack) {
+            // Direct ancestor
+            if (ex <= xmin && (ex+ew+fudge) >= xmax) {
+                e.classList.add("parent");
+                zoom_parent(e);
+                update_text(e);
+            }
+            // not in current path
+            else
+                e.classList.add("hide");
+        }
+        // Children maybe
+        else {
+            // no common path
+            if (ex < xmin || ex + fudge >= xmax) {
+                e.classList.add("hide");
+            }
+            else {
+                zoom_child(e, xmin, ratio);
+                update_text(e);
+            }
+        }
+    }
+}
+function unzoom() {
+    unzoombtn.classList.add("hide");
+    var el = frames.children;
+    for(var i = 0; i < el.length; i++) {
+        el[i].classList.remove("parent");
+        el[i].classList.remove("hide");
+        zoom_reset(el[i]);
+        update_text(el[i]);
+    }
+}
+// search
+function reset_search() {
+    var el = document.querySelectorAll("#frames rect");
+    for (var i = 0; i < el.length; i++) {
+        orig_load(el[i], "fill")
+    }
+    var params = get_params();
+    delete params.s;
+    history.replaceState(null, null, parse_params(params));
+}
+function search_prompt() {
+    if (!searching) {
+        var term = prompt("Enter a search term (regexp " +
+            "allowed, eg: ^ext4_)", "");
+        if (term != null) {
+            search(term)
+        }
+    } else {
+        reset_search();
+        searching = 0;
+        searchbtn.classList.remove("show");
+        searchbtn.firstChild.nodeValue = "Search"
+        matchedtxt.classList.add("hide");
+        matchedtxt.firstChild.nodeValue = ""
+    }
+}
+function search(term) {
+    var re = new RegExp(term);
+    var el = frames.children;
+    var matches = new Object();
+    var maxwidth = 0;
+    for (var i = 0; i < el.length; i++) {
+        var e = el[i];
+        var func = g_to_func(e);
+        var rect = find_child(e, "rect");
+        if (func == null || rect == null)
+            continue;
+        // Save max width. Only works as we have a root frame
+        var w = parseFloat(rect.attributes.width.value);
+        if (w > maxwidth)
+            maxwidth = w;
+        if (func.match(re)) {
+            // highlight
+            var x = parseFloat(rect.attributes.x.value);
+            orig_save(rect, "fill");
+            rect.attributes.fill.value = searchcolor;
+            // remember matches
+            if (matches[x] == undefined) {
+                matches[x] = w;
+            } else {
+                if (w > matches[x]) {
+                    // overwrite with parent
+                    matches[x] = w;
+                }
+            }
+            searching = 1;
+        }
+    }
+    if (!searching)
+        return;
+    var params = get_params();
+    params.s = term;
+    history.replaceState(null, null, parse_params(params));
+
+    searchbtn.classList.add("show");
+    searchbtn.firstChild.nodeValue = "Reset Search";
+    // calculate percent matched, excluding vertical overlap
+    var count = 0;
+    var lastx = -1;
+    var lastw = 0;
+    var keys = Array();
+    for (k in matches) {
+        if (matches.hasOwnProperty(k))
+            keys.push(k);
+    }
+    // sort the matched frames by their x location
+    // ascending, then width descending
+    keys.sort(function(a, b){
+        return a - b;
+    });
+    // Step through frames saving only the biggest bottom-up frames
+    // thanks to the sort order. This relies on the tree property
+    // where children are always smaller than their parents.
+    var fudge = 0.0001;    // JavaScript floating point
+    for (var k in keys) {
+        var x = parseFloat(keys[k]);
+        var w = matches[keys[k]];
+        if (x >= lastx + lastw - fudge) {
+            count += w;
+            lastx = x;
+            lastw = w;
+        }
+    }
+    // display matched percent
+    matchedtxt.classList.remove("hide");
+    var pct = 100 * count / maxwidth;
+    if (pct != 100) pct = pct.toFixed(1);
+    matchedtxt.firstChild.nodeValue = "Matched: " + pct + "%";
+}
+function format_percent(n) {
+    return n.toFixed(4) + "%";
+}
+]]></script><rect x="0" y="0" width="100%" height="678" fill="url(#background)"/><text id="title" x="50.0000%" y="24.00">Flame Graph</text><text id="details" x="10" y="661.00"> </text><text id="unzoom" class="hide" x="10" y="24.00">Reset Zoom</text><text id="search" x="1090" y="24.00">Search</text><text id="matched" x="1090" y="661.00"> </text><svg id="frames" x="10" width="1180"><g><title>&lt;&amp;str as std::ffi::c_str::CString::new::SpecIntoVec&gt;::into_vec (17 samples, 0.17%)</title><rect x="0.0000%" y="581" width="0.1665%" height="15" fill="rgb(227,0,7)"/><text x="0.2500%" y="591.50"></text></g><g><title>&lt;cgmath::matrix::Matrix4&lt;S&gt; as core::ops::arith::Mul&gt;::mul (24 samples, 0.23%)</title><rect x="0.1665%" y="581" width="0.2350%" height="15" fill="rgb(217,0,24)"/><text x="0.4165%" y="591.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (58 samples, 0.57%)</title><rect x="0.4210%" y="581" width="0.5679%" height="15" fill="rgb(221,193,54)"/><text x="0.6710%" y="591.50"></text></g><g><title>_int_free (20 samples, 0.20%)</title><rect x="0.9987%" y="581" width="0.1958%" height="15" fill="rgb(248,212,6)"/><text x="1.2487%" y="591.50"></text></g><g><title>rtx::engine::rendering::Renderer2D::run (37 samples, 0.36%)</title><rect x="1.3708%" y="581" width="0.3623%" height="15" fill="rgb(208,68,35)"/><text x="1.6208%" y="591.50"></text></g><g><title>rtx::engine::rendering::Renderer2D::drawQuad (14 samples, 0.14%)</title><rect x="1.5960%" y="565" width="0.1371%" height="15" fill="rgb(232,128,0)"/><text x="1.8460%" y="575.50"></text></g><g><title>std::ffi::c_str::CString::_new (17 samples, 0.17%)</title><rect x="1.7331%" y="581" width="0.1665%" height="15" fill="rgb(207,160,47)"/><text x="1.9831%" y="591.50"></text></g><g><title>[[heap]] (232 samples, 2.27%)</title><rect x="0.0000%" y="597" width="2.2716%" height="15" fill="rgb(228,23,34)"/><text x="0.2500%" y="607.50">[..</text></g><g><title>std::ffi::c_str::CString::from_vec_unchecked (38 samples, 0.37%)</title><rect x="1.8995%" y="581" width="0.3721%" height="15" fill="rgb(218,30,26)"/><text x="2.1495%" y="591.50"></text></g><g><title>__GI___libc_malloc (17 samples, 0.17%)</title><rect x="2.3793%" y="581" width="0.1665%" height="15" fill="rgb(220,122,19)"/><text x="2.6293%" y="591.50"></text></g><g><title>[[stack]] (48 samples, 0.47%)</title><rect x="2.2716%" y="597" width="0.4700%" height="15" fill="rgb(250,228,42)"/><text x="2.5216%" y="607.50"></text></g><g><title>rtx::engine::rendering::Renderer2D::run (20 samples, 0.20%)</title><rect x="2.5458%" y="581" width="0.1958%" height="15" fill="rgb(240,193,28)"/><text x="2.7958%" y="591.50"></text></g><g><title>[anon] (14 samples, 0.14%)</title><rect x="2.7416%" y="597" width="0.1371%" height="15" fill="rgb(216,20,37)"/><text x="2.9916%" y="607.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (14 samples, 0.14%)</title><rect x="2.7416%" y="581" width="0.1371%" height="15" fill="rgb(206,188,39)"/><text x="2.9916%" y="591.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (13 samples, 0.13%)</title><rect x="3.0549%" y="533" width="0.1273%" height="15" fill="rgb(217,207,13)"/><text x="3.3049%" y="543.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (12 samples, 0.12%)</title><rect x="3.0647%" y="517" width="0.1175%" height="15" fill="rgb(231,73,38)"/><text x="3.3147%" y="527.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (21 samples, 0.21%)</title><rect x="3.0256%" y="549" width="0.2056%" height="15" fill="rgb(225,20,46)"/><text x="3.2756%" y="559.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (25 samples, 0.24%)</title><rect x="3.0060%" y="565" width="0.2448%" height="15" fill="rgb(210,31,41)"/><text x="3.2560%" y="575.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (32 samples, 0.31%)</title><rect x="2.9766%" y="581" width="0.3133%" height="15" fill="rgb(221,200,47)"/><text x="3.2266%" y="591.50"></text></g><g><title>[libGLX_nvidia.so.455.45.01] (49 samples, 0.48%)</title><rect x="2.8787%" y="597" width="0.4798%" height="15" fill="rgb(226,26,5)"/><text x="3.1287%" y="607.50"></text></g><g><title>[libGLdispatch.so.0.0.0] (36 samples, 0.35%)</title><rect x="3.3585%" y="597" width="0.3525%" height="15" fill="rgb(249,33,26)"/><text x="3.6085%" y="607.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (42 samples, 0.41%)</title><rect x="3.7110%" y="597" width="0.4112%" height="15" fill="rgb(235,183,28)"/><text x="3.9610%" y="607.50"></text></g><g><title>&lt;cgmath::matrix::Matrix4&lt;S&gt; as core::ops::arith::Mul&gt;::mul (36 samples, 0.35%)</title><rect x="4.1222%" y="581" width="0.3525%" height="15" fill="rgb(221,5,38)"/><text x="4.3722%" y="591.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (280 samples, 2.74%)</title><rect x="4.4845%" y="581" width="2.7416%" height="15" fill="rgb(247,18,42)"/><text x="4.7345%" y="591.50">[l..</text></g><g><title>__GI___libc_malloc (12 samples, 0.12%)</title><rect x="7.2457%" y="581" width="0.1175%" height="15" fill="rgb(241,131,45)"/><text x="7.4957%" y="591.50"></text></g><g><title>openJoystickDevice (19 samples, 0.19%)</title><rect x="7.4219%" y="581" width="0.1860%" height="15" fill="rgb(249,31,29)"/><text x="7.6719%" y="591.50"></text></g><g><title>__GI___close (18 samples, 0.18%)</title><rect x="7.4317%" y="565" width="0.1762%" height="15" fill="rgb(225,111,53)"/><text x="7.6817%" y="575.50"></text></g><g><title>pthread_self (39 samples, 0.38%)</title><rect x="7.6080%" y="581" width="0.3819%" height="15" fill="rgb(238,160,17)"/><text x="7.8580%" y="591.50"></text></g><g><title>rtx::engine::OpenGL::shader::Shader::setMat4f (26 samples, 0.25%)</title><rect x="7.9898%" y="581" width="0.2546%" height="15" fill="rgb(214,148,48)"/><text x="8.2398%" y="591.50"></text></g><g><title>rtx::engine::OpenGL::shader::Shader::getLocation (20 samples, 0.20%)</title><rect x="8.0486%" y="565" width="0.1958%" height="15" fill="rgb(232,36,49)"/><text x="8.2986%" y="575.50"></text></g><g><title>std::ffi::c_str::CString::new (16 samples, 0.16%)</title><rect x="8.0877%" y="549" width="0.1567%" height="15" fill="rgb(209,103,24)"/><text x="8.3377%" y="559.50"></text></g><g><title>rtx::engine::OpenGL::shader::Shader::setVec3f (25 samples, 0.24%)</title><rect x="8.2444%" y="581" width="0.2448%" height="15" fill="rgb(229,88,8)"/><text x="8.4944%" y="591.50"></text></g><g><title>rtx::engine::OpenGL::shader::Shader::getLocation (16 samples, 0.16%)</title><rect x="8.3325%" y="565" width="0.1567%" height="15" fill="rgb(213,181,19)"/><text x="8.5825%" y="575.50"></text></g><g><title>[unknown] (459 samples, 4.49%)</title><rect x="4.1222%" y="597" width="4.4943%" height="15" fill="rgb(254,191,54)"/><text x="4.3722%" y="607.50">[unkn..</text></g><g><title>&lt;alloc::vec::Vec&lt;T&gt; as core::iter::traits::collect::Extend&lt;&amp;T&gt;&gt;::extend (18 samples, 0.18%)</title><rect x="8.7829%" y="565" width="0.1762%" height="15" fill="rgb(241,83,37)"/><text x="9.0329%" y="575.50"></text></g><g><title>&lt;alloc::vec::Vec&lt;T&gt; as alloc::vec::SpecExtend&lt;&amp;T,core::slice::iter::Iter&lt;T&gt;&gt;&gt;::spec_extend (18 samples, 0.18%)</title><rect x="8.7829%" y="549" width="0.1762%" height="15" fill="rgb(233,36,39)"/><text x="9.0329%" y="559.50"></text></g><g><title>alloc::vec::Vec&lt;T&gt;::append_elements (18 samples, 0.18%)</title><rect x="8.7829%" y="533" width="0.1762%" height="15" fill="rgb(226,3,54)"/><text x="9.0329%" y="543.50"></text></g><g><title>core::intrinsics::copy_nonoverlapping (18 samples, 0.18%)</title><rect x="8.7829%" y="517" width="0.1762%" height="15" fill="rgb(245,192,40)"/><text x="9.0329%" y="527.50"></text></g><g><title>&lt;&amp;str as std::ffi::c_str::CString::new::SpecIntoVec&gt;::into_vec (43 samples, 0.42%)</title><rect x="8.6165%" y="581" width="0.4210%" height="15" fill="rgb(238,167,29)"/><text x="8.8665%" y="591.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (61 samples, 0.60%)</title><rect x="9.0375%" y="581" width="0.5973%" height="15" fill="rgb(232,182,51)"/><text x="9.2875%" y="591.50"></text></g><g><title>_int_free (30 samples, 0.29%)</title><rect x="9.6348%" y="581" width="0.2937%" height="15" fill="rgb(231,60,39)"/><text x="9.8848%" y="591.50"></text></g><g><title>_edata (170 samples, 1.66%)</title><rect x="8.6165%" y="597" width="1.6645%" height="15" fill="rgb(208,69,12)"/><text x="8.8665%" y="607.50"></text></g><g><title>std::ffi::c_str::CString::_new (36 samples, 0.35%)</title><rect x="9.9285%" y="581" width="0.3525%" height="15" fill="rgb(235,93,37)"/><text x="10.1785%" y="591.50"></text></g><g><title>rtx::engine::core::context::EngineContext::createGLFWWindow (15 samples, 0.15%)</title><rect x="10.3300%" y="389" width="0.1469%" height="15" fill="rgb(213,116,39)"/><text x="10.5800%" y="399.50"></text></g><g><title>rtx::engine::core::context::EngineContext::new (16 samples, 0.16%)</title><rect x="10.3300%" y="405" width="0.1567%" height="15" fill="rgb(222,207,29)"/><text x="10.5800%" y="415.50"></text></g><g><title>&lt;rtx::DemoScene as rtx::engine::core::scene::Scene&gt;::onCreate (23 samples, 0.23%)</title><rect x="10.4866%" y="389" width="0.2252%" height="15" fill="rgb(206,96,30)"/><text x="10.7366%" y="399.50"></text></g><g><title>rtx::DemoScene::addComponent (15 samples, 0.15%)</title><rect x="10.5650%" y="373" width="0.1469%" height="15" fill="rgb(218,138,4)"/><text x="10.8150%" y="383.50"></text></g><g><title>rtx::engine::ecs::registry::Registry::addComponent (15 samples, 0.15%)</title><rect x="10.5650%" y="357" width="0.1469%" height="15" fill="rgb(250,191,14)"/><text x="10.8150%" y="367.50"></text></g><g><title>&lt;rtx::DemoScene as rtx::engine::core::scene::Scene&gt;::onUpdate (33 samples, 0.32%)</title><rect x="10.7118%" y="341" width="0.3231%" height="15" fill="rgb(239,60,40)"/><text x="10.9618%" y="351.50"></text></g><g><title>__memcpy_sse2_unaligned (16 samples, 0.16%)</title><rect x="21.3062%" y="197" width="0.1567%" height="15" fill="rgb(206,27,48)"/><text x="21.5562%" y="207.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (978 samples, 9.58%)</title><rect x="11.9456%" y="245" width="9.5760%" height="15" fill="rgb(225,35,8)"/><text x="12.1956%" y="255.50">[libnvidia-glc..</text></g><g><title>[libnvidia-glcore.so.455.45.01] (955 samples, 9.35%)</title><rect x="12.1708%" y="229" width="9.3508%" height="15" fill="rgb(250,213,24)"/><text x="12.4208%" y="239.50">[libnvidia-gl..</text></g><g><title>[libnvidia-glcore.so.455.45.01] (168 samples, 1.64%)</title><rect x="19.8766%" y="213" width="1.6450%" height="15" fill="rgb(247,123,22)"/><text x="20.1266%" y="223.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (185 samples, 1.81%)</title><rect x="31.8418%" y="181" width="1.8114%" height="15" fill="rgb(231,138,38)"/><text x="32.0918%" y="191.50">[..</text></g><g><title>[libnvidia-glcore.so.455.45.01] (23 samples, 0.23%)</title><rect x="33.4280%" y="165" width="0.2252%" height="15" fill="rgb(231,145,46)"/><text x="33.6780%" y="175.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (23 samples, 0.23%)</title><rect x="33.4280%" y="149" width="0.2252%" height="15" fill="rgb(251,118,11)"/><text x="33.6780%" y="159.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (21 samples, 0.21%)</title><rect x="33.4476%" y="133" width="0.2056%" height="15" fill="rgb(217,147,25)"/><text x="33.6976%" y="143.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (17 samples, 0.17%)</title><rect x="33.4867%" y="117" width="0.1665%" height="15" fill="rgb(247,81,37)"/><text x="33.7367%" y="127.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (14 samples, 0.14%)</title><rect x="33.5161%" y="101" width="0.1371%" height="15" fill="rgb(209,12,38)"/><text x="33.7661%" y="111.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (12 samples, 0.12%)</title><rect x="33.5357%" y="85" width="0.1175%" height="15" fill="rgb(227,1,9)"/><text x="33.7857%" y="95.50"></text></g><g><title>gl::DrawElements (1,238 samples, 12.12%)</title><rect x="21.5803%" y="245" width="12.1218%" height="15" fill="rgb(248,47,43)"/><text x="21.8303%" y="255.50">gl::DrawElements</text></g><g><title>[libnvidia-glcore.so.455.45.01] (1,232 samples, 12.06%)</title><rect x="21.6391%" y="229" width="12.0631%" height="15" fill="rgb(221,10,30)"/><text x="21.8891%" y="239.50">[libnvidia-glcore...</text></g><g><title>[libnvidia-glcore.so.455.45.01] (1,056 samples, 10.34%)</title><rect x="23.3624%" y="213" width="10.3398%" height="15" fill="rgb(210,229,1)"/><text x="23.6124%" y="223.50">[libnvidia-glco..</text></g><g><title>[libnvidia-glcore.so.455.45.01] (607 samples, 5.94%)</title><rect x="27.7587%" y="197" width="5.9434%" height="15" fill="rgb(222,148,37)"/><text x="28.0087%" y="207.50">[libnvid..</text></g><g><title>&lt;std::ffi::c_str::CString as core::ops::deref::Deref&gt;::deref (12 samples, 0.12%)</title><rect x="34.0057%" y="213" width="0.1175%" height="15" fill="rgb(234,67,33)"/><text x="34.2557%" y="223.50"></text></g><g><title>std::ffi::c_str::CString::as_bytes_with_nul (12 samples, 0.12%)</title><rect x="34.0057%" y="197" width="0.1175%" height="15" fill="rgb(247,98,35)"/><text x="34.2557%" y="207.50"></text></g><g><title>__GI___libc_free (19 samples, 0.19%)</title><rect x="34.3092%" y="133" width="0.1860%" height="15" fill="rgb(247,138,52)"/><text x="34.5592%" y="143.50"></text></g><g><title>__rust_dealloc (11 samples, 0.11%)</title><rect x="34.5932%" y="133" width="0.1077%" height="15" fill="rgb(213,79,30)"/><text x="34.8432%" y="143.50"></text></g><g><title>core::ptr::drop_in_place (122 samples, 1.19%)</title><rect x="34.1232%" y="213" width="1.1946%" height="15" fill="rgb(246,177,23)"/><text x="34.3732%" y="223.50"></text></g><g><title>core::ptr::drop_in_place (122 samples, 1.19%)</title><rect x="34.1232%" y="197" width="1.1946%" height="15" fill="rgb(230,62,27)"/><text x="34.3732%" y="207.50"></text></g><g><title>alloc::alloc::box_free (111 samples, 1.09%)</title><rect x="34.2309%" y="181" width="1.0869%" height="15" fill="rgb(216,154,8)"/><text x="34.4809%" y="191.50"></text></g><g><title>&lt;alloc::alloc::Global as core::alloc::AllocRef&gt;::dealloc (111 samples, 1.09%)</title><rect x="34.2309%" y="165" width="1.0869%" height="15" fill="rgb(244,35,45)"/><text x="34.4809%" y="175.50"></text></g><g><title>alloc::alloc::dealloc (111 samples, 1.09%)</title><rect x="34.2309%" y="149" width="1.0869%" height="15" fill="rgb(251,115,12)"/><text x="34.4809%" y="159.50"></text></g><g><title>_int_free (63 samples, 0.62%)</title><rect x="34.7009%" y="133" width="0.6169%" height="15" fill="rgb(240,54,50)"/><text x="34.9509%" y="143.50"></text></g><g><title>core::result::Result&lt;T,E&gt;::unwrap (105 samples, 1.03%)</title><rect x="35.3177%" y="213" width="1.0281%" height="15" fill="rgb(233,84,52)"/><text x="35.5677%" y="223.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (409 samples, 4.00%)</title><rect x="43.9538%" y="181" width="4.0047%" height="15" fill="rgb(207,117,47)"/><text x="44.2038%" y="191.50">[lib..</text></g><g><title>__strcmp_avx2 (23 samples, 0.23%)</title><rect x="47.9585%" y="181" width="0.2252%" height="15" fill="rgb(249,43,39)"/><text x="48.2085%" y="191.50"></text></g><g><title>gl::GetUniformLocation (1,219 samples, 11.94%)</title><rect x="36.3458%" y="213" width="11.9358%" height="15" fill="rgb(209,38,44)"/><text x="36.5958%" y="223.50">gl::GetUniformLoca..</text></g><g><title>[libnvidia-glcore.so.455.45.01] (1,219 samples, 11.94%)</title><rect x="36.3458%" y="197" width="11.9358%" height="15" fill="rgb(236,212,23)"/><text x="36.5958%" y="207.50">[libnvidia-glcore...</text></g><g><title>&lt;alloc::vec::Vec&lt;T&gt; as core::iter::traits::collect::Extend&lt;&amp;T&gt;&gt;::extend (52 samples, 0.51%)</title><rect x="48.4676%" y="181" width="0.5092%" height="15" fill="rgb(242,79,21)"/><text x="48.7176%" y="191.50"></text></g><g><title>&lt;alloc::vec::Vec&lt;T&gt; as alloc::vec::SpecExtend&lt;&amp;T,core::slice::iter::Iter&lt;T&gt;&gt;&gt;::spec_extend (52 samples, 0.51%)</title><rect x="48.4676%" y="165" width="0.5092%" height="15" fill="rgb(211,96,35)"/><text x="48.7176%" y="175.50"></text></g><g><title>alloc::vec::Vec&lt;T&gt;::append_elements (52 samples, 0.51%)</title><rect x="48.4676%" y="149" width="0.5092%" height="15" fill="rgb(253,215,40)"/><text x="48.7176%" y="159.50"></text></g><g><title>core::intrinsics::copy_nonoverlapping (39 samples, 0.38%)</title><rect x="48.5949%" y="133" width="0.3819%" height="15" fill="rgb(211,81,21)"/><text x="48.8449%" y="143.50"></text></g><g><title>__memmove_avx_unaligned_erms (28 samples, 0.27%)</title><rect x="48.7026%" y="117" width="0.2742%" height="15" fill="rgb(208,190,38)"/><text x="48.9526%" y="127.50"></text></g><g><title>__GI___libc_malloc (55 samples, 0.54%)</title><rect x="49.1628%" y="69" width="0.5385%" height="15" fill="rgb(235,213,38)"/><text x="49.4128%" y="79.50"></text></g><g><title>__rdl_alloc (15 samples, 0.15%)</title><rect x="49.7014%" y="69" width="0.1469%" height="15" fill="rgb(237,122,38)"/><text x="49.9514%" y="79.50"></text></g><g><title>std::sys::unix::alloc::&lt;impl core::alloc::global::GlobalAlloc for std::alloc::System&gt;::alloc (15 samples, 0.15%)</title><rect x="49.7014%" y="53" width="0.1469%" height="15" fill="rgb(244,218,35)"/><text x="49.9514%" y="63.50"></text></g><g><title>&lt;&amp;str as std::ffi::c_str::CString::new::SpecIntoVec&gt;::into_vec (157 samples, 1.54%)</title><rect x="48.3599%" y="197" width="1.5373%" height="15" fill="rgb(240,68,47)"/><text x="48.6099%" y="207.50"></text></g><g><title>alloc::vec::Vec&lt;T&gt;::with_capacity (94 samples, 0.92%)</title><rect x="48.9768%" y="181" width="0.9204%" height="15" fill="rgb(210,16,53)"/><text x="49.2268%" y="191.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T&gt;::with_capacity (87 samples, 0.85%)</title><rect x="49.0453%" y="165" width="0.8519%" height="15" fill="rgb(235,124,12)"/><text x="49.2953%" y="175.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T,A&gt;::with_capacity_in (87 samples, 0.85%)</title><rect x="49.0453%" y="149" width="0.8519%" height="15" fill="rgb(224,169,11)"/><text x="49.2953%" y="159.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T,A&gt;::allocate_in (87 samples, 0.85%)</title><rect x="49.0453%" y="133" width="0.8519%" height="15" fill="rgb(250,166,2)"/><text x="49.2953%" y="143.50"></text></g><g><title>&lt;alloc::alloc::Global as core::alloc::AllocRef&gt;::alloc (86 samples, 0.84%)</title><rect x="49.0551%" y="117" width="0.8421%" height="15" fill="rgb(242,216,29)"/><text x="49.3051%" y="127.50"></text></g><g><title>alloc::alloc::Global::alloc_impl (86 samples, 0.84%)</title><rect x="49.0551%" y="101" width="0.8421%" height="15" fill="rgb(230,116,27)"/><text x="49.3051%" y="111.50"></text></g><g><title>alloc::alloc::alloc (81 samples, 0.79%)</title><rect x="49.1041%" y="85" width="0.7931%" height="15" fill="rgb(228,99,48)"/><text x="49.3541%" y="95.50"></text></g><g><title>std::ffi::c_str::CString::from_vec_unchecked (24 samples, 0.23%)</title><rect x="50.2007%" y="181" width="0.2350%" height="15" fill="rgb(253,11,6)"/><text x="50.4507%" y="191.50"></text></g><g><title>rtx::engine::OpenGL::shader::Shader::setVec3f (1,880 samples, 18.41%)</title><rect x="33.7021%" y="245" width="18.4079%" height="15" fill="rgb(247,143,39)"/><text x="33.9521%" y="255.50">rtx::engine::OpenGL::shader::..</text></g><g><title>rtx::engine::OpenGL::shader::Shader::getLocation (1,864 samples, 18.25%)</title><rect x="33.8588%" y="229" width="18.2512%" height="15" fill="rgb(236,97,10)"/><text x="34.1088%" y="239.50">rtx::engine::OpenGL::shader:..</text></g><g><title>std::ffi::c_str::CString::new (389 samples, 3.81%)</title><rect x="48.3012%" y="213" width="3.8089%" height="15" fill="rgb(233,208,19)"/><text x="48.5512%" y="223.50">std:..</text></g><g><title>std::ffi::c_str::CString::_new (226 samples, 2.21%)</title><rect x="49.8972%" y="197" width="2.2129%" height="15" fill="rgb(216,164,2)"/><text x="50.1472%" y="207.50">s..</text></g><g><title>std::memchr::memchr (171 samples, 1.67%)</title><rect x="50.4357%" y="181" width="1.6743%" height="15" fill="rgb(220,129,5)"/><text x="50.6857%" y="191.50"></text></g><g><title>std::sys::unix::memchr::memchr (171 samples, 1.67%)</title><rect x="50.4357%" y="165" width="1.6743%" height="15" fill="rgb(242,17,10)"/><text x="50.6857%" y="175.50"></text></g><g><title>__memchr_avx2 (165 samples, 1.62%)</title><rect x="50.4945%" y="149" width="1.6156%" height="15" fill="rgb(242,107,0)"/><text x="50.7445%" y="159.50"></text></g><g><title>&lt;f32 as core::ops::arith::Add&gt;::add (245 samples, 2.40%)</title><rect x="57.0058%" y="197" width="2.3989%" height="15" fill="rgb(251,28,31)"/><text x="57.2558%" y="207.50">&lt;f..</text></g><g><title>&lt;cgmath::vector::Vector4&lt;S&gt; as core::ops::arith::Add&gt;::add (367 samples, 3.59%)</title><rect x="56.9960%" y="213" width="3.5935%" height="15" fill="rgb(233,223,10)"/><text x="57.2460%" y="223.50">&lt;cgm..</text></g><g><title>cgmath::vector::Vector4&lt;S&gt;::new (121 samples, 1.18%)</title><rect x="59.4047%" y="197" width="1.1848%" height="15" fill="rgb(215,21,27)"/><text x="59.6547%" y="207.50"></text></g><g><title>&lt;cgmath::matrix::Matrix4&lt;S&gt; as core::ops::arith::Mul&gt;::mul (85 samples, 0.83%)</title><rect x="60.5894%" y="197" width="0.8323%" height="15" fill="rgb(232,23,21)"/><text x="60.8394%" y="207.50"></text></g><g><title>&lt;cgmath::vector::Vector4&lt;S&gt; as core::ops::arith::Mul&lt;S&gt;&gt;::mul (429 samples, 4.20%)</title><rect x="60.5894%" y="213" width="4.2005%" height="15" fill="rgb(244,5,23)"/><text x="60.8394%" y="223.50">&lt;cgma..</text></g><g><title>&lt;f32 as core::ops::arith::Mul&gt;::mul (344 samples, 3.37%)</title><rect x="61.4217%" y="197" width="3.3683%" height="15" fill="rgb(226,81,46)"/><text x="61.6717%" y="207.50">&lt;f3..</text></g><g><title>&lt;cgmath::matrix::Matrix4&lt;S&gt; as core::ops::arith::Mul&gt;::mul (979 samples, 9.59%)</title><rect x="55.4294%" y="229" width="9.5858%" height="15" fill="rgb(247,70,30)"/><text x="55.6794%" y="239.50">&lt;cgmath::matri..</text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::from_cols (23 samples, 0.23%)</title><rect x="64.7900%" y="213" width="0.2252%" height="15" fill="rgb(212,68,19)"/><text x="65.0400%" y="223.50"></text></g><g><title>&lt;rtx::engine::rendering::bshader as core::ops::deref::Deref&gt;::deref (12 samples, 0.12%)</title><rect x="65.0152%" y="229" width="0.1175%" height="15" fill="rgb(240,187,13)"/><text x="65.2652%" y="239.50"></text></g><g><title>&lt;rtx::engine::rendering::bshader as core::ops::deref::Deref&gt;::deref::__stability (12 samples, 0.12%)</title><rect x="65.0152%" y="213" width="0.1175%" height="15" fill="rgb(223,113,26)"/><text x="65.2652%" y="223.50"></text></g><g><title>lazy_static::lazy::Lazy&lt;T&gt;::get (12 samples, 0.12%)</title><rect x="65.0152%" y="197" width="0.1175%" height="15" fill="rgb(206,192,2)"/><text x="65.2652%" y="207.50"></text></g><g><title>__memcpy_sse2_unaligned_erms (33 samples, 0.32%)</title><rect x="77.5874%" y="181" width="0.3231%" height="15" fill="rgb(241,108,4)"/><text x="77.8374%" y="191.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (222 samples, 2.17%)</title><rect x="75.7956%" y="197" width="2.1737%" height="15" fill="rgb(247,173,49)"/><text x="76.0456%" y="207.50">[..</text></g><g><title>__memcpy_sse2_unaligned_erms (24 samples, 0.23%)</title><rect x="78.0476%" y="197" width="0.2350%" height="15" fill="rgb(224,114,35)"/><text x="78.2976%" y="207.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (1,346 samples, 13.18%)</title><rect x="65.1327%" y="229" width="13.1793%" height="15" fill="rgb(245,159,27)"/><text x="65.3827%" y="239.50">[libnvidia-glcore.so..</text></g><g><title>[libnvidia-glcore.so.455.45.01] (1,319 samples, 12.91%)</title><rect x="65.3970%" y="213" width="12.9149%" height="15" fill="rgb(245,172,44)"/><text x="65.6470%" y="223.50">[libnvidia-glcore.s..</text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::from_scale (18 samples, 0.18%)</title><rect x="78.3120%" y="229" width="0.1762%" height="15" fill="rgb(236,23,11)"/><text x="78.5620%" y="239.50"></text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::from_nonuniform_scale (18 samples, 0.18%)</title><rect x="78.3120%" y="213" width="0.1762%" height="15" fill="rgb(205,117,38)"/><text x="78.5620%" y="223.50"></text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::new (18 samples, 0.18%)</title><rect x="78.3120%" y="197" width="0.1762%" height="15" fill="rgb(237,72,25)"/><text x="78.5620%" y="207.50"></text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::from_cols (18 samples, 0.18%)</title><rect x="78.3120%" y="181" width="0.1762%" height="15" fill="rgb(244,70,9)"/><text x="78.5620%" y="191.50"></text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::from_translation (21 samples, 0.21%)</title><rect x="78.4882%" y="229" width="0.2056%" height="15" fill="rgb(217,125,39)"/><text x="78.7382%" y="239.50"></text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::new (21 samples, 0.21%)</title><rect x="78.4882%" y="213" width="0.2056%" height="15" fill="rgb(235,36,10)"/><text x="78.7382%" y="223.50"></text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::from_cols (21 samples, 0.21%)</title><rect x="78.4882%" y="197" width="0.2056%" height="15" fill="rgb(251,123,47)"/><text x="78.7382%" y="207.50"></text></g><g><title>cgmath::structure::SquareMatrix::identity (20 samples, 0.20%)</title><rect x="78.6938%" y="229" width="0.1958%" height="15" fill="rgb(221,13,13)"/><text x="78.9438%" y="239.50"></text></g><g><title>&lt;cgmath::matrix::Matrix4&lt;S&gt; as num_traits::identities::One&gt;::one (20 samples, 0.20%)</title><rect x="78.6938%" y="213" width="0.1958%" height="15" fill="rgb(238,131,9)"/><text x="78.9438%" y="223.50"></text></g><g><title>&lt;cgmath::matrix::Matrix4&lt;S&gt; as cgmath::structure::SquareMatrix&gt;::from_value (20 samples, 0.20%)</title><rect x="78.6938%" y="197" width="0.1958%" height="15" fill="rgb(211,50,8)"/><text x="78.9438%" y="207.50"></text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::new (20 samples, 0.20%)</title><rect x="78.6938%" y="181" width="0.1958%" height="15" fill="rgb(245,182,24)"/><text x="78.9438%" y="191.50"></text></g><g><title>cgmath::matrix::Matrix4&lt;S&gt;::from_cols (20 samples, 0.20%)</title><rect x="78.6938%" y="165" width="0.1958%" height="15" fill="rgb(242,14,37)"/><text x="78.9438%" y="175.50"></text></g><g><title>&lt;std::ffi::c_str::CString as core::ops::deref::Deref&gt;::deref (12 samples, 0.12%)</title><rect x="79.2030%" y="197" width="0.1175%" height="15" fill="rgb(246,228,12)"/><text x="79.4530%" y="207.50"></text></g><g><title>std::ffi::c_str::CString::as_bytes_with_nul (12 samples, 0.12%)</title><rect x="79.2030%" y="181" width="0.1175%" height="15" fill="rgb(213,55,15)"/><text x="79.4530%" y="191.50"></text></g><g><title>__GI___libc_free (15 samples, 0.15%)</title><rect x="79.4478%" y="117" width="0.1469%" height="15" fill="rgb(209,9,3)"/><text x="79.6978%" y="127.50"></text></g><g><title>core::ptr::drop_in_place (123 samples, 1.20%)</title><rect x="79.3205%" y="197" width="1.2043%" height="15" fill="rgb(230,59,30)"/><text x="79.5705%" y="207.50"></text></g><g><title>core::ptr::drop_in_place (123 samples, 1.20%)</title><rect x="79.3205%" y="181" width="1.2043%" height="15" fill="rgb(209,121,21)"/><text x="79.5705%" y="191.50"></text></g><g><title>alloc::alloc::box_free (116 samples, 1.14%)</title><rect x="79.3890%" y="165" width="1.1358%" height="15" fill="rgb(220,109,13)"/><text x="79.6390%" y="175.50"></text></g><g><title>&lt;alloc::alloc::Global as core::alloc::AllocRef&gt;::dealloc (116 samples, 1.14%)</title><rect x="79.3890%" y="149" width="1.1358%" height="15" fill="rgb(232,18,1)"/><text x="79.6390%" y="159.50"></text></g><g><title>alloc::alloc::dealloc (116 samples, 1.14%)</title><rect x="79.3890%" y="133" width="1.1358%" height="15" fill="rgb(215,41,42)"/><text x="79.6390%" y="143.50"></text></g><g><title>_int_free (78 samples, 0.76%)</title><rect x="79.7611%" y="117" width="0.7637%" height="15" fill="rgb(224,123,36)"/><text x="80.0111%" y="127.50"></text></g><g><title>core::result::Result&lt;T,E&gt;::unwrap (116 samples, 1.14%)</title><rect x="80.5248%" y="197" width="1.1358%" height="15" fill="rgb(240,125,3)"/><text x="80.7748%" y="207.50"></text></g><g><title>[libnvidia-glcore.so.455.45.01] (427 samples, 4.18%)</title><rect x="90.4436%" y="165" width="4.1809%" height="15" fill="rgb(205,98,50)"/><text x="90.6936%" y="175.50">[libn..</text></g><g><title>__strcmp_avx2 (25 samples, 0.24%)</title><rect x="94.6245%" y="165" width="0.2448%" height="15" fill="rgb(205,185,37)"/><text x="94.8745%" y="175.50"></text></g><g><title>gl::GetUniformLocation (1,357 samples, 13.29%)</title><rect x="81.6606%" y="197" width="13.2870%" height="15" fill="rgb(238,207,15)"/><text x="81.9106%" y="207.50">gl::GetUniformLocati..</text></g><g><title>[libnvidia-glcore.so.455.45.01] (1,357 samples, 13.29%)</title><rect x="81.6606%" y="181" width="13.2870%" height="15" fill="rgb(213,199,42)"/><text x="81.9106%" y="191.50">[libnvidia-glcore.so..</text></g><g><title>&lt;alloc::vec::Vec&lt;T&gt; as core::iter::traits::collect::Extend&lt;&amp;T&gt;&gt;::extend (25 samples, 0.24%)</title><rect x="95.0945%" y="165" width="0.2448%" height="15" fill="rgb(235,201,11)"/><text x="95.3445%" y="175.50"></text></g><g><title>&lt;alloc::vec::Vec&lt;T&gt; as alloc::vec::SpecExtend&lt;&amp;T,core::slice::iter::Iter&lt;T&gt;&gt;&gt;::spec_extend (25 samples, 0.24%)</title><rect x="95.0945%" y="149" width="0.2448%" height="15" fill="rgb(207,46,11)"/><text x="95.3445%" y="159.50"></text></g><g><title>alloc::vec::Vec&lt;T&gt;::append_elements (25 samples, 0.24%)</title><rect x="95.0945%" y="133" width="0.2448%" height="15" fill="rgb(241,35,35)"/><text x="95.3445%" y="143.50"></text></g><g><title>core::intrinsics::copy_nonoverlapping (24 samples, 0.23%)</title><rect x="95.1043%" y="117" width="0.2350%" height="15" fill="rgb(243,32,47)"/><text x="95.3543%" y="127.50"></text></g><g><title>__memmove_avx_unaligned_erms (15 samples, 0.15%)</title><rect x="95.1924%" y="101" width="0.1469%" height="15" fill="rgb(247,202,23)"/><text x="95.4424%" y="111.50"></text></g><g><title>__GI___libc_malloc (64 samples, 0.63%)</title><rect x="95.4470%" y="53" width="0.6267%" height="15" fill="rgb(219,102,11)"/><text x="95.6970%" y="63.50"></text></g><g><title>__rdl_alloc (18 samples, 0.18%)</title><rect x="96.0736%" y="53" width="0.1762%" height="15" fill="rgb(243,110,44)"/><text x="96.3236%" y="63.50"></text></g><g><title>std::sys::unix::alloc::&lt;impl core::alloc::global::GlobalAlloc for std::alloc::System&gt;::alloc (18 samples, 0.18%)</title><rect x="96.0736%" y="37" width="0.1762%" height="15" fill="rgb(222,74,54)"/><text x="96.3236%" y="47.50"></text></g><g><title>&lt;&amp;str as std::ffi::c_str::CString::new::SpecIntoVec&gt;::into_vec (139 samples, 1.36%)</title><rect x="94.9770%" y="181" width="1.3610%" height="15" fill="rgb(216,99,12)"/><text x="95.2270%" y="191.50"></text></g><g><title>alloc::vec::Vec&lt;T&gt;::with_capacity (102 samples, 1.00%)</title><rect x="95.3393%" y="165" width="0.9987%" height="15" fill="rgb(226,22,26)"/><text x="95.5893%" y="175.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T&gt;::with_capacity (95 samples, 0.93%)</title><rect x="95.4078%" y="149" width="0.9302%" height="15" fill="rgb(217,163,10)"/><text x="95.6578%" y="159.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T,A&gt;::with_capacity_in (95 samples, 0.93%)</title><rect x="95.4078%" y="133" width="0.9302%" height="15" fill="rgb(213,25,53)"/><text x="95.6578%" y="143.50"></text></g><g><title>alloc::raw_vec::RawVec&lt;T,A&gt;::allocate_in (95 samples, 0.93%)</title><rect x="95.4078%" y="117" width="0.9302%" height="15" fill="rgb(252,105,26)"/><text x="95.6578%" y="127.50"></text></g><g><title>&lt;alloc::alloc::Global as core::alloc::AllocRef&gt;::alloc (95 samples, 0.93%)</title><rect x="95.4078%" y="101" width="0.9302%" height="15" fill="rgb(220,39,43)"/><text x="95.6578%" y="111.50"></text></g><g><title>alloc::alloc::Global::alloc_impl (95 samples, 0.93%)</title><rect x="95.4078%" y="85" width="0.9302%" height="15" fill="rgb(229,68,48)"/><text x="95.6578%" y="95.50"></text></g><g><title>alloc::alloc::alloc (95 samples, 0.93%)</title><rect x="95.4078%" y="69" width="0.9302%" height="15" fill="rgb(252,8,32)"/><text x="95.6578%" y="79.50"></text></g><g><title>alloc::vec::Vec&lt;T&gt;::push (22 samples, 0.22%)</title><rect x="96.6024%" y="149" width="0.2154%" height="15" fill="rgb(223,20,43)"/><text x="96.8524%" y="159.50"></text></g><g><title>std::ffi::c_str::CString::from_vec_unchecked (34 samples, 0.33%)</title><rect x="96.5926%" y="165" width="0.3329%" height="15" fill="rgb(229,81,49)"/><text x="96.8426%" y="175.50"></text></g><g><title>alloc::vec::Vec&lt;T&gt;::reserve_exact (11 samples, 0.11%)</title><rect x="96.8178%" y="149" width="0.1077%" height="15" fill="rgb(236,28,36)"/><text x="97.0678%" y="159.50"></text></g><g><title>rtx::engine::rendering::Renderer2D::drawQuad (4,747 samples, 46.48%)</title><rect x="52.1101%" y="245" width="46.4800%" height="15" fill="rgb(249,185,26)"/><text x="52.3601%" y="255.50">rtx::engine::rendering::Renderer2D::drawQuad</text></g><g><title>rtx::engine::OpenGL::shader::Shader::setMat4f (2,010 samples, 19.68%)</title><rect x="78.9092%" y="229" width="19.6808%" height="15" fill="rgb(249,174,33)"/><text x="79.1592%" y="239.50">rtx::engine::OpenGL::shader::Sh..</text></g><g><title>rtx::engine::OpenGL::shader::Shader::getLocation (1,998 samples, 19.56%)</title><rect x="79.0267%" y="213" width="19.5633%" height="15" fill="rgb(233,201,37)"/><text x="79.2767%" y="223.50">rtx::engine::OpenGL::shader::Sh..</text></g><g><title>std::ffi::c_str::CString::new (369 samples, 3.61%)</title><rect x="94.9770%" y="197" width="3.6130%" height="15" fill="rgb(221,78,26)"/><text x="95.2270%" y="207.50">std:..</text></g><g><title>std::ffi::c_str::CString::_new (230 samples, 2.25%)</title><rect x="96.3380%" y="181" width="2.2520%" height="15" fill="rgb(250,127,30)"/><text x="96.5880%" y="191.50">s..</text></g><g><title>std::memchr::memchr (170 samples, 1.66%)</title><rect x="96.9255%" y="165" width="1.6645%" height="15" fill="rgb(230,49,44)"/><text x="97.1755%" y="175.50"></text></g><g><title>std::sys::unix::memchr::memchr (170 samples, 1.66%)</title><rect x="96.9255%" y="149" width="1.6645%" height="15" fill="rgb(229,67,23)"/><text x="97.1755%" y="159.50"></text></g><g><title>__memchr_avx2 (158 samples, 1.55%)</title><rect x="97.0430%" y="133" width="1.5470%" height="15" fill="rgb(249,83,47)"/><text x="97.2930%" y="143.50"></text></g><g><title>rtx::DemoScene::drawObject (8,942 samples, 87.56%)</title><rect x="11.0937%" y="277" width="87.5551%" height="15" fill="rgb(215,43,3)"/><text x="11.3437%" y="287.50">rtx::DemoScene::drawObject</text></g><g><title>rtx::engine::rendering::Renderer2D::run (8,906 samples, 87.20%)</title><rect x="11.4462%" y="261" width="87.2026%" height="15" fill="rgb(238,154,13)"/><text x="11.6962%" y="271.50">rtx::engine::rendering::Renderer2D::run</text></g><g><title>&lt;rtx::DemoScene as rtx::engine::core::scene::Scene&gt;::onUpdate (9,111 samples, 89.21%)</title><rect x="10.7118%" y="389" width="89.2098%" height="15" fill="rgb(219,56,2)"/><text x="10.9618%" y="399.50">&lt;rtx::DemoScene as rtx::engine::core::scene::Scene&gt;::onUpdate</text></g><g><title>core::iter::traits::iterator::Iterator::for_each (9,111 samples, 89.21%)</title><rect x="10.7118%" y="373" width="89.2098%" height="15" fill="rgb(233,0,4)"/><text x="10.9618%" y="383.50">core::iter::traits::iterator::Iterator::for_each</text></g><g><title>&lt;core::iter::adapters::Map&lt;I,F&gt; as core::iter::traits::iterator::Iterator&gt;::fold (9,111 samples, 89.21%)</title><rect x="10.7118%" y="357" width="89.2098%" height="15" fill="rgb(235,30,7)"/><text x="10.9618%" y="367.50">&lt;core::iter::adapters::Map&lt;I,F&gt; as core::iter::traits::iterator::Iterator&gt;::fold</text></g><g><title>core::iter::traits::iterator::Iterator::fold (9,078 samples, 88.89%)</title><rect x="11.0350%" y="341" width="88.8867%" height="15" fill="rgb(250,79,13)"/><text x="11.2850%" y="351.50">core::iter::traits::iterator::Iterator::fold</text></g><g><title>core::iter::adapters::map_fold::{{closure}} (9,072 samples, 88.83%)</title><rect x="11.0937%" y="325" width="88.8280%" height="15" fill="rgb(211,146,34)"/><text x="11.3437%" y="335.50">core::iter::adapters::map_fold::{{closure}}</text></g><g><title>core::iter::traits::iterator::Iterator::for_each::call::{{closure}} (9,072 samples, 88.83%)</title><rect x="11.0937%" y="309" width="88.8280%" height="15" fill="rgb(228,22,38)"/><text x="11.3437%" y="319.50">core::iter::traits::iterator::Iterator::for_each::call::{{closure}}</text></g><g><title>&lt;rtx::DemoScene as rtx::engine::core::scene::Scene&gt;::onUpdate::{{closure}} (9,072 samples, 88.83%)</title><rect x="11.0937%" y="293" width="88.8280%" height="15" fill="rgb(235,168,5)"/><text x="11.3437%" y="303.50">&lt;rtx::DemoScene as rtx::engine::core::scene::Scene&gt;::onUpdate::{{closure}}</text></g><g><title>rtx::DemoScene::updateObject (130 samples, 1.27%)</title><rect x="98.6488%" y="277" width="1.2729%" height="15" fill="rgb(221,155,16)"/><text x="98.8988%" y="287.50"></text></g><g><title>__libc_start_main (9,156 samples, 89.65%)</title><rect x="10.3300%" y="581" width="89.6504%" height="15" fill="rgb(215,215,53)"/><text x="10.5800%" y="591.50">__libc_start_main</text></g><g><title>main (9,156 samples, 89.65%)</title><rect x="10.3300%" y="565" width="89.6504%" height="15" fill="rgb(223,4,10)"/><text x="10.5800%" y="575.50">main</text></g><g><title>std::rt::lang_start_internal (9,156 samples, 89.65%)</title><rect x="10.3300%" y="549" width="89.6504%" height="15" fill="rgb(234,103,6)"/><text x="10.5800%" y="559.50">std::rt::lang_start_internal</text></g><g><title>std::panic::catch_unwind (9,156 samples, 89.65%)</title><rect x="10.3300%" y="533" width="89.6504%" height="15" fill="rgb(227,97,0)"/><text x="10.5800%" y="543.50">std::panic::catch_unwind</text></g><g><title>std::panicking::try (9,156 samples, 89.65%)</title><rect x="10.3300%" y="517" width="89.6504%" height="15" fill="rgb(234,150,53)"/><text x="10.5800%" y="527.50">std::panicking::try</text></g><g><title>std::panicking::try::do_call (9,156 samples, 89.65%)</title><rect x="10.3300%" y="501" width="89.6504%" height="15" fill="rgb(228,201,54)"/><text x="10.5800%" y="511.50">std::panicking::try::do_call</text></g><g><title>core::ops::function::impls::&lt;impl core::ops::function::FnOnce&lt;A&gt; for &amp;F&gt;::call_once (9,156 samples, 89.65%)</title><rect x="10.3300%" y="485" width="89.6504%" height="15" fill="rgb(222,22,37)"/><text x="10.5800%" y="495.50">core::ops::function::impls::&lt;impl core::ops::function::FnOnce&lt;A&gt; for &amp;F&gt;::call_once</text></g><g><title>std::rt::lang_start::{{closure}} (9,156 samples, 89.65%)</title><rect x="10.3300%" y="469" width="89.6504%" height="15" fill="rgb(237,53,32)"/><text x="10.5800%" y="479.50">std::rt::lang_start::{{closure}}</text></g><g><title>std::sys_common::backtrace::__rust_begin_short_backtrace (9,156 samples, 89.65%)</title><rect x="10.3300%" y="453" width="89.6504%" height="15" fill="rgb(233,25,53)"/><text x="10.5800%" y="463.50">std::sys_common::backtrace::__rust_begin_short_backtrace</text></g><g><title>core::ops::function::FnOnce::call_once (9,156 samples, 89.65%)</title><rect x="10.3300%" y="437" width="89.6504%" height="15" fill="rgb(210,40,34)"/><text x="10.5800%" y="447.50">core::ops::function::FnOnce::call_once</text></g><g><title>rtx::main (9,156 samples, 89.65%)</title><rect x="10.3300%" y="421" width="89.6504%" height="15" fill="rgb(241,220,44)"/><text x="10.5800%" y="431.50">rtx::main</text></g><g><title>rtx::engine::core::context::EngineContext::runScene (9,140 samples, 89.49%)</title><rect x="10.4866%" y="405" width="89.4938%" height="15" fill="rgb(235,28,35)"/><text x="10.7366%" y="415.50">rtx::engine::core::context::EngineContext::runScene</text></g><g><title>all (10,213 samples, 100%)</title><rect x="0.0000%" y="629" width="100.0000%" height="15" fill="rgb(210,56,17)"/><text x="0.2500%" y="639.50"></text></g><g><title>rtx (10,213 samples, 100.00%)</title><rect x="0.0000%" y="613" width="100.0000%" height="15" fill="rgb(224,130,29)"/><text x="0.2500%" y="623.50">rtx</text></g><g><title>_start (9,163 samples, 89.72%)</title><rect x="10.2810%" y="597" width="89.7190%" height="15" fill="rgb(235,212,8)"/><text x="10.5310%" y="607.50">_start</text></g></svg></svg>

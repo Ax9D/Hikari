@@ -1,0 +1,41 @@
+[package]
+name = "graphy"
+version = "0.1.0"
+authors = ["atri <atrisarkar91@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+thiserror = "1.0.24"
+
+log = { version = "0.4.14"}
+crossterm = "0.19.0"
+fern = { version = "0.6.0", features = ["colored"] }
+chrono = "0.4.19"
+indexmap = "1.6.2"
+vec_map = "0.8.2"
+glam = "0.15.0"
+lazy_static = "1.4.0"
+
+ash = "0.33.2"
+ash-window = "0.7.0"
+winit = "0.25.0"
+gpu-allocator = "0.9.0"
+shaderc = "0.7"
+spirv-reflect = "0.2.3"
+parking_lot = "0.11.1"
+fnv = "1.0.7"
+const-cstr = "0.3.0"
+lru = "0.7.0"
+fxhash = {version = "0.2.1"}
+
+arrayvec = "0.7.1"
+bytemuck = "1.7.2"
+
+[dev-dependencies]
+hikari-asset = { path = "../hikari_asset"} 
+scoped_threadpool = "0.1.9"
+
+[profile.release]
+debug = true
