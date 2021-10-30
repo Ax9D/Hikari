@@ -73,6 +73,7 @@ impl StateCell {
                 data: typed_ref,
                 borrow: &self.borrow,
             }
+            
         } else {
             panic!(
                 "Couldn't get a shared reference to {} as it is already borrowed mutably",
@@ -100,3 +101,7 @@ impl StateCell {
         }
     }
 }
+
+
+
+

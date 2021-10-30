@@ -7,12 +7,13 @@ use std::ops::Range;
 pub use cache_map::CacheMap;
 pub use temporary_map::TemporaryMap;
 
-pub fn for_each_bit(mask: u32, range: Range<usize>,  mut f: impl FnMut(u32)) {
+#[inline]
+pub fn for_each_bit(mut mask: u32, range: Range<usize>,  mut f: impl FnMut(u32)) {
     for i in range {
         let value = (mask >> i) & 1;
 
         if value == 1 {
-            (f)(value);
+            (f)(i as u32);
         }
     }
 }

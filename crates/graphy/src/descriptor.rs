@@ -515,4 +515,9 @@ impl DescriptorPool {
             },
         }
     }
+    pub fn new_frame(&mut self) {
+        for allocator in self.set_allocators.values_mut() {
+            allocator.new_frame();
+        } 
+    }
 }

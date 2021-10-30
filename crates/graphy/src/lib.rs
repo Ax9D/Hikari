@@ -47,7 +47,7 @@ mod tests {
     use std::time::Instant;
 
     use ash::vk;
-    use winit::{event::*, event_loop::*, platform::windows::EventLoopExtWindows, window::*};
+    use winit::{event::*, event_loop::*, window::*};
 
     // use crate::{
     //     graph::graphics::{pipeline::PipelineState, Pipeline},

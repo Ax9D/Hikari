@@ -69,7 +69,7 @@ impl PipelineLookup {
     }
 
     //Call once per frame
-    pub fn garbage_collect(&mut self) {
+    pub fn new_frame(&mut self) {
         for pipeline in self.pipelines.unused().drain(..) {
             self.destroy_pipeline(pipeline);
         }
@@ -78,10 +78,6 @@ impl PipelineLookup {
 
 impl Drop for PipelineLookup {
     fn drop(&mut self) {
-        self.garbage_collect();
-        
-        unsafe {
-            self.device.raw().destroy_pipeline_cache(self.vk_pipeline_cache, None);
-        }
+        self.new_frame();
     }
 }

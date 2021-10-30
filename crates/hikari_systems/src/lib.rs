@@ -1,9 +1,13 @@
 pub mod borrow;
-pub mod context;
-pub mod state;
-pub mod system;
+pub mod atomic_borrow;
 
-pub use context::Context;
-pub use context::ContextBuilder;
+pub mod global;
+pub mod state;
+pub mod task;
+
+pub use global::GlobalState;
+pub use global::GlobalStateBuilder;
 pub use state::State;
 
+
+mod query;

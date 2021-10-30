@@ -9,6 +9,8 @@ use vec_map::VecMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use crate::descriptor::DescriptorPool;
+use crate::graph::command::CommandBufferSavedState;
 use crate::texture::SampledImage;
 
 use ash::prelude::VkResult;
@@ -28,6 +30,7 @@ use thiserror::Error;
 use std::collections::HashMap;
 
 use self::pass::graphics::Renderpass;
+use self::pipeline::PipelineLookup;
 
 #[derive(Error, Debug)]
 pub enum GraphCompilationError {
@@ -60,6 +63,8 @@ pub enum GraphCompilationError {
 
 pub struct Graph<Scene, PerFrame, Resources> {
     graph: ProcessedGraph<Scene, PerFrame, Resources>,
+    descriptor_pool: DescriptorPool,
+    pipeline_lookup: PipelineLookup,
     pass_resources: Vec<PassResources>,
     allocation_data: AllocationData,
     flat: Vec<usize>,
@@ -105,9 +110,10 @@ impl<Scene, PerFrame, Resources> Graph<Scene, PerFrame, Resources> {
                     let mut command_buffer = CommandBuffer::new(
                         gfx.device(),
                         current_frame.command_buffer,
-                        pipeline_lut,
-                        &pass_resources.resource_bind_infos,
-                        &self.allocation_data,
+                        CommandBufferSavedState {
+                            pipeline_lookup: &mut self.pipeline_lookup,
+                            descriptor_pool: &mut self.descriptor_pool,
+                        }
                     );
 
                     let (width, height) = size.get_size(self.size, gfx.swapchain().size());
@@ -118,26 +124,24 @@ impl<Scene, PerFrame, Resources> Graph<Scene, PerFrame, Resources> {
                             offset: vk::Offset2D { x: 0, y: 0 },
                             extent: vk::Extent2D { width, height },
                         });
-                    let framebuffer = match fbkind {
-                        FramebufferKind::Allocated => {
-                            self.allocation_data.get_framebuffer(pass_ix).unwrap()
-                        }
-                        FramebufferKind::Swapchain => unsafe {},
-                    };
 
-                    unsafe {
-                        gfx.device().raw().cmd_begin_render_pass(
-                            command_buffer.raw(),
-                            &create_info,
-                            vk::SubpassContents::INLINE,
-                        );
+                    if node.outputs_swapchain() {
+
                     }
+
+                    command_buffer.begin_renderpass(&create_info);
+
+                    self.bind_resources(&command_buffer, &pass_resources.resource_bind_infos);
 
                     (node.run_fn)(&mut command_buffer, scene, perframe, resources);
 
                     unsafe {
-                        gfx.device().raw().cmd_end_render_pass(command_buffer.raw());
+                        self.allocation_data.get_barrier_storage(pass_ix)
+                        .expect("Internal implementation error")
+                        .apply(gfx.device(), command_buffer.raw());
                     }
+
+                    command_buffer.end_renderpass();
                 }
                 None => todo!(),
             }
@@ -148,7 +152,19 @@ impl<Scene, PerFrame, Resources> Graph<Scene, PerFrame, Resources> {
 
         gfx.frame_state_mut().update();
 
+        self.descriptor_pool.new_frame();
+        self.pipeline_lookup.new_frame();
+
         Ok(())
+    }
+
+    fn bind_resources(&self, cmd: &CommandBuffer, bind_infos: &[ResourceBindInfo]) {
+        for bind_info in bind_infos {
+            let image = self.allocation_data.get_image(bind_info.image_ix)
+            .expect("Internal implementation error");
+
+            cmd.set_image(image, 0, bind_info.binding);
+        }
     }
 }
 
@@ -205,6 +221,7 @@ struct ProcessedNode<Scene, PerFrame, Resources> {
     pub node_data: NodeData,
 }
 impl<Scene, PerFrame, Resources> ProcessedNode<Scene, PerFrame, Resources> {
+    #[inline]
     pub fn outputs_swapchain(&self) -> bool {
         match self.node_data {
             NodeData::Graphics(_, _, output_swapchain) => output_swapchain,
@@ -919,13 +936,6 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
         };
 
         Ok(resources)
-    }
-    fn allocate(
-        gfx: &crate::Gfx,
-        graph_size: (u32, u32),
-        graph: &ProcessedGraph<Scene, PerFrame, Resources>,
-    ) -> VkResult<AllocationData> {
-        todo!()
     }
     fn compile(
         device: &Arc<crate::Device>,

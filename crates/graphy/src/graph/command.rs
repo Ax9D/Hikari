@@ -129,6 +129,7 @@ impl PipelineContext {
 
     }
     pub fn flush(&mut self, renderpass: vk::RenderPass, pipe_lookup: &mut PipelineLookup, descriptor_pool: &mut DescriptorPool) {
+
         if self.pipeline_dirty {
             pipe_lookup.get_vk_pipeline(&self.psv, renderpass, 1).unwrap();
         }
@@ -151,24 +152,44 @@ pub struct CommandBuffer<'a> {
     saved_state: CommandBufferSavedState<'a>,
     cmd: vk::CommandBuffer,
     pipeline_context: Option<PipelineContext>,
+    active_renderpass: Option<vk::RenderPass>,
 }
 
 impl<'a> CommandBuffer<'a> {
     pub(crate) fn new(
-        cmd: vk::CommandBuffer,
         device: &'a Arc<crate::Device>,
-        saved_state: CommandBufferSavedState<'a>
-
+        cmd: vk::CommandBuffer,
+        saved_state: CommandBufferSavedState<'a>,
     ) -> Self {
         Self {
             device,
             cmd,
             pipeline_context: None,
             saved_state,
+            active_renderpass: None
         }
     }
     pub fn raw(&self) -> vk::CommandBuffer {
         self.cmd
+    }
+    pub(crate) fn begin_renderpass(&mut self, begin_info: &vk::RenderPassBeginInfo) {
+        unsafe {
+            debug_assert!(begin_info.render_pass!=vk::RenderPass::null());
+
+            self.active_renderpass = Some(begin_info.render_pass);
+            self.device.raw().cmd_begin_render_pass(self.raw(), begin_info, vk::SubpassContents::INLINE);
+        }
+    }
+    pub(crate) fn end_renderpass(&mut self) {
+        if let Some(renderpass) = self.active_renderpass {
+            unsafe {
+                self.device.raw().cmd_end_render_pass(self.raw());
+            }
+
+            self.active_renderpass = None;
+        } else {
+            panic!("Renderpass was never started");
+        }
     }
     fn try_get_pctx(&self) -> Result<&PipelineContext, CommandExecutionError> {
         match &self.pipeline_context {
@@ -239,7 +260,7 @@ impl<'a> CommandBuffer<'a> {
         let pctx = self.try_get_pctx()?;
         pctx.descriptor_state.set_image(&pctx.psv.shader, image.image_view(0).unwrap(), image.sampler(), set, binding, 0)
     }
-    pub(crate) fn push_constants<T: Pod>(&mut self, data: &T) -> Result<(), CommandExecutionError> {
+    pub fn push_constants<T: Pod>(&mut self, data: &T) -> Result<(), CommandExecutionError> {
         let pctx = self.try_get_pctx_mut()?;
         pctx.descriptor_state.push_constants(&pctx.psv.shader, data);
 
