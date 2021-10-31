@@ -1,97 +1,86 @@
 use std::marker::PhantomData;
 
-use crate::{State, atomic_borrow::{Ref, RefMut}, global::UnsafeGlobalState};
+use crate::{
+    borrow::{Ref, RefMut},
+    global::UnsafeGlobalState,
+    State,
+};
 
-trait Fetch<'a>: Sized {
-    type Item: DerefTuple<'a>;
+pub trait Query {
+    type Fetch: for<'a> Fetch<'a>;
+}
+
+pub unsafe trait Fetch<'a>: Sized {
+    type Item;
+
     fn get(g_state: &'a UnsafeGlobalState) -> Self::Item;
 }
 
-struct FetchRead<T> {
+pub struct RefFetch<T> {
     _phantom: PhantomData<T>
 }
 
-struct FetchWrite<T> {
-    _phantom: PhantomData<T>
+impl<'a, S:State> Query for Ref<'a, S> {
+    type Fetch = RefFetch<S>;
 }
 
-
-// impl<'a, S: State> Fetch<'a> for FetchRead<S> {
-//     type Item = Ref<'a, S>;
-
-//     fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-//         g_state.get::<S>().unwrap()
-//     }
-// }
-
-// impl<'a, S: State> Fetch<'a> for FetchWrite<S> {
-//     type Item = RefMut<'a, S>;
-
-//     fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-//         g_state.get_mut::<S>().unwrap()
-//     }
-// }
-
-
-impl<'a, S: State> Fetch<'a> for &'a S {
+unsafe impl<'a, S: State> Fetch<'a> for RefFetch<S> {
     type Item = Ref<'a, S>;
 
     fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-        g_state.get::<S>().unwrap()
+        unsafe{ g_state.get::<S>().unwrap() }
     }
 }
 
-impl<'a,A:State, B: State> Fetch<'a> for (&'a A, &'a B) {
-    type Item = (Ref<'a, A>, Ref<'a, B>);
-
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-        (g_state.get::<A>().unwrap(), g_state.get::<B>().unwrap())
-    }
+pub struct RefMutFetch<T> {
+    _phantom: PhantomData<T>
+}
+impl<'a, S:State> Query for RefMut<'a, S> {
+    type Fetch = RefFetch<S>;
 }
 
-impl <'a, S: State> Fetch<'a> for &'a mut S {
+unsafe impl<'a, S: State> Fetch<'a> for RefMutFetch<S> {
     type Item = RefMut<'a, S>;
 
     fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-        g_state.get_mut::<S>().unwrap()
-    }
-}
-trait DerefTuple<'a> {
-    type Target;
-
-    fn deref(&'a mut self) -> Self::Target;
-}
-impl <'a, A: State> DerefTuple<'a> for Ref<'a, A> {
-    type Target = &'a A;
-
-    fn deref(&'a mut self) -> Self::Target {
-        let a = self;
-        &* a
-    }
-}
-impl<'a, A: State, B: State> DerefTuple<'a> for (Ref<'a, A>, Ref<'a, B>) {
-    type Target = (&'a A, &'a B);
-
-    fn deref(&'a mut self) -> Self::Target {
-        let (a, b) = self;
-        (&*a, &*b)
+        unsafe{ g_state.get_mut::<S>().unwrap() }
     }
 }
 
-impl<'a, A: State, B: State> DerefTuple<'a> for (Ref<'a, A>, RefMut<'a, B>) {
-    type Target = (&'a A, &'a mut B);
-
-    fn deref(&'a mut self) -> Self::Target {
-        let (a, b) = self;
-        (&*a, &mut *b)
-    }
+impl Query for () {
+    type Fetch = ();
 }
 
-impl <'a, A: State> DerefTuple<'a> for RefMut<'a, A> {
-    type Target = &'a mut A;
+macro_rules! impl_query {
+    ($($name: ident),*) => {
+        impl<$($name: Query),*> Query for ($($name,)*) {
+            type Fetch = ($($name::Fetch,)*);
+        }
+ 
 
-    fn deref(&'a mut self) -> Self::Target {
-        let a = self;
-        &mut *a
+        unsafe impl<'a, $($name: Fetch<'a>),*> Fetch<'a> for ($($name,)*) {
+            type Item = ($($name::Item,)*);
+
+            fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+                ($($name::get(g_state),)*)
+            }
+        }
+    }
+}
+impl_query!(A);
+impl_query!(A, B);
+impl_query!(A, B, C);
+impl_query!(A, B, C, D);
+impl_query!(A, B, C, D, E);
+impl_query!(A, B, C, D, E, F);
+impl_query!(A, B, C, D, E, F, G);
+impl_query!(A, B, C, D, E, F, G, H);
+
+unsafe impl<'a> Fetch<'a> for () {
+    type Item = ();
+
+    #[allow(unused_variables)]
+    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+        ()
     }
 }

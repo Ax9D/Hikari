@@ -1,8 +1,13 @@
-use std::{any::Any, cell::UnsafeCell, ops::{Deref, DerefMut}, sync::atomic::{self, AtomicUsize}};
+use std::{
+    any::Any,
+    cell::UnsafeCell,
+    ops::{Deref, DerefMut},
+    sync::atomic::{self, AtomicUsize},
+};
 
 use crate::State;
 
-pub(crate) struct StateCell {
+pub struct StateCell {
     data: UnsafeCell<Box<dyn Any>>,
     borrow: AtomicUsize,
 }
@@ -11,7 +16,7 @@ impl StateCell {
     pub fn new<S: State>(state: S) -> Self {
         Self {
             data: UnsafeCell::new(Box::new(state)),
-            borrow: AtomicUsize::new(0)
+            borrow: AtomicUsize::new(0),
         }
     }
     pub fn borrow_cast<S: State>(&self) -> Ref<S> {
@@ -21,10 +26,10 @@ impl StateCell {
                 let typed_ref = data_ref.downcast_ref::<S>().unwrap();
 
                 Ref {
-                data: typed_ref,
-                borrow,
+                    data: typed_ref,
+                    borrow,
+                }
             }
-        },
             Err(s) => panic!("{}", s),
         }
     }
@@ -35,17 +40,17 @@ impl StateCell {
                 let typed_ref = data_ref.downcast_mut::<S>().unwrap();
 
                 RefMut {
-                data: typed_ref,
-                borrow,
+                    data: typed_ref,
+                    borrow,
+                }
             }
-        },
             Err(s) => panic!("{}", s),
         }
     }
 }
 
 struct BorrowRef<'a> {
-    borrow: &'a AtomicUsize
+    borrow: &'a AtomicUsize,
 }
 
 const HIGH_BIT: usize = !(::core::usize::MAX >> 1);
@@ -165,9 +170,8 @@ impl<'b> BorrowRefMut<'b> {
 
 pub struct Ref<'a, S> {
     data: &'a S,
-    borrow: BorrowRef<'a>
+    borrow: BorrowRef<'a>,
 }
-
 
 impl<'b, T> Deref for Ref<'b, T> {
     type Target = T;
@@ -182,7 +186,6 @@ pub struct RefMut<'a, S> {
     data: &'a mut S,
     borrow: BorrowRefMut<'a>,
 }
-
 
 impl<'b, T> Deref for RefMut<'b, T> {
     type Target = T;

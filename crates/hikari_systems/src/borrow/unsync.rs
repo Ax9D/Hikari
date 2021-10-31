@@ -10,7 +10,6 @@ pub struct Ref<'a, T> {
 }
 
 impl<'a, T> Drop for Ref<'a, T> {
-    
     fn drop(&mut self) {
         self.borrow.set(self.borrow.get() + 1);
     }
@@ -49,7 +48,7 @@ impl<'a, T> DerefMut for RefMut<'a, T> {
     }
 }
 
-pub(crate) struct StateCell {
+pub struct StateCell {
     data: UnsafeCell<Box<dyn Any>>,
     borrow: Cell<isize>,
 }
@@ -73,7 +72,6 @@ impl StateCell {
                 data: typed_ref,
                 borrow: &self.borrow,
             }
-            
         } else {
             panic!(
                 "Couldn't get a shared reference to {} as it is already borrowed mutably",
@@ -101,7 +99,3 @@ impl StateCell {
         }
     }
 }
-
-
-
-
