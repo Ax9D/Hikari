@@ -17,10 +17,10 @@ pub unsafe trait Fetch<'a>: Sized {
 }
 
 pub struct RefFetch<T> {
-    _phantom: PhantomData<T>
+    _phantom: PhantomData<T>,
 }
 
-impl<'a, S:State> Query for Ref<'a, S> {
+impl<'a, S: State> Query for Ref<'a, S> {
     type Fetch = RefFetch<S>;
 }
 
@@ -28,27 +28,35 @@ unsafe impl<'a, S: State> Fetch<'a> for RefFetch<S> {
     type Item = Ref<'a, S>;
 
     fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-        unsafe{ g_state.get::<S>().unwrap() }
+        unsafe { g_state.get::<S>().expect(&format!("No state of type: {}", std::any::type_name::<S>())) }
     }
 }
 
 pub struct RefMutFetch<T> {
-    _phantom: PhantomData<T>
+    _phantom: PhantomData<T>,
 }
-impl<'a, S:State> Query for RefMut<'a, S> {
-    type Fetch = RefFetch<S>;
+impl<'a, S: State> Query for RefMut<'a, S> {
+    type Fetch = RefMutFetch<S>;
 }
 
 unsafe impl<'a, S: State> Fetch<'a> for RefMutFetch<S> {
     type Item = RefMut<'a, S>;
 
     fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-        unsafe{ g_state.get_mut::<S>().unwrap() }
+        unsafe { g_state.get_mut::<S>().expect(&format!("No state of type: {}", std::any::type_name::<S>())) }
     }
 }
 
 impl Query for () {
     type Fetch = ();
+}
+unsafe impl<'a> Fetch<'a> for () {
+    type Item = ();
+
+    #[allow(unused_variables)]
+    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+        ()
+    }
 }
 
 macro_rules! impl_query {
@@ -56,7 +64,6 @@ macro_rules! impl_query {
         impl<$($name: Query),*> Query for ($($name,)*) {
             type Fetch = ($($name::Fetch,)*);
         }
- 
 
         unsafe impl<'a, $($name: Fetch<'a>),*> Fetch<'a> for ($($name,)*) {
             type Item = ($($name::Item,)*);
@@ -75,12 +82,3 @@ impl_query!(A, B, C, D, E);
 impl_query!(A, B, C, D, E, F);
 impl_query!(A, B, C, D, E, F, G);
 impl_query!(A, B, C, D, E, F, G, H);
-
-unsafe impl<'a> Fetch<'a> for () {
-    type Item = ();
-
-    #[allow(unused_variables)]
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-        ()
-    }
-}

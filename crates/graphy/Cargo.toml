@@ -10,9 +10,6 @@ edition = "2018"
 thiserror = "1.0.24"
 
 log = { version = "0.4.14"}
-crossterm = "0.19.0"
-fern = { version = "0.6.0", features = ["colored"] }
-chrono = "0.4.19"
 indexmap = "1.6.2"
 vec_map = "0.8.2"
 glam = "0.15.0"
@@ -20,7 +17,7 @@ lazy_static = "1.4.0"
 
 ash = "0.33.2"
 ash-window = "0.7.0"
-winit = "0.25.0"
+winit = {version = "0.25.0", features = ["x11"] }
 gpu-allocator = "0.9.0"
 shaderc = "0.7"
 spirv-reflect = "0.2.3"
@@ -36,6 +33,9 @@ bytemuck = "1.7.2"
 [dev-dependencies]
 hikari-asset = { path = "../hikari_asset"} 
 scoped_threadpool = "0.1.9"
+crossterm = "0.19.0"
+fern = { version = "0.6.0", features = ["colored"] }
+chrono = "0.4.19"
 
 [profile.release]
 debug = true

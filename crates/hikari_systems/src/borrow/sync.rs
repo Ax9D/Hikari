@@ -7,6 +7,9 @@ use std::{
 
 use crate::State;
 
+/* Atomic borrow counting code has been stolen from Atomic RefCell's implementation,
+ * by bholley licensed under the Mozilla Public License, http://mozilla.org/MPL/2.0
+ */
 pub struct StateCell {
     data: UnsafeCell<Box<dyn Any>>,
     borrow: AtomicUsize,
@@ -173,7 +176,7 @@ pub struct Ref<'a, S> {
     borrow: BorrowRef<'a>,
 }
 
-impl<'b, T> Deref for Ref<'b, T> {
+impl<T> Deref for Ref<'_, T> {
     type Target = T;
 
     #[inline]
@@ -187,7 +190,7 @@ pub struct RefMut<'a, S> {
     borrow: BorrowRefMut<'a>,
 }
 
-impl<'b, T> Deref for RefMut<'b, T> {
+impl<T> Deref for RefMut<'_, T> {
     type Target = T;
 
     #[inline]
@@ -196,7 +199,7 @@ impl<'b, T> Deref for RefMut<'b, T> {
     }
 }
 
-impl<'b, T> DerefMut for RefMut<'b, T> {
+impl<T> DerefMut for RefMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         self.data

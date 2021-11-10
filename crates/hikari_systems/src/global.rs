@@ -2,8 +2,10 @@ use std::any::TypeId;
 
 use fxhash::FxHashMap;
 
-use crate::{State, query::{Fetch, Query}};
-
+use crate::{
+    query::{Fetch, Query},
+    State,
+};
 
 pub use crate::borrow::{Ref, RefMut, StateCell};
 
@@ -43,7 +45,7 @@ impl GlobalStateBuilder {
 unsafe impl Send for UnsafeGlobalState {}
 unsafe impl Sync for UnsafeGlobalState {}
 
-//Access to Internal state is not guaranteed to be thread safe, because of thread_unsafety feature 
+//Access to Internal state is not guaranteed to be thread safe, because of thread_unsafety feature
 pub struct UnsafeGlobalState {
     state_list: FxHashMap<TypeId, StateCell>,
 }
@@ -62,7 +64,7 @@ impl UnsafeGlobalState {
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_mut())
     }
-    pub unsafe fn query< Q: Query>(&self) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
+    pub unsafe fn query<Q: Query>(&self) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
         Q::Fetch::get(self)
     }
 }
@@ -91,7 +93,10 @@ impl GlobalState {
 mod tests {
     use std::time::Instant;
 
-    use crate::{GlobalState, global::{Ref, RefMut}};
+    use crate::{
+        global::{Ref, RefMut},
+        GlobalState,
+    };
 
     pub struct Renderer {
         x: i32,
@@ -111,7 +116,7 @@ mod tests {
 
         let now = Instant::now();
 
-        //let mut tuple = context.inner.query::<(Ref<Physics>, RefMut<Renderer>)>();
+        let mut tuple = unsafe { context.inner.query::<(Ref<Physics>, RefMut<Renderer>)>() };
 
         //let x = tuple.deref();
         // let (a,b) = tuple;

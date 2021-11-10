@@ -28,12 +28,13 @@ pub struct RefMut<'a, T> {
     borrow: &'a Cell<isize>,
 }
 
-impl<'a, T> Drop for RefMut<'a, T> {
+impl<T> Drop for RefMut<'_, T> {
+    #[inline]
     fn drop(&mut self) {
         self.borrow.set(self.borrow.get() - 1);
     }
 }
-impl<'a, T> Deref for RefMut<'a, T> {
+impl<T> Deref for RefMut<'_, T> {
     type Target = T;
 
     #[inline]
@@ -41,7 +42,7 @@ impl<'a, T> Deref for RefMut<'a, T> {
         self.data
     }
 }
-impl<'a, T> DerefMut for RefMut<'a, T> {
+impl<T> DerefMut for RefMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.data

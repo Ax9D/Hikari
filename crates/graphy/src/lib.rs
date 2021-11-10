@@ -55,12 +55,44 @@ mod tests {
     // };
 
     use crate::{Gfx, descriptor};
+    
+    extern crate fern;
+    use fern::*;
+
 
     const WIDTH: u32 = 800;
     const HEIGHT: u32 = 600;
+    fn setup_logging() {
+        let colors_line = fern::colors::ColoredLevelConfig::new()
+            .error(fern::colors::Color::Red)
+            .warn(fern::colors::Color::Yellow)
+            .info(fern::colors::Color::Green)
+            .debug(fern::colors::Color::BrightBlue)
+            .trace(fern::colors::Color::BrightBlack);
+        fern::Dispatch::new()
+            .format(move |out, message, record| {
+                out.finish(format_args!(
+                    "{bold}{white}[{}]{reset} {}{s_reset} {}\n",
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                    colors_line.color(record.level()),
+                    message,
+                    bold = crossterm::style::Attribute::Bold,
+                    white = crossterm::style::SetForegroundColor(crossterm::style::Color::White),
+                    reset = crossterm::style::ResetColor,
+                    s_reset = crossterm::style::Attribute::Reset
+                ))
+            })
+            .level(log::LevelFilter::Debug)
+            .chain(std::io::stdout())
+            .chain(fern::log_file("output.log").unwrap())
+            .apply()
+            .unwrap();
+    }
 
     #[test]
     fn offscreen() -> Result<(), Box<dyn std::error::Error>> {
+        setup_logging();
+
         let event_loop = EventLoop::<()>::new_any_thread();
         let mut window = WindowBuilder::new().build(&event_loop).unwrap();
 

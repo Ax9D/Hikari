@@ -1,75 +1,26 @@
-use std::{cmp::Ordering, collections::HashSet};
+use std::{collections::HashSet};
 
-use crate::{global::UnsafeGlobalState, GlobalState};
-
-pub struct System {
-    exec: Box<dyn FnMut(&UnsafeGlobalState) + 'static>
-}
-impl System {
-    #[inline]
-    pub fn run(&mut self, g_state: &UnsafeGlobalState) {
-        (self.exec)(g_state);
-    }
-}
-pub trait IntoSystem<Params>: 'static {
-    fn into_system(self) -> System;
-}
-
-use crate::query::Fetch;
-
-use crate::query::Query;
-
-macro_rules! impl_into_system {
-    ($($name: ident),*) => {
-        #[allow(non_snake_case)]
-        impl<'a, Func, Return, $($name: Query),*> IntoSystem<($($name,)*)> for Func
-        where 
-            Func:
-                FnMut($($name),*) -> Return +
-                FnMut($(<<$name as Query>::Fetch as Fetch>::Item),* ) -> Return + 
-                Send + Sync + 'static {
-            fn into_system(mut self) -> System { 
-                System {
-                    exec: Box::new(move |g_state| {
-                        //($($name::get(g_state),)*)
-                        let ($($name,)*) = unsafe { g_state.query::<($($name,)*)>() };
-    
-                        self($($name,)*);
-                    })
-                }
-            }
-        }
-    };
-}
-impl_into_system!();
-impl_into_system!(A);
-impl_into_system!(A, B);
-impl_into_system!(A, B, C);
-impl_into_system!(A, B, C, D);
-impl_into_system!(A, B, C, D, E);
-impl_into_system!(A, B, C, D, E, F);
-impl_into_system!(A, B, C, D, E, F, G);
-impl_into_system!(A, B, C, D, E, F, G, H);
+use crate::{global::UnsafeGlobalState, system::Function};
 
 pub struct Task {
     name: String,
-    system: System,
+    system: Function,
     before: HashSet<String>,
     after: HashSet<String>,
 }
 impl Task {
-    pub fn new(name: &str, system: System) -> TaskBuilder {
+    pub fn new(name: &str, system: Function) -> TaskBuilder {
         TaskBuilder {
             task: Task {
                 name: name.to_owned(),
                 system,
                 before: HashSet::new(),
-                after: HashSet::new()
+                after: HashSet::new(),
             },
         }
     }
     #[inline]
-    pub fn run(&mut self, g_state: &UnsafeGlobalState) {
+    pub unsafe fn run(&mut self, g_state: &UnsafeGlobalState) {
         self.system.run(g_state);
     }
 }
@@ -77,7 +28,6 @@ pub struct TaskBuilder {
     task: Task,
 }
 impl TaskBuilder {
-
     pub fn before(mut self, task_name: &str) -> Self {
         self.task.before.insert(task_name.to_owned());
 
@@ -87,6 +37,16 @@ impl TaskBuilder {
         self.task.after.insert(task_name.to_owned());
 
         self
+    }
+    fn validate(self) -> Result<Self, String> {
+        let intersection = self.task.before.intersection(&self.task.after);
+        if intersection.count() > 0 {
+            Ok(self)
+        } else {
+            Err(format!(
+                "Task cannot run both before and after another a task!"
+            ))
+        }
     }
     pub fn build(self) -> Task {
         self.task
@@ -147,30 +107,30 @@ impl TaskScheduleBuilder {
     // }
     pub fn build(mut self) -> TaskSchedule {
         let tasks = &mut self.schedule.tasks;
-        tasks.sort_by(|a, b| {
-            if a.before.contains(&b.name) {
-                Ordering::Greater
-            } else if b.before.contains(&a.name) {
-                Ordering::Less
-            } else {
-                Ordering::Equal
-            }
-        });
 
         self.schedule
     }
 }
 #[cfg(test)]
 mod tests {
-    use crate::borrow::Ref;
+    use crate::{GlobalState, global::Ref, global::RefMut, system::IntoFunction};
 
-    use super::{IntoSystem, Task};
+    use super::{Task};
 
-    fn do_stuff(x: Ref<i32>, y: Ref<f32>) -> i32 {
-        todo!()
+    fn do_stuff(mut x: RefMut<f32>, y: Ref<i32>) {
+        (*x)+=*y as f32;
+        println!("Works {}  {}", *x, *y);
+        
     }
     #[test]
     fn task_build() {
-        let task = Task::new("Test", do_stuff.into_system());
+        let global = GlobalState::new()
+        .add_state(420)
+        .add_state(69_f32)
+        .build();
+
+        let mut task = Task::new("Hk_Renderer_Update", do_stuff.into_function()).build();
+
+        unsafe { task.run(global.raw()); }
     }
 }
