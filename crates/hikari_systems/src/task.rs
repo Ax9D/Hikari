@@ -1,19 +1,19 @@
 use std::{collections::HashSet};
 
-use crate::{global::UnsafeGlobalState, system::Function};
+use crate::{function::{Function, IntoFunction}, global::UnsafeGlobalState};
 
 pub struct Task {
     name: String,
-    system: Function,
+    function: Function,
     before: HashSet<String>,
     after: HashSet<String>,
 }
 impl Task {
-    pub fn new(name: &str, system: Function) -> TaskBuilder {
+    pub fn new<Params>(name: &str, function: impl IntoFunction<Params>) -> TaskBuilder {
         TaskBuilder {
             task: Task {
                 name: name.to_owned(),
-                system,
+                function: function.into_function(),
                 before: HashSet::new(),
                 after: HashSet::new(),
             },
@@ -21,7 +21,7 @@ impl Task {
     }
     #[inline]
     pub unsafe fn run(&mut self, g_state: &UnsafeGlobalState) {
-        self.system.run(g_state);
+        self.function.run(g_state);
     }
 }
 pub struct TaskBuilder {
@@ -113,14 +113,12 @@ impl TaskScheduleBuilder {
 }
 #[cfg(test)]
 mod tests {
-    use crate::{GlobalState, global::Ref, global::RefMut, system::IntoFunction};
+    use crate::{GlobalState, global::Ref, global::RefMut};
 
     use super::{Task};
 
-    fn do_stuff(mut x: RefMut<f32>, y: Ref<i32>) {
-        (*x)+=*y as f32;
-        println!("Works {}  {}", *x, *y);
-        
+    fn do_stuff(x: Option<RefMut<f32>>, y: Ref<i32>) {      
+        println!("{}", *x.unwrap());  
     }
     #[test]
     fn task_build() {
@@ -129,7 +127,7 @@ mod tests {
         .add_state(69_f32)
         .build();
 
-        let mut task = Task::new("Hk_Renderer_Update", do_stuff.into_function()).build();
+        let mut task = Task::new("Hk_Renderer_Update", &do_stuff).build();
 
         unsafe { task.run(global.raw()); }
     }

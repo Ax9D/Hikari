@@ -10,8 +10,7 @@ pub struct Function {
 }
 impl Function {
     #[inline]
-    pub unsafe fn run(&mut self, g_state: &UnsafeGlobalState) {
-        
+    pub unsafe fn run(&mut self, g_state: &UnsafeGlobalState) {  
         (self.exec)(g_state);
     }
 }
@@ -27,7 +26,7 @@ use crate::query::Fetch;
 
 use crate::query::Query;
 
-macro_rules! impl_into_system {
+macro_rules! impl_into_function {
     ($($name: ident),*) => {
         #[allow(non_snake_case)]
         impl<'a, Func, Return, $($name: Query + 'static),*> IntoFunction<($($name,)*)> for Func
@@ -54,12 +53,12 @@ macro_rules! impl_into_system {
         }
     };
 }
-impl_into_system!();
-impl_into_system!(A);
-impl_into_system!(A, B);
-impl_into_system!(A, B, C);
-impl_into_system!(A, B, C, D);
-impl_into_system!(A, B, C, D, E);
-impl_into_system!(A, B, C, D, E, F);
-impl_into_system!(A, B, C, D, E, F, G);
-impl_into_system!(A, B, C, D, E, F, G, H);
+impl_into_function!();
+impl_into_function!(A);
+impl_into_function!(A, B);
+impl_into_function!(A, B, C);
+impl_into_function!(A, B, C, D);
+impl_into_function!(A, B, C, D, E);
+impl_into_function!(A, B, C, D, E, F);
+impl_into_function!(A, B, C, D, E, F, G);
+impl_into_function!(A, B, C, D, E, F, G, H);
