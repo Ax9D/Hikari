@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, pin::Pin};
 
 use crate::{
     borrow::{Ref, RefMut},
@@ -13,7 +13,7 @@ pub trait Query {
 pub unsafe trait Fetch<'a>: Sized {
     type Item;
 
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item;
+    fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item;
 }
 
 pub struct RefFetch<T> {
@@ -27,7 +27,7 @@ impl<'a, S: State> Query for Ref<'a, S> {
 unsafe impl<'a, S: State> Fetch<'a> for RefFetch<S> {
     type Item = Ref<'a, S>;
 
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+    fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
         unsafe { g_state.get::<S>().expect(&format!("No state of type: {}", std::any::type_name::<S>())) }
     }
 }
@@ -41,8 +41,8 @@ impl<'a, S: State> Query for RefMut<'a, S> {
 unsafe impl<'a, S: State> Fetch<'a> for RefMutFetch<S> {
     type Item = RefMut<'a, S>;
 
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
-        unsafe { g_state.get_mut::<S>().expect(&format!("No state of type: {}", std::any::type_name::<S>())) }
+    fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
+        unsafe { UnsafeGlobalState::get_mut::<S>(g_state).expect(&format!("No state of type: {}", std::any::type_name::<S>())) }
     }
 }
 
@@ -55,7 +55,7 @@ pub struct MaybeRefFetch<T> {
 unsafe impl<'a, S: State> Fetch<'a> for MaybeRefFetch<S> {
     type Item = Option<Ref<'a, S>>;
 
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+    fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
         unsafe { g_state.get::<S>() }
     }
 }
@@ -69,7 +69,7 @@ pub struct MaybeRefMutFetch<T> {
 unsafe impl<'a, S: State> Fetch<'a> for MaybeRefMutFetch<S> {
     type Item = Option<RefMut<'a, S>>;
 
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+    fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
         unsafe { g_state.get_mut::<S>() }
     }
 }
@@ -82,7 +82,7 @@ unsafe impl<'a> Fetch<'a> for () {
     type Item = ();
 
     #[allow(unused_variables)]
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+    fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
         ()
     }
 }
@@ -93,9 +93,9 @@ impl<'a> Query for &'a UnsafeGlobalState {
 pub struct UnsafeGlobalFetch;
 
 unsafe impl<'a> Fetch<'a> for UnsafeGlobalFetch {
-    type Item = &'a UnsafeGlobalState;
+    type Item = Pin<&'a UnsafeGlobalState>;
 
-    fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+    fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
         g_state
     }
     
@@ -110,7 +110,7 @@ macro_rules! impl_query {
         unsafe impl<'a, $($name: Fetch<'a>),*> Fetch<'a> for ($($name,)*) {
             type Item = ($($name::Item,)*);
 
-            fn get(g_state: &'a UnsafeGlobalState) -> Self::Item {
+            fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
                 ($($name::get(g_state),)*)
             }
         }

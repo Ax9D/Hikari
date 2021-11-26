@@ -1,4 +1,4 @@
-use std::{collections::HashSet};
+use std::{collections::HashSet, pin::Pin};
 
 use crate::{function::{Function, IntoFunction}, global::UnsafeGlobalState};
 
@@ -19,8 +19,11 @@ impl Task {
             },
         }
     }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
     #[inline]
-    pub unsafe fn run(&mut self, g_state: &UnsafeGlobalState) {
+    pub unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) {
         self.function.run(g_state);
     }
 }
@@ -48,8 +51,10 @@ impl TaskBuilder {
             ))
         }
     }
-    pub fn build(self) -> Task {
-        self.task
+    pub fn build(self) -> Result<Task, String> {
+        Ok(
+            self.validate()?.task
+        )
     }
 }
 
@@ -118,16 +123,16 @@ mod tests {
     use super::{Task};
 
     fn do_stuff(x: Option<RefMut<f32>>, y: Ref<i32>) {      
-        println!("{}", *x.unwrap());  
     }
     #[test]
     fn task_build() {
         let global = GlobalState::new()
         .add_state(420)
         .add_state(69_f32)
+        .add_state("coom jar")
         .build();
 
-        let mut task = Task::new("Hk_Renderer_Update", &do_stuff).build();
+        let mut task = Task::new("Hk_Renderer_Update", &do_stuff).build().unwrap();
 
         unsafe { task.run(global.raw()); }
     }

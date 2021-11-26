@@ -10,6 +10,8 @@ edition = "2018"
 thiserror = "1.0.24"
 
 log = { version = "0.4.14"}
+crossterm = "0.19.0"
+
 indexmap = "1.6.2"
 vec_map = "0.8.2"
 glam = "0.15.0"
@@ -33,7 +35,6 @@ bytemuck = "1.7.2"
 [dev-dependencies]
 hikari-asset = { path = "../hikari_asset"} 
 scoped_threadpool = "0.1.9"
-crossterm = "0.19.0"
 fern = { version = "0.6.0", features = ["colored"] }
 chrono = "0.4.19"
 

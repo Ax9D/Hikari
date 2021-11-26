@@ -1,6 +1,7 @@
-#[allow(unused)]
+#![allow(dead_code)]
 mod sync;
 mod unsync;
+
 
 #[cfg(feature = "thread_unsafety")]
 pub use unsync::*;

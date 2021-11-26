@@ -1,16 +1,16 @@
-
+#[allow(dead_code)]
 pub struct Type {
     name: &'static str,
     id: TypeId,
 }
-
+#[allow(dead_code)]
 pub struct Function {
     param_types: Vec<Type>,
-    exec: Box<dyn FnMut(&UnsafeGlobalState) + 'static>,
+    exec: Box<dyn FnMut(Pin<&UnsafeGlobalState>) + 'static>,
 }
 impl Function {
     #[inline]
-    pub unsafe fn run(&mut self, g_state: &UnsafeGlobalState) {  
+    pub unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) {  
         (self.exec)(g_state);
     }
 }
@@ -20,6 +20,7 @@ pub trait IntoFunction<Params>: 'static {
 
 use std::any::TypeId;
 use std::any::type_name;
+use std::pin::Pin;
 
 use crate::global::UnsafeGlobalState;
 use crate::query::Fetch;

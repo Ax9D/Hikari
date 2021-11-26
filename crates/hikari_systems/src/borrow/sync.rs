@@ -1,9 +1,4 @@
-use std::{
-    any::Any,
-    cell::UnsafeCell,
-    ops::{Deref, DerefMut},
-    sync::atomic::{self, AtomicUsize},
-};
+use std::{any::Any, cell::UnsafeCell, fmt, ops::{Deref, DerefMut}, sync::atomic::{self, AtomicUsize}};
 
 use crate::State;
 
@@ -170,7 +165,7 @@ impl<'b> BorrowRefMut<'b> {
         }
     }
 }
-
+#[allow(dead_code)]
 pub struct Ref<'a, S> {
     data: &'a S,
     borrow: BorrowRef<'a>,
@@ -184,7 +179,14 @@ impl<T> Deref for Ref<'_, T> {
         self.data
     }
 }
+impl<T: fmt::Display> fmt::Display for Ref<'_, T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.data.fmt(f)
+    }
+}
 
+#[allow(dead_code)]
 pub struct RefMut<'a, S> {
     data: &'a mut S,
     borrow: BorrowRefMut<'a>,
@@ -203,5 +205,11 @@ impl<T> DerefMut for RefMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         self.data
+    }
+}
+impl<T: fmt::Display> fmt::Display for RefMut<'_, T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.data.fmt(f)
     }
 }

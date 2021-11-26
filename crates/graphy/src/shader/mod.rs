@@ -56,6 +56,8 @@ use crate::descriptor::{self, DescriptorSetLayoutBuilder, MAX_DESCRIPTOR_SETS};
 pub enum ShaderCreateError {
     #[error("Failed to compile shader, {0}\n Error : {1}")]
     CompilationError(String, String),
+    #[error("Failed to validate shader, {0}\n Error: {1}")]
+    ValidationError(String, String),
     #[error("Failed to link shader, {0}\n Error : {1}")]
     LinkingError(String, String),
 }
@@ -369,7 +371,7 @@ impl<'a> ShaderProgramBuilder<'a> {
         entry_point: &str,
         shader_kind: shaderc::ShaderKind,
         debug_name: &str,
-    ) -> Result<Vec<u32>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<u32>, ShaderCreateError> {
         #[allow(unused_mut)]
         let mut options = shaderc::CompileOptions::new().unwrap();
 
@@ -381,7 +383,7 @@ impl<'a> ShaderProgramBuilder<'a> {
             debug_name,
             entry_point,
             Some(&options),
-        )?;
+        ).map_err(|err| ShaderCreateError::CompilationError(debug_name.to_string(), err.to_string()))?;
 
         log::debug!("Compiled shader {}", debug_name);
 
@@ -407,7 +409,7 @@ impl<'a> ShaderProgramBuilder<'a> {
         shader: &ShaderCode,
         debug_name: String,
         kind: shaderc::ShaderKind,
-    ) -> Result<CompiledShaderModule, Box<dyn std::error::Error>> {
+    ) -> Result<CompiledShaderModule, ShaderCreateError> {
         let data;
         let spirv = match &shader.data {
             ShaderData::Spirv(data) => unsafe {
@@ -430,9 +432,10 @@ impl<'a> ShaderProgramBuilder<'a> {
         };
 
         let reflection_data = super::ReflectionData::new(spirv)
-            .or_else(|err| Err(ShaderCreateError::CompilationError(debug_name.clone(), err)))?;
+            .map_err(|err| ShaderCreateError::ValidationError(debug_name.clone(), err))?;
 
-        let module = Self::create_vk_module(device.raw(), &spirv)?;
+        let module = Self::create_vk_module(device.raw(), &spirv)
+        .map_err(|error| ShaderCreateError::CompilationError(debug_name.clone(), error.to_string()))?;
 
         let stage = shaderc_to_vulkan_stage(kind);
 
@@ -447,7 +450,7 @@ impl<'a> ShaderProgramBuilder<'a> {
     pub fn build(
         self,
         device: &Arc<crate::Device>,
-    ) -> Result<Arc<Shader>, Box<dyn std::error::Error>> {
+    ) -> Result<Arc<Shader>, ShaderCreateError> {
         log::debug!("Compiling vertex shader");
 
         let vertex = Self::create_shader_module(
@@ -464,7 +467,8 @@ impl<'a> ShaderProgramBuilder<'a> {
             shaderc::ShaderKind::Fragment,
         )?;
 
-        let pipeline_layout = PipelineLayout::new(device, &[&vertex, &fragment])?;
+        let pipeline_layout = PipelineLayout::new(device, &[&vertex, &fragment])
+        .map_err(|err| ShaderCreateError::LinkingError(self.name.clone(), err.to_string()))?;
 
         let mut hasher = fxhash::FxHasher::default();
         

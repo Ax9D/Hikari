@@ -1,5 +1,6 @@
 use std::any::{type_name, Any};
 use std::cell::{Cell, UnsafeCell};
+use std::fmt;
 use std::ops::{Deref, DerefMut};
 
 use crate::State;
@@ -20,6 +21,12 @@ impl<'a, T> Deref for Ref<'a, T> {
     #[inline]
     fn deref(&self) -> &Self::Target {
         self.data
+    }
+}
+impl<T: fmt::Display> fmt::Display for Ref<'_, T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.data.fmt(f)
     }
 }
 
@@ -46,6 +53,12 @@ impl<T> DerefMut for RefMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.data
+    }
+}
+impl<T: fmt::Display> fmt::Display for RefMut<'_, T> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.data.fmt(f)
     }
 }
 

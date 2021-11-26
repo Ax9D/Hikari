@@ -1,4 +1,3 @@
-#[allow(unused)]
 pub mod global;
 pub mod query;
 pub mod state;

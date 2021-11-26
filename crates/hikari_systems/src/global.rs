@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::{any::TypeId, marker::PhantomPinned, pin::Pin};
 
 use fxhash::FxHashMap;
 
@@ -18,6 +18,7 @@ impl GlobalStateBuilder {
         Self {
             g_state: UnsafeGlobalState {
                 state_list: Default::default(),
+                _marker: PhantomPinned::default()
             },
         }
     }
@@ -28,7 +29,7 @@ impl GlobalStateBuilder {
             .insert(TypeId::of::<S>(), StateCell::new(state))
         {
             panic!(
-                "State {} has already been registered",
+                "State of type {} has already been registered",
                 std::any::type_name::<S>()
             );
         }
@@ -37,7 +38,7 @@ impl GlobalStateBuilder {
     }
     pub fn build(self) -> GlobalState {
         GlobalState {
-            inner: self.g_state,
+            inner: Box::pin(self.g_state),
         }
     }
 }
@@ -48,45 +49,52 @@ unsafe impl Sync for UnsafeGlobalState {}
 //Access to Internal state is not guaranteed to be thread safe, because of thread_unsafety feature
 pub struct UnsafeGlobalState {
     state_list: FxHashMap<TypeId, StateCell>,
+    _marker: PhantomPinned
 }
 
 impl UnsafeGlobalState {
     pub fn new() -> GlobalStateBuilder {
         GlobalStateBuilder::new()
     }
-    pub unsafe fn get<S: State>(&self) -> Option<Ref<S>> {
-        self.state_list
+    pub unsafe fn get<S: State>(self: Pin<&Self>) -> Option<Ref<S>> {
+        self.get_ref().state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast())
     }
-    pub unsafe fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
-        self.state_list
+    pub unsafe fn get_mut<S: State>(self: Pin<&Self>) -> Option<RefMut<S>> {
+        self.get_ref().state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_mut())
     }
-    pub unsafe fn query<Q: Query>(&self) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
+    pub unsafe fn query<Q: Query>(self: Pin<&Self>) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
         Q::Fetch::get(self)
     }
 }
 
 pub struct GlobalState {
-    inner: UnsafeGlobalState,
+    inner: Pin<Box<UnsafeGlobalState>>,
 }
 impl GlobalState {
     pub fn new() -> GlobalStateBuilder {
         GlobalStateBuilder::new()
     }
-    pub fn raw(&self) -> &UnsafeGlobalState {
-        &self.inner
+    #[inline]
+    pub fn raw(&self) -> Pin<&UnsafeGlobalState> {
+        self.inner.as_ref()
     }
     #[inline]
-    pub fn get<S: State>(&self) -> Option<Ref<S>> {
-        unsafe { self.inner.get() }
+    pub fn raw_mut(&mut self) -> Pin<&mut UnsafeGlobalState> {
+        self.inner.as_mut()
     }
     #[inline]
-    pub fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
-        unsafe { self.inner.get_mut() }
+    unsafe fn get<S: State>(&self) -> Option<Ref<S>> {
+        self.raw().get() 
     }
+    #[inline]
+    unsafe fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
+        UnsafeGlobalState::get_mut(self.raw())
+    }
+
 }
 
 #[cfg(test)]
@@ -94,7 +102,6 @@ mod tests {
     use std::time::Instant;
 
     use crate::{
-        global::{Ref, RefMut},
         GlobalState,
     };
 
@@ -115,17 +122,14 @@ mod tests {
             .build();
 
         let now = Instant::now();
-
-        let mut tuple = unsafe { context.inner.query::<(Ref<Physics>, RefMut<Renderer>)>() };
-
         //let x = tuple.deref();
         // let (a,b) = tuple;
         // let refs = (&*a, &*b);
 
         let mut sum: i32 = 0;
         for _ in 0..n {
-            let phys = context.get_mut::<Physics>().unwrap();
-            let mut renderer = context.get_mut::<Renderer>().unwrap();
+            let phys = unsafe { context.get_mut::<Physics>().unwrap() };
+            let mut renderer = unsafe { context.get_mut::<Renderer>().unwrap() };
             renderer.x = rand::random();
 
             sum = sum.wrapping_add(renderer.x + phys.y as i32);
