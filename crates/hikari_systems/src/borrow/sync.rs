@@ -46,7 +46,7 @@ impl StateCell {
         }
     }
 }
-
+#[derive(Debug)]
 struct BorrowRef<'a> {
     borrow: &'a AtomicUsize,
 }
@@ -130,6 +130,7 @@ impl<'b> Drop for BorrowRef<'b> {
         debug_assert!(old & HIGH_BIT == 0);
     }
 }
+#[derive(Debug)]
 struct BorrowRefMut<'b> {
     borrow: &'b AtomicUsize,
 }
@@ -179,6 +180,14 @@ impl<T> Deref for Ref<'_, T> {
         self.data
     }
 }
+
+impl<'a, S: fmt::Debug> fmt::Debug for Ref<'a, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.data.fmt(f)
+    }
+}
+
 impl<T: fmt::Display> fmt::Display for Ref<'_, T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -207,6 +216,14 @@ impl<T> DerefMut for RefMut<'_, T> {
         self.data
     }
 }
+
+impl<'a, S: fmt::Debug> fmt::Debug for RefMut<'a, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.data.fmt(f)
+    }
+}
+
 impl<T: fmt::Display> fmt::Display for RefMut<'_, T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

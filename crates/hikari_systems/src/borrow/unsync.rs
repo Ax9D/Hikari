@@ -23,6 +23,12 @@ impl<'a, T> Deref for Ref<'a, T> {
         self.data
     }
 }
+impl<'a, S: fmt::Debug> fmt::Debug for Ref<'a, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.data.fmt(f)
+    }
+}
 impl<T: fmt::Display> fmt::Display for Ref<'_, T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -53,6 +59,13 @@ impl<T> DerefMut for RefMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.data
+    }
+}
+
+impl<'a, S: fmt::Debug> fmt::Debug for RefMut<'a, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.data.fmt(f)
     }
 }
 impl<T: fmt::Display> fmt::Display for RefMut<'_, T> {

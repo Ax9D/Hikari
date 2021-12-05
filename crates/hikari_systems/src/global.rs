@@ -87,11 +87,11 @@ impl GlobalState {
         self.inner.as_mut()
     }
     #[inline]
-    unsafe fn get<S: State>(&self) -> Option<Ref<S>> {
+    pub unsafe fn get<S: State>(&self) -> Option<Ref<S>> {
         self.raw().get() 
     }
     #[inline]
-    unsafe fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
+    pub unsafe fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
         UnsafeGlobalState::get_mut(self.raw())
     }
 

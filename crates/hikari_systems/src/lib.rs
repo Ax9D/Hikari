@@ -8,4 +8,11 @@ pub use global::GlobalState;
 pub use global::GlobalStateBuilder;
 pub use state::State;
 
+pub use task::Task;
+pub use task::Schedule;
+pub use task::ScheduleBuilder;
+
+pub use function::Function;
+pub use function::IntoFunction;
+
 mod borrow;
