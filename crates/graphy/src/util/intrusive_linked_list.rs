@@ -6,13 +6,13 @@ pub struct Node<T> {
 impl<T> Node<T> {
     pub fn new_boxed(data: T) -> Box<Self> {
         Box::new(Self {
-            data, 
+            data,
             next: std::ptr::null_mut(),
             prev: std::ptr::null_mut(),
         })
     }
     pub fn data(&self) -> &T {
-       &self.data
+        &self.data
     }
     pub fn data_mut(&mut self) -> &mut T {
         &mut self.data
@@ -24,8 +24,8 @@ impl<T> Node<T> {
 }
 pub struct IntrusiveLinkedList<T> {
     first: *mut Node<T>,
-    last:  *mut Node<T>,
-    len: usize
+    last: *mut Node<T>,
+    len: usize,
 }
 
 impl<T> IntrusiveLinkedList<T> {
@@ -33,11 +33,11 @@ impl<T> IntrusiveLinkedList<T> {
         Self {
             first: std::ptr::null_mut(),
             last: std::ptr::null_mut(),
-            len: 0
+            len: 0,
         }
     }
     pub fn is_empty(&self) -> bool {
-        self.len==0
+        self.len == 0
     }
     pub fn append_node(&mut self, data: Box<Node<T>>) -> *mut Node<T> {
         let data_ptr = Box::into_raw(data);
@@ -45,16 +45,14 @@ impl<T> IntrusiveLinkedList<T> {
         if self.is_empty() {
             self.first = data_ptr;
             self.last = data_ptr;
-
-        }
-        else {
-            unsafe { 
-                Node::join( self.last, data_ptr );
+        } else {
+            unsafe {
+                Node::join(self.last, data_ptr);
                 self.last = data_ptr;
             }
         }
 
-        self.len+=1;
+        self.len += 1;
 
         data_ptr
     }
@@ -64,65 +62,62 @@ impl<T> IntrusiveLinkedList<T> {
         if self.is_empty() {
             self.first = data_ptr;
             self.last = data_ptr;
-        }
-        else {
-            unsafe { 
-                Node::join( data_ptr, self.first );
+        } else {
+            unsafe {
+                Node::join(data_ptr, self.first);
                 self.first = data_ptr;
             }
         }
 
-        self.len+=1;
+        self.len += 1;
 
         data_ptr
     }
-    pub fn remove_node(&mut self, node: *mut Node<T>) -> Box<Node<T>>{
+    pub fn remove_node(&mut self, node: *mut Node<T>) -> Box<Node<T>> {
         unsafe {
             debug_assert!(!node.is_null());
 
             if self.first == node {
-
                 self.first = (*self.first).next;
-
             } else if self.last == node {
-
                 self.last = (*self.last).prev;
-
-            }
-            else {
+            } else {
                 let prev = (*node).prev;
                 let next = (*node).next;
-    
+
                 Node::join(prev, next);
             }
 
-            self.len-=1;
+            self.len -= 1;
             Box::from_raw(node)
         }
     }
     pub fn iter(&self) -> Iter<T> {
         let current = self.first;
-        
-        Iter { list: self, current}
+
+        Iter {
+            list: self,
+            current,
+        }
     }
     pub fn drain(&mut self) -> Drain<T> {
         let current = self.first;
-    
+
         Drain {
             list: self,
-            current
+            current,
         }
     }
 }
 impl<T> Drop for IntrusiveLinkedList<T> {
     fn drop(&mut self) {
-       self.drain();
+        self.drain();
     }
 }
 
 pub struct Drain<'a, T> {
     list: &'a mut IntrusiveLinkedList<T>,
-    current: *mut Node<T>
+    current: *mut Node<T>,
 }
 
 impl<'a, T> Iterator for Drain<'a, T> {
@@ -144,7 +139,7 @@ impl<'a, T> Iterator for Drain<'a, T> {
 
 pub struct Iter<'a, T> {
     list: &'a IntrusiveLinkedList<T>,
-    current: *mut Node<T>
+    current: *mut Node<T>,
 }
 
 impl<'a, T> Iterator for Iter<'a, T> {

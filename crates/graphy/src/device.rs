@@ -394,7 +394,9 @@ impl Device {
             buffer_device_address: false,
         })?);
 
-        memory_allocator.lock().report_memory_leaks(log::Level::Debug);
+        memory_allocator
+            .lock()
+            .report_memory_leaks(log::Level::Debug);
 
         let shader_compiler = Mutex::new(
             shaderc::Compiler::new().ok_or("Failed to initialize shaderc compiler".to_owned())?,
@@ -414,7 +416,6 @@ impl Device {
             inner: ash_device,
             instance: instance,
         };
-
 
         //let device = RawDevice { inner: ash_device.clone() };
         Ok(Arc::new(Self {
@@ -447,44 +448,49 @@ impl Device {
         let mut data = Vec::new();
 
         let file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open(VK_PIPELINE_CACHE_FILE)
-        .expect("Couldn't create pipeline cache file")
-        .read_to_end(&mut data);
+            .create(true)
+            .write(true)
+            .open(VK_PIPELINE_CACHE_FILE)
+            .expect("Couldn't create pipeline cache file")
+            .read_to_end(&mut data);
 
-
-        log::debug!("Read {} bytes from pipeline cache, {}", data.len(), VK_PIPELINE_CACHE_FILE);
+        log::debug!(
+            "Read {} bytes from pipeline cache, {}",
+            data.len(),
+            VK_PIPELINE_CACHE_FILE
+        );
         data
     }
-    fn write_pipeline_cache_to_disk(&self) -> VkResult<()>{
+    fn write_pipeline_cache_to_disk(&self) -> VkResult<()> {
         let data = unsafe { self.raw().get_pipeline_cache_data(self.pipeline_cache())? };
 
-        log::debug!("Writing {} bytes to pipeline cache, {}", data.len(), VK_PIPELINE_CACHE_FILE);
+        log::debug!(
+            "Writing {} bytes to pipeline cache, {}",
+            data.len(),
+            VK_PIPELINE_CACHE_FILE
+        );
 
         std::fs::write(VK_PIPELINE_CACHE_FILE, data)
-        .expect("Couldn't write to pipeline cache file");
-        
+            .expect("Couldn't write to pipeline cache file");
+
         Ok(())
     }
     fn create_pipeline_cache(device: &ash::Device) -> VkResult<vk::PipelineCache> {
         let pipeline_cache_data = Self::read_pipeline_cache_from_disk();
-        let create_info = vk::PipelineCacheCreateInfo::builder()
-        .initial_data(&pipeline_cache_data);
+        let create_info = vk::PipelineCacheCreateInfo::builder().initial_data(&pipeline_cache_data);
 
         let cache_from_previous_data = unsafe { device.create_pipeline_cache(&create_info, None) };
-        match  cache_from_previous_data {
+        match cache_from_previous_data {
             Ok(cache) => Ok(cache),
 
             //If it errors try to create an empty cache
             Err(_) => {
                 log::debug!("Pipeline cache from disk seems to be unusable, creating empty cache");
 
-                let create_info = vk::PipelineCacheCreateInfo::builder()
-                .initial_data(&[]);
+                let create_info = vk::PipelineCacheCreateInfo::builder().initial_data(&[]);
 
                 unsafe { device.create_pipeline_cache(&create_info, None) }
-            },
+            }
         }
     }
     pub(crate) fn pipeline_cache(&self) -> vk::PipelineCache {
@@ -581,7 +587,6 @@ impl Device {
 }
 impl Drop for Device {
     fn drop(&mut self) {
-        
         self.write_pipeline_cache_to_disk();
 
         log::debug!("Dropped Device");

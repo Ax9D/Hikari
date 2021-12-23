@@ -6,7 +6,7 @@ use std::{
 
 use ash::vk;
 
-use crate::{ShaderData, ShaderDataType, shader::Shader};
+use crate::{shader::Shader, ShaderData, ShaderDataType};
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum PrimitiveTopology {
@@ -314,7 +314,7 @@ impl VertexInputLayout {
 impl VertexInputLayout {
     pub fn new() -> VertexInputLayoutBuilder {
         VertexInputLayoutBuilder {
-            layouts: Vec::new()
+            layouts: Vec::new(),
         }
     }
 }
@@ -388,9 +388,8 @@ impl PipelineState {
         renderpass: vk::RenderPass,
         n_color_attachments: usize,
     ) -> vk::Pipeline {
-
         let pipeline_cache = device.pipeline_cache();
-        
+
         let input_state = self.input_layout.into_vk();
 
         let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::builder()

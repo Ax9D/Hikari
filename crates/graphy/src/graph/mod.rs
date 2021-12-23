@@ -2,6 +2,7 @@ mod command;
 mod framebuffer;
 mod pass;
 mod pipeline;
+mod storage;
 
 pub use command::CommandBuffer;
 use vec_map::VecMap;
@@ -79,7 +80,6 @@ impl<Scene, PerFrame, Resources> Graph<Scene, PerFrame, Resources> {
         resources: &Resources,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let last_frame = gfx.frame_state().last_frame();
-
         unsafe {
             let fences = &[last_frame.render_finished_fence];
             log::debug!("Fetched render finished fence");
@@ -95,53 +95,59 @@ impl<Scene, PerFrame, Resources> Graph<Scene, PerFrame, Resources> {
         log::debug!("Reset fences");
         let current_frame = gfx.frame_state().current_frame();
 
-        unsafe {
-            gfx.device().raw().reset_command_buffer(
-                current_frame.command_buffer,
-                vk::CommandBufferResetFlags::empty(),
-            )?;
-        }
+        let mut command_buffer = CommandBuffer::from_existing(
+            gfx.device(),
+            current_frame.command_buffer,
+            CommandBufferSavedState {
+                pipeline_lookup: &mut self.pipeline_lookup,
+                descriptor_pool: &mut self.descriptor_pool,
+            },
+        );
+
+        command_buffer.reset();
 
         for &pass_ix in &self.flat {
             let node = &self.graph.nodes[pass_ix];
             let pass_resources = &self.pass_resources[pass_ix];
             match &pass_resources.renderpass {
                 Some(renderpass) => {
-                    let mut command_buffer = CommandBuffer::new(
-                        gfx.device(),
-                        current_frame.command_buffer,
-                        CommandBufferSavedState {
-                            pipeline_lookup: &mut self.pipeline_lookup,
-                            descriptor_pool: &mut self.descriptor_pool,
-                        }
-                    );
 
-                    let (width, height) = size.get_size(self.size, gfx.swapchain().size());
 
+                    let image_size = match node.node_data {
+                        NodeData::Graphics(size, _) => size,
+                        _ => unreachable!(),
+                    };
+
+                    let (width, height) = image_size.get_size(self.size);
+                    
                     let create_info = vk::RenderPassBeginInfo::builder()
-                        .render_pass(*renderpass)
-                        .render_area(vk::Rect2D {
-                            offset: vk::Offset2D { x: 0, y: 0 },
-                            extent: vk::Extent2D { width, height },
-                        });
-
-                    if node.outputs_swapchain() {
-
-                    }
-
-                    command_buffer.begin_renderpass(&create_info);
-
-                    self.bind_resources(&command_buffer, &pass_resources.resource_bind_infos);
-
+                    .render_pass(renderpass.inner)
+                    .render_area(vk::Rect2D {
+                        offset: vk::Offset2D { x: 0, y: 0 },
+                        extent: vk::Extent2D { width, height },
+                    });
+                    //.framebuffer();
+                    
+                    command_buffer.begin_renderpass(renderpass.clone(), &create_info);
+                    
+                    Self::bind_resources(
+                        &self.allocation_data,
+                        &mut command_buffer,
+                        &pass_resources.resource_bind_infos,
+                    );
+                    
+                    log::debug!("Here");
                     (node.run_fn)(&mut command_buffer, scene, perframe, resources);
 
                     unsafe {
                         self.allocation_data.get_barrier_storage(pass_ix)
-                        .expect("Internal implementation error")
+                        .expect("Internal implementation error, something has gone horribly wrong...")
                         .apply(gfx.device(), command_buffer.raw());
                     }
 
                     command_buffer.end_renderpass();
+
+                    if node.outputs_swapchain() {}
                 }
                 None => todo!(),
             }
@@ -152,16 +158,26 @@ impl<Scene, PerFrame, Resources> Graph<Scene, PerFrame, Resources> {
 
         gfx.frame_state_mut().update();
 
+        log::debug!("Updated frame state");
+
         self.descriptor_pool.new_frame();
+        log::debug!("Updated descriptor pool");
+
         self.pipeline_lookup.new_frame();
+        log::debug!("Updated pipeline lookup");
 
         Ok(())
     }
 
-    fn bind_resources(&self, cmd: &CommandBuffer, bind_infos: &[ResourceBindInfo]) {
+    fn bind_resources(
+        allocation_data: &AllocationData,
+        cmd: &mut CommandBuffer,
+        bind_infos: &[ResourceBindInfo],
+    ) {
         for bind_info in bind_infos {
-            let image = self.allocation_data.get_image(bind_info.image_ix)
-            .expect("Internal implementation error");
+            let image = allocation_data
+            .get_image(bind_info.image_ix)
+                .expect("Internal implementation error");
 
             cmd.set_image(image, 0, bind_info.binding);
         }
@@ -209,7 +225,7 @@ struct ProcessedGraph<S, P, R> {
     outputs_swapchain: bool,
 }
 enum NodeData {
-    Graphics(ImageSize, HashSet<Arc<pass::graphics::Pipeline>>, bool),
+    Graphics(ImageSize, bool),
     Compute,
 }
 struct ProcessedNode<Scene, PerFrame, Resources> {
@@ -224,7 +240,7 @@ impl<Scene, PerFrame, Resources> ProcessedNode<Scene, PerFrame, Resources> {
     #[inline]
     pub fn outputs_swapchain(&self) -> bool {
         match self.node_data {
-            NodeData::Graphics(_, _, output_swapchain) => output_swapchain,
+            NodeData::Graphics(_, output_swapchain) => output_swapchain,
             NodeData::Compute => false,
         }
     }
@@ -286,17 +302,20 @@ pub(super) struct ResourceBindInfo {
     image_ix: usize,
     binding: u32, //of set 0
 }
+#[derive(Clone)]
+pub(super) struct CompiledRenderpass {
+    pub inner: vk::RenderPass,
+    pub n_color_attachments: usize,
+}
 struct PassResources {
     resource_bind_infos: Vec<ResourceBindInfo>,
-    renderpass: Option<vk::RenderPass>,
+    renderpass: Option<CompiledRenderpass>,
 }
 impl PassResources {
     fn delete(self, device: &Arc<crate::Device>) {
         unsafe {
-            if let Some(vk_renderpass) = self.renderpass {
-                device
-                    .raw()
-                    .destroy_render_pass(vk_renderpass, None);
+            if let Some(pass) = self.renderpass {
+                device.raw().destroy_render_pass(pass.inner, None);
             }
         }
     }
@@ -358,8 +377,8 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
                 inputs,
                 outputs,
                 is_final: pass.is_final(),
+                node_data: NodeData::Graphics(size, pass.outputs_swapchain()),
                 run_fn: pass.draw_fn,
-                node_data: NodeData::Graphics(size, pass.pipelines, pass.outputs_swapchain()),
             };
 
             nodes.push(node);
@@ -578,7 +597,7 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
             match &output.output {
                 Output::Color(output) => {
                     let size = match &parent_node.node_data {
-                        NodeData::Graphics(size, _, _) => size,
+                        NodeData::Graphics(size, _) => size,
                         NodeData::Compute => unreachable!(),
                     };
 
@@ -591,16 +610,13 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
                     allocation_data.add_image(
                         ix,
                         crate::texture::SampledImage::with_dimensions(
-                            device,
-                            width,
-                            height,
-                            config,
+                            device, width, height, config,
                         )?,
                     );
                 }
                 Output::DepthStencil(output) => {
                     let size = match &parent_node.node_data {
-                        NodeData::Graphics(size, _, _) => size,
+                        NodeData::Graphics(size, _) => size,
                         NodeData::Compute => unreachable!(),
                     };
 
@@ -620,10 +636,7 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
                     allocation_data.add_image(
                         ix,
                         crate::texture::SampledImage::with_dimensions(
-                            device,
-                            width,
-                            height,
-                            config,
+                            device, width, height, config,
                         )?,
                     );
                 }
@@ -642,7 +655,7 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
         graph: &ProcessedGraph<Scene, PerFrame, Resources>,
     ) -> VkResult<()> {
         for (ix, (node, resources)) in graph.nodes.iter().zip(pass_resources.iter()).enumerate() {
-            if let Some(renderpass) = resources.renderpass {
+            if let Some(CompiledRenderpass { inner, .. }) = resources.renderpass {
                 if node.outputs_swapchain() {
                     let mut attachment_ixs = Vec::new();
 
@@ -659,7 +672,7 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
                         device,
                         allocation_data,
                         &attachment_ixs,
-                        renderpass,
+                        inner,
                     )?;
 
                     allocation_data.add_framebuffer(ix, framebuffer);
@@ -685,7 +698,7 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
                         let parent_pass = &graph.nodes[parent_pass_ix];
 
                         match node.node_data {
-                            NodeData::Graphics(_, _, _) => {
+                            NodeData::Graphics(_, _) => {
                                 acc | vk::PipelineStageFlags2KHR::FRAGMENT_SHADER
                             }
                             NodeData::Compute => acc | vk::PipelineStageFlags2KHR::COMPUTE_SHADER,
@@ -758,7 +771,9 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
     ) -> Result<Vec<PassResources>, Box<dyn std::error::Error>> {
         let mut resources = Vec::new();
         for (node_ix, _) in graph.nodes.iter().enumerate() {
-            resources.push(Self::allocate_single_pass_resources(device, swapchain, node_ix, graph)?)
+            resources.push(Self::allocate_single_pass_resources(
+                device, swapchain, node_ix, graph,
+            )?)
         }
 
         Ok(resources)
@@ -907,24 +922,16 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
         }
 
         let renderpass = match &node.node_data {
-            NodeData::Graphics(size, pipelines, outputs_swapchain) => {
-
+            NodeData::Graphics(size, outputs_swapchain) => {
                 let (vk_renderpass, n_color_attachments) = if *outputs_swapchain {
                     (swapchain.renderpass(), 1)
                 } else {
                     Self::create_render_pass(device, &graph.all_outputs, &node.outputs)?
                 };
-
-                for pipeline in pipelines {
-                    let now = std::time::Instant::now();
-                    let vk_pipeline = unsafe {
-                        pipeline.create(device, vk_renderpass, n_color_attachments)
-                    };
-
-                    log::debug!("Pipeline created,  took: {:?}", now.elapsed());
-                }
-
-                Some(vk_renderpass)
+                Some(CompiledRenderpass {
+                    inner: vk_renderpass,
+                    n_color_attachments,
+                })
             }
 
             NodeData::Compute => None,
@@ -945,7 +952,7 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
         //let barriers = Self::generate_barriers(&flat, graph);
 
         Ok((
-            Self::allocate_pass_resources(device, swapchain,  &graph)?,
+            Self::allocate_pass_resources(device, swapchain, &graph)?,
             Self::flatten(&graph)?,
         ))
     }
@@ -958,31 +965,38 @@ impl<Scene, PerFrame, Resources> GraphBuilder<Scene, PerFrame, Resources> {
         let device = gfx.device();
         let swapchain = &gfx.swapchain().lock();
 
-        let mut size = self.size.clone();
+        let size = self.size.clone().unwrap_or(swapchain.size());
 
         let graph = self.generate_processed_graph();
         Self::validate(&graph)?;
-
-        if size == None && !graph.outputs_swapchain {
-            return Err("Graph doesn't output to swapchain so a graph size (pixel resolution) must be provided".into());
-        }
 
         let (pass_resources, flat) = Self::compile(device, swapchain, &graph)?;
 
         let mut allocation_data = AllocationData::new(gfx.device());
 
         Self::allocate_images(device, swapchain, &mut allocation_data, size, &graph)?;
-        Self::allocate_framebuffers(device, swapchain, &mut allocation_data, &pass_resources, size, &graph)?;
+        Self::allocate_framebuffers(
+            device,
+            swapchain,
+            &mut allocation_data,
+            &pass_resources,
+            size,
+            &graph,
+        )?;
         Self::allocate_barriers(&mut allocation_data, &graph);
 
         log::info!("Graph building took: {:?}", now.elapsed());
 
+        let descriptor_pool = DescriptorPool::new(gfx.device());
+        let pipeline_lookup = PipelineLookup::new(device, 100)?;
         Ok(Graph {
             size,
             allocation_data,
             pass_resources,
             graph,
             flat,
+            descriptor_pool,
+            pipeline_lookup,
         })
         //Graph::compile(self.initial_width, self.initial_height, self.passes)
     }

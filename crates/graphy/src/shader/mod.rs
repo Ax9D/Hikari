@@ -149,19 +149,24 @@ pub(crate) struct PipelineLayout {
 
     push_constant_stage_flags: vk::ShaderStageFlags,
 
-    vk_pipeline_layout: vk::PipelineLayout
-}   
+    vk_pipeline_layout: vk::PipelineLayout,
+}
 
 impl PartialEq for PipelineLayout {
     fn eq(&self, other: &Self) -> bool {
-        self.set_layouts == other.set_layouts && self.set_mask == other.set_mask && self.push_constant_stage_flags == other.push_constant_stage_flags
+        self.set_layouts == other.set_layouts
+            && self.set_mask == other.set_mask
+            && self.push_constant_stage_flags == other.push_constant_stage_flags
     }
 }
 impl Eq for PipelineLayout {}
 
 impl PipelineLayout {
-    pub fn new(device: &Arc<crate::Device>, stages: &[&CompiledShaderModule]) -> Result<Self, Box<dyn std::error::Error>>{
-        let set_layouts = Self::generate_descriptor_set_layouts(device,  stages)?;
+    pub fn new(
+        device: &Arc<crate::Device>,
+        stages: &[&CompiledShaderModule],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let set_layouts = Self::generate_descriptor_set_layouts(device, stages)?;
         let push_constant_ranges = Self::generate_push_constant_ranges(stages);
 
         let push_constant_stage_flags = push_constant_ranges
@@ -170,41 +175,46 @@ impl PipelineLayout {
                 flags | range.stage_flags
             });
 
-
         let mut vk_set_layouts = [vk::DescriptorSetLayout::null(); MAX_DESCRIPTOR_SETS];
 
         for (set, set_layout) in set_layouts.iter().enumerate() {
             vk_set_layouts[set] = set_layouts[set].raw();
         }
 
-        assert!(vk_set_layouts.iter().all( |&layout| layout!=vk::DescriptorSetLayout::null() ));
-        
-        let vk_pipeline_layout = Self::create_pipeline_layout(device, &vk_set_layouts, &push_constant_ranges)?;
-        
-        let set_mask = set_layouts.iter().enumerate().fold(0, |mask,(set, layout)| {
-            if layout.all_mask() != 0 {
-                mask | ( 1 << set) 
-            }
-            else {
-                mask
-            }
-        });
-        
+        assert!(vk_set_layouts
+            .iter()
+            .all(|&layout| layout != vk::DescriptorSetLayout::null()));
+
+        let vk_pipeline_layout =
+            Self::create_pipeline_layout(device, &vk_set_layouts, &push_constant_ranges)?;
+
+        let set_mask = set_layouts
+            .iter()
+            .enumerate()
+            .fold(0, |mask, (set, layout)| {
+                if layout.all_mask() != 0 {
+                    mask | (1 << set)
+                } else {
+                    mask
+                }
+            });
 
         log::info!("Set mask {:b}", set_mask);
-        
-        Ok(
-            Self {
-                device: device.clone(),
-                set_layouts,
-                push_constant_stage_flags,
 
-                vk_pipeline_layout,
-                set_mask
-            }
-        )
+        Ok(Self {
+            device: device.clone(),
+            set_layouts,
+            push_constant_stage_flags,
+
+            vk_pipeline_layout,
+            set_mask,
+        })
     }
-    fn create_pipeline_layout(device: &Arc<crate::Device>, vk_set_layouts: &[vk::DescriptorSetLayout], push_constant_ranges: &[vk::PushConstantRange]) -> VkResult<vk::PipelineLayout>{
+    fn create_pipeline_layout(
+        device: &Arc<crate::Device>,
+        vk_set_layouts: &[vk::DescriptorSetLayout],
+        push_constant_ranges: &[vk::PushConstantRange],
+    ) -> VkResult<vk::PipelineLayout> {
         let create_info = vk::PipelineLayoutCreateInfo::builder()
             .set_layouts(&vk_set_layouts)
             .push_constant_ranges(&push_constant_ranges);
@@ -215,35 +225,54 @@ impl PipelineLayout {
         device: &Arc<crate::Device>,
         stages: &[&CompiledShaderModule],
     ) -> Result<[DescriptorSetLayout; MAX_DESCRIPTOR_SETS], Box<dyn std::error::Error>> {
-        let mut layout_builders: [DescriptorSetLayoutBuilder; MAX_DESCRIPTOR_SETS] = [DescriptorSetLayout::new(); MAX_DESCRIPTOR_SETS];
+        let mut layout_builders: [DescriptorSetLayoutBuilder; MAX_DESCRIPTOR_SETS] =
+            [DescriptorSetLayout::new(); MAX_DESCRIPTOR_SETS];
         for &stage in stages {
-            for set in &stage.reflection_data.raw_data().enumerate_descriptor_sets(None).unwrap() {
+            for set in &stage
+                .reflection_data
+                .raw_data()
+                .enumerate_descriptor_sets(None)
+                .unwrap()
+            {
                 let layout_builder = &mut layout_builders[set.set as usize];
-                    for binding in &set.bindings {
-                        let descriptor_type = reflect::spirv_desc_type_to_vk_desc_type(binding.descriptor_type);
-                        
-                        layout_builder.with_binding(binding.binding, descriptor_type, binding.count, stage.stage);
+                for binding in &set.bindings {
+                    let descriptor_type =
+                        reflect::spirv_desc_type_to_vk_desc_type(binding.descriptor_type);
 
-                        if let Some((existing_dt, existing_count, _)) = layout_builder.binding(binding.binding) {
-                            if existing_dt != descriptor_type || existing_count !=binding.count {
-                                return Err(format!("set {} binding {} is different in different stages of shader: {}",set.set, binding.binding, stage.debug_name).into());
-                            }
+                    layout_builder.with_binding(
+                        binding.binding,
+                        descriptor_type,
+                        binding.count,
+                        stage.stage,
+                    );
+
+                    if let Some((existing_dt, existing_count, _)) =
+                        layout_builder.binding(binding.binding)
+                    {
+                        if existing_dt != descriptor_type || existing_count != binding.count {
+                            return Err(format!(
+                                "set {} binding {} is different in different stages of shader: {}",
+                                set.set, binding.binding, stage.debug_name
+                            )
+                            .into());
                         }
-
                     }
+                }
             }
         }
 
-        let mut layouts= [DescriptorSetLayout::new().build(device)?; MAX_DESCRIPTOR_SETS];
+        let mut layouts = [DescriptorSetLayout::new().build(device)?; MAX_DESCRIPTOR_SETS];
 
-        layout_builders.iter().enumerate().for_each(|(ix, builder)| layouts[ix] = builder.build(device).unwrap());
+        layout_builders
+            .iter()
+            .enumerate()
+            .for_each(|(ix, builder)| layouts[ix] = builder.build(device).unwrap());
 
         Ok(layouts)
     }
     fn generate_push_constant_ranges(
         stages: &[&CompiledShaderModule],
     ) -> Vec<vk::PushConstantRange> {
-
         struct PushConstantRange {
             size: u32,
             offset: u32,
@@ -288,7 +317,6 @@ impl PipelineLayout {
         self.vk_pipeline_layout
     }
 
-
     /// Get a reference to the pipeline layout's set layouts.
     pub fn set_layouts(&self) -> &[DescriptorSetLayout; MAX_DESCRIPTOR_SETS] {
         &self.set_layouts
@@ -304,7 +332,9 @@ impl PipelineLayout {
 impl Drop for PipelineLayout {
     fn drop(&mut self) {
         unsafe {
-            self.device.raw().destroy_pipeline_layout(self.vk_pipeline_layout, None);
+            self.device
+                .raw()
+                .destroy_pipeline_layout(self.vk_pipeline_layout, None);
         }
     }
 }
@@ -377,13 +407,11 @@ impl<'a> ShaderProgramBuilder<'a> {
 
         //options.set_optimization_level(shaderc::OptimizationLevel::Zero);
 
-        let artifact = compiler.compile_into_spirv(
-            glsl,
-            shader_kind,
-            debug_name,
-            entry_point,
-            Some(&options),
-        ).map_err(|err| ShaderCreateError::CompilationError(debug_name.to_string(), err.to_string()))?;
+        let artifact = compiler
+            .compile_into_spirv(glsl, shader_kind, debug_name, entry_point, Some(&options))
+            .map_err(|err| {
+                ShaderCreateError::CompilationError(debug_name.to_string(), err.to_string())
+            })?;
 
         log::debug!("Compiled shader {}", debug_name);
 
@@ -403,7 +431,7 @@ impl<'a> ShaderProgramBuilder<'a> {
         log::debug!("Created shader module");
         unsafe { device.create_shader_module(&create_info, None) }
     }
-    
+
     fn create_shader_module(
         device: &crate::Device,
         shader: &ShaderCode,
@@ -434,8 +462,9 @@ impl<'a> ShaderProgramBuilder<'a> {
         let reflection_data = super::ReflectionData::new(spirv)
             .map_err(|err| ShaderCreateError::ValidationError(debug_name.clone(), err))?;
 
-        let module = Self::create_vk_module(device.raw(), &spirv)
-        .map_err(|error| ShaderCreateError::CompilationError(debug_name.clone(), error.to_string()))?;
+        let module = Self::create_vk_module(device.raw(), &spirv).map_err(|error| {
+            ShaderCreateError::CompilationError(debug_name.clone(), error.to_string())
+        })?;
 
         let stage = shaderc_to_vulkan_stage(kind);
 
@@ -447,10 +476,7 @@ impl<'a> ShaderProgramBuilder<'a> {
             reflection_data,
         })
     }
-    pub fn build(
-        self,
-        device: &Arc<crate::Device>,
-    ) -> Result<Arc<Shader>, ShaderCreateError> {
+    pub fn build(self, device: &Arc<crate::Device>) -> Result<Arc<Shader>, ShaderCreateError> {
         log::debug!("Compiling vertex shader");
 
         let vertex = Self::create_shader_module(
@@ -468,10 +494,10 @@ impl<'a> ShaderProgramBuilder<'a> {
         )?;
 
         let pipeline_layout = PipelineLayout::new(device, &[&vertex, &fragment])
-        .map_err(|err| ShaderCreateError::LinkingError(self.name.clone(), err.to_string()))?;
+            .map_err(|err| ShaderCreateError::LinkingError(self.name.clone(), err.to_string()))?;
 
-        let mut hasher = fxhash::FxHasher::default();
-        
+        let mut hasher = crate::util::hasher();
+
         let hash = {
             vertex.hash(&mut hasher);
             fragment.hash(&mut hasher);
@@ -486,7 +512,7 @@ impl<'a> ShaderProgramBuilder<'a> {
             fragment,
             pipeline_layout,
 
-            hash
+            hash,
         }))
     }
 }

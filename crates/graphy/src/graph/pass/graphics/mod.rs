@@ -50,7 +50,6 @@ impl<Scene, PerFrame, Resources> RenderpassBuilder<Scene, PerFrame, Resources> {
                 inputs: IndexMap::new(),
                 outputs: IndexMap::new(),
                 draw_fn: Box::new(draw_fn),
-                pipelines: HashSet::new(),
                 size,
                 is_final: false,
                 outputs_swapchain: false,
@@ -87,11 +86,6 @@ impl<Scene, PerFrame, Resources> RenderpassBuilder<Scene, PerFrame, Resources> {
         self.pass
             .outputs
             .insert(name.as_ref().to_string(), Output::DepthStencil(output));
-
-        self
-    }
-    pub fn will_use_pipeline(mut self, pipeline: &Arc<Pipeline>) -> Self {
-        self.pass.pipelines.insert(pipeline.clone());
 
         self
     }
@@ -138,7 +132,7 @@ impl<Scene, PerFrame, Resources> RenderpassBuilder<Scene, PerFrame, Resources> {
         Ok(self.sanity_checks()?.check_cyclic_deps()?)
     }
     pub fn build(
-        self,
+        mut self,
     ) -> Result<Renderpass<Scene, PerFrame, Resources>, Box<dyn std::error::Error>> {
         if self.pass.outputs_swapchain {
             self.pass.is_final = true;
@@ -154,7 +148,6 @@ pub struct Renderpass<Scene, PerFrame, Resources> {
     inputs: IndexMap<String, Input>,
     outputs: IndexMap<String, Output>,
     size: ImageSize,
-    pub(crate) pipelines: HashSet<Arc<Pipeline>>,
     is_final: bool,
     outputs_swapchain: bool,
     pub(crate) draw_fn:
@@ -179,5 +172,24 @@ impl<Scene, PerFrame, Resources> Renderpass<Scene, PerFrame, Resources> {
     }
     pub fn size(&self) -> &ImageSize {
         &self.size
+    }
+}
+struct Rpass<Scene, PerFrame, Resources> {
+    name: String,
+    size: ImageSize,
+    inputs: Vec<Input>,
+    outputs: Vec<Output>,
+    is_final: bool,
+    pub(crate) draw_fn:
+        Box<dyn Fn(&mut crate::graph::CommandBuffer, &Scene, &PerFrame, &Resources)>,
+}
+
+impl<Scene, PerFrame, Resources> Rpass<Scene, PerFrame, Resources> {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn input(mut self, input: ) -> Self{
+        self.inputs.push()
+        self
     }
 }

@@ -194,7 +194,7 @@ impl Swapchain {
         let mut framebuffers = Vec::new();
         for &color_image in color_images {
             let attachments = [color_image, depth_stencil_image.image_view(1).unwrap()];
-            
+
             let create_info = vk::FramebufferCreateInfo::builder()
                 .render_pass(renderpass)
                 .attachments(&attachments)

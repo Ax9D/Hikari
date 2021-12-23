@@ -5,20 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "cppvsdbg",
+            "type": "lldb",
             "request": "launch",
             "name": "Debug unit tests in library 'graphy'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
+                    "--lib",
+                    "--",
+                    "--nocapture"
                 ],
                 "filter": {
                     "name": "graphy",
                     "kind": "lib"
                 }
             },
-            "program": "${workspaceRoot}/target/debug/deps/graphy-9b5fd30a8b1cd12c.exe",
+            //"program": "${workspaceRoot}/target/debug/deps/graphy-9b5fd30a8b1cd12c.exe",
             "args": [],
             "cwd": "${workspaceFolder}"
         }

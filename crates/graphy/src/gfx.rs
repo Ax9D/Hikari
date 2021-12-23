@@ -198,7 +198,7 @@ pub struct Gfx {
     frame_state: FrameState,
     device: Arc<crate::Device>,
     swapchain: Arc<Mutex<Swapchain>>, //
-    entry: ash::Entry,                      //
+    entry: ash::Entry,                //
 }
 impl Gfx {
     fn get_extensions(window: &Window, debug: bool) -> Vec<*const i8> {

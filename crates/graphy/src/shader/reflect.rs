@@ -1,4 +1,4 @@
-use std::collections::{HashMap};
+use std::collections::HashMap;
 
 use ash::vk;
 
@@ -147,11 +147,17 @@ impl ReflectionData {
             log::debug!("{:?}", binding.name);
 
             if binding.set as usize >= crate::descriptor::MAX_DESCRIPTOR_SETS {
-                return Err(format!("annot have more than {} descriptor sets", crate::descriptor::MAX_DESCRIPTOR_SETS));
+                return Err(format!(
+                    "annot have more than {} descriptor sets",
+                    crate::descriptor::MAX_DESCRIPTOR_SETS
+                ));
             }
 
             if binding.binding as usize >= crate::descriptor::MAX_BINDINGS_PER_SET {
-                return Err(format!("annot have more than {} bindings in a set", crate::descriptor::MAX_BINDINGS_PER_SET));
+                return Err(format!(
+                    "annot have more than {} bindings in a set",
+                    crate::descriptor::MAX_BINDINGS_PER_SET
+                ));
             }
 
             //Descriptor set name can be a empty string for some reason????
