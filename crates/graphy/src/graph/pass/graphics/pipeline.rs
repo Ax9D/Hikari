@@ -373,6 +373,8 @@ pub struct PipelineState {
 }
 impl std::hash::Hash for PipelineState {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        hikari_dev::profile_function!();
+
         self.primitive_topology.hash(state);
         self.rasterizer_state.hash(state);
         self.depth_stencil_state.hash(state);
@@ -388,6 +390,8 @@ impl PipelineState {
         renderpass: vk::RenderPass,
         n_color_attachments: usize,
     ) -> vk::Pipeline {
+        hikari_dev::profile_function!();
+
         let pipeline_cache = device.pipeline_cache();
 
         let input_state = self.input_layout.into_vk();
@@ -446,51 +450,5 @@ impl PipelineState {
             .raw()
             .create_graphics_pipelines(pipeline_cache, &create_infos, None)
             .unwrap()[0]
-    }
-}
-#[derive(Clone)]
-pub struct Pipeline {
-    shader: Arc<Shader>,
-    state: PipelineState,
-    hash: u64,
-}
-impl Pipeline {
-    pub fn new(shader: Arc<crate::Shader>, state: PipelineState) -> Arc<Self> {
-        let mut hasher = DefaultHasher::new();
-
-        shader.hash(&mut hasher);
-        state.hash(&mut hasher);
-
-        let hash = hasher.finish();
-
-        Arc::new(Self {
-            shader: shader.clone(),
-            state,
-            hash,
-        })
-    }
-    pub fn shader(&self) -> &Arc<Shader> {
-        &self.shader
-    }
-    pub unsafe fn create(
-        &self,
-        device: &Arc<crate::Device>,
-        renderpass: vk::RenderPass,
-        n_color_attachments: usize,
-    ) -> vk::Pipeline {
-        self.state
-            .create_pipeline(device, &self.shader, renderpass, n_color_attachments)
-    }
-}
-impl PartialEq for Pipeline {
-    fn eq(&self, other: &Self) -> bool {
-        self.shader == other.shader && self.state == other.state
-    }
-}
-impl Eq for Pipeline {}
-
-impl Hash for Pipeline {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.hash.hash(state);
     }
 }

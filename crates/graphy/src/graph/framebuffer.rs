@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use ash::{prelude::VkResult, vk};
 
-use super::AllocationData;
+use crate::texture::SampledImage;
+
+use super::{resources::GraphResources, Handle};
 
 // pub(crate) struct Framebuffer {
 //     device: Arc<crate::Device>,
@@ -13,13 +15,13 @@ use super::AllocationData;
 
 pub(super) fn from_allocation_data(
     device: &Arc<crate::Device>,
-    allocation_data: &AllocationData,
-    attachment_ixs: &[usize],
+    allocation_data: &GraphResources,
+    image_handles: &[Handle<SampledImage>],
     renderpass: vk::RenderPass,
 ) -> VkResult<vk::Framebuffer> {
-    let images: Vec<_> = attachment_ixs
+    let images: Vec<_> = image_handles
         .iter()
-        .map(|&ix| allocation_data.get_image(ix).unwrap())
+        .map(|handle| allocation_data.get_image(handle).unwrap())
         .collect();
 
     let image_views: Vec<_> = images

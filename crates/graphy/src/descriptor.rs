@@ -8,7 +8,6 @@ use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
 use ash::vk;
 use ash::vk::DescriptorPoolSize;
-use fxhash::FxHashMap;
 
 use crate::util::TemporaryMap;
 
@@ -121,7 +120,6 @@ impl DescriptorSetLayoutBuilder {
                 todo!()
             }
         }
-
         self.stage_flags[id as usize] |= stage_flags;
         self.counts[id as usize] = count;
     }
@@ -130,7 +128,7 @@ impl DescriptorSetLayoutBuilder {
             return None;
         }
 
-        if self.combined_image_sampler_mask & 1 << id == 1 {
+        if (self.combined_image_sampler_mask >> id) & 1 == 1 {
             return Some((
                 vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 self.counts[id as usize],
@@ -138,7 +136,7 @@ impl DescriptorSetLayoutBuilder {
             ));
         }
 
-        if self.uniform_buffer_mask & 1 << id == 1 {
+        if (self.uniform_buffer_mask >> id) & 1 == 1 {
             return Some((
                 vk::DescriptorType::UNIFORM_BUFFER,
                 self.counts[id as usize],
@@ -158,7 +156,7 @@ impl DescriptorSetLayoutBuilder {
 
 pub(crate) struct DescriptorSetLayoutCache {
     device: ash::Device,
-    layouts: FxHashMap<DescriptorSetLayoutBuilder, DescriptorSetLayout>,
+    layouts: HashMap<DescriptorSetLayoutBuilder, DescriptorSetLayout, crate::util::BuildHasher>,
 }
 
 impl DescriptorSetLayoutCache {
@@ -196,6 +194,7 @@ impl DescriptorSetLayoutCache {
                     *vk::DescriptorSetLayoutBinding::builder()
                         .binding(binding as u32)
                         .stage_flags(stage_flags)
+                        .descriptor_type(desc_type)
                         .descriptor_count(count),
                 )
             }
@@ -239,10 +238,15 @@ struct ImageState {
 }
 impl Hash for ImageState {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        crate::util::for_each_bit(self.image_update_mask, 0..MAX_IMAGE_COUNT, |image_ix| {
-            image_ix.hash(state);
-            self.images[image_ix as usize].hash(state);
-        });
+        self.image_update_mask.hash(state);
+
+        crate::util::for_each_bit_in_range(
+            self.image_update_mask,
+            0..MAX_IMAGE_COUNT,
+            |image_ix| {
+                self.images[image_ix as usize].hash(state);
+            },
+        );
     }
 }
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
@@ -253,31 +257,26 @@ struct BufferState {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-struct BindingState {
+pub struct BindingState {
     image_state: ImageState,
     buffer_state: BufferState,
 }
 impl BindingState {
     pub fn set_image(&mut self, ix: usize, image_view: vk::ImageView, sampler: vk::Sampler) {
         self.image_state.images[ix] = (image_view, sampler);
-        self.image_state.image_update_mask &= 1 << ix;
+        self.image_state.image_update_mask |= 1 << ix;
     }
-    pub fn set_buffer(
-        &mut self,
-        buffer: vk::Buffer,
-        offset: vk::DeviceSize,
-        range: vk::DeviceSize,
-    ) {
+    pub fn set_buffer(&mut self, buffer: vk::Buffer, start: vk::DeviceSize, range: vk::DeviceSize) {
         self.buffer_state.buffer = buffer;
-        self.buffer_state.offset = offset;
+        self.buffer_state.offset = start;
         self.buffer_state.range = range;
     }
 }
-#[derive(Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct DescriptorSetState {
     pub set: u32,
     //pub set_layout: DescriptorSetLayout,
-    bindings: [BindingState; MAX_BINDINGS_PER_SET],
+    pub bindings: [BindingState; MAX_BINDINGS_PER_SET],
 }
 impl DescriptorSetState {
     pub fn new(set: u32, set_layout: DescriptorSetLayout) -> Self {
@@ -300,27 +299,33 @@ impl DescriptorSetState {
         &mut self,
         binding: u32,
         buffer: vk::Buffer,
-        offset: vk::DeviceSize,
+        start: vk::DeviceSize,
         range: vk::DeviceSize,
     ) {
-        self.bindings[binding as usize].set_buffer(buffer, offset, range);
+        self.bindings[binding as usize].set_buffer(buffer, start, range);
     }
     fn hash(&self, set_layout: &DescriptorSetLayout) -> u64 {
+        hikari_dev::profile_function!();
+
         let mut state = crate::util::hasher();
 
-        crate::util::for_each_bit(
+        crate::util::for_each_bit_in_range(
             set_layout.combined_image_sampler_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
-                self.bindings[self.set as usize].image_state.hash(&mut state);
+                self.bindings[self.set as usize]
+                    .image_state
+                    .hash(&mut state);
             },
         );
 
-        crate::util::for_each_bit(
+        crate::util::for_each_bit_in_range(
             set_layout.uniform_buffer_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
-                self.bindings[self.set as usize].buffer_state.hash(&mut state);
+                self.bindings[self.set as usize]
+                    .buffer_state
+                    .hash(&mut state);
             },
         );
 
@@ -347,7 +352,7 @@ impl DescriptorSetAllocator {
         device: &Arc<crate::Device>,
         set_layout: DescriptorSetLayout,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(Self {
+        let mut allocator = Self {
             device: device.clone(),
             set_layout,
             max_sets: MAX_SETS_PER_POOL as u32,
@@ -355,7 +360,11 @@ impl DescriptorSetAllocator {
             resuable_sets: Vec::new(),
             pools: Vec::new(),
             pool_sizes: Self::get_pool_sizes(MAX_SETS_PER_POOL, set_layout),
-        })
+        };
+
+        allocator.pools.push(allocator.create_pool()?);
+
+        Ok(allocator)
     }
 
     fn get_pool_sizes(
@@ -388,7 +397,7 @@ impl DescriptorSetAllocator {
         unsafe { self.device.raw().create_descriptor_pool(&create_info, None) }
     }
     fn current_pool(&self) -> vk::DescriptorPool {
-        self.pools[self.pools.len()]
+        self.pools[self.pools.len() - 1]
     }
     fn allocate(&mut self, vk_set_layout: vk::DescriptorSetLayout) -> VkResult<vk::DescriptorSet> {
         unsafe {
@@ -416,28 +425,31 @@ impl DescriptorSetAllocator {
 
         let mut writes = ArrayVec::<vk::WriteDescriptorSet, MAX_WRITES>::new();
 
-        crate::util::for_each_bit(
+        
+        crate::util::for_each_bit_in_range(
             self.set_layout.combined_image_sampler_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
+
                 let image_state = &state.bindings[binding as usize].image_state;
 
-                crate::util::for_each_bit(
+                crate::util::for_each_bit_in_range(
                     image_state.image_update_mask,
                     0..MAX_IMAGE_COUNT,
                     |image_ix| {
                         let (image_view, sampler) = image_state.images[image_ix as usize];
 
+                        let write = [vk::DescriptorImageInfo {
+                            image_view,
+                            sampler,
+                            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        }];
                         let write = *vk::WriteDescriptorSet::builder()
                             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                             .dst_set(set)
                             .dst_binding(binding)
                             .dst_array_element(image_ix)
-                            .image_info(&[vk::DescriptorImageInfo {
-                                image_view,
-                                sampler,
-                                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                            }]);
+                            .image_info(&write);
 
                         writes.push(write);
                     },
@@ -445,7 +457,7 @@ impl DescriptorSetAllocator {
             },
         );
 
-        crate::util::for_each_bit(
+        crate::util::for_each_bit_in_range(
             self.set_layout.uniform_buffer_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
@@ -467,7 +479,6 @@ impl DescriptorSetAllocator {
                 }
             },
         );
-
         unsafe {
             self.device.raw().update_descriptor_sets(&writes, &[]);
         }
@@ -498,53 +509,6 @@ impl DescriptorSetAllocator {
         let reusable_sets = &mut self.resuable_sets;
         self.temp_map.new_frame(|set| reusable_sets.push(set));
     }
-
-    // fn default_descriptor_pool(
-    //     device: ash::Device,
-    //     count: u32,
-    //     flags: vk::DescriptorPoolCreateFlags,
-    // ) -> VkResult<vk::DescriptorPool> {
-    //     use vk::DescriptorType;
-
-    //     //From https://vkguide.dev/docs/extra-chapter/abstracting_descriptors/
-    //     let pool_sizes = [
-    //         (DescriptorType::SAMPLER, 0.5),
-    //         (DescriptorType::COMBINED_IMAGE_SAMPLER, 4.0),
-    //         (DescriptorType::SAMPLED_IMAGE, 4.0),
-    //         (DescriptorType::STORAGE_BUFFER, 1.0),
-    //         (DescriptorType::UNIFORM_TEXEL_BUFFER, 1.0),
-    //         (DescriptorType::STORAGE_TEXEL_BUFFER, 1.0),
-    //         (DescriptorType::UNIFORM_BUFFER, 2.0),
-    //         (DescriptorType::STORAGE_BUFFER, 2.0),
-    //         (DescriptorType::UNIFORM_BUFFER_DYNAMIC, 1.0),
-    //         (DescriptorType::STORAGE_BUFFER_DYNAMIC, 1.0),
-    //         (DescriptorType::INPUT_ATTACHMENT, 0.5),
-    //     ];
-
-    //     let pool_sizes: Vec<_> = pool_sizes
-    //         .iter()
-    //         .map(|(ty, n)| {
-    //             DescriptorPoolSize::builder()
-    //                 .ty(*ty)
-    //                 .descriptor_count((count as f32 * (*n)) as u32)
-    //                 .build()
-    //         })
-    //         .collect();
-    //     let create_info = vk::DescriptorPoolCreateInfo::builder()
-    //         .pool_sizes(&pool_sizes)
-    //         .max_sets(count)
-    //         .flags(flags);
-
-    //     unsafe { device.create_descriptor_pool(&create_info, None) }
-    // }
-    //REFACTOR THIS SHIT INTO A GRACEFUL DROP SOMEHOW
-    // pub unsafe fn free(&mut self) {
-    //     unsafe {
-    //         self.device.reset_descriptor_pool(self.pool, vk::DescriptorPoolResetFlags::empty()).unwrap();
-    //         self.device.destroy_descriptor_pool(self.pool, None);
-    //     }
-    //     log::debug!("Dropped DescriptorSetAllocator");
-    // }
 }
 
 impl Drop for DescriptorSetAllocator {
@@ -560,13 +524,14 @@ impl Drop for DescriptorSetAllocator {
 
 pub struct DescriptorPool {
     device: Arc<crate::Device>,
-    set_allocators: FxHashMap<vk::DescriptorSetLayout, DescriptorSetAllocator>,
+    set_allocators:
+        HashMap<vk::DescriptorSetLayout, DescriptorSetAllocator, crate::util::BuildHasher>,
 }
 impl DescriptorPool {
     pub fn new(device: &Arc<crate::Device>) -> Self {
         Self {
             device: device.clone(),
-            set_allocators: FxHashMap::default(),
+            set_allocators: HashMap::default(),
         }
     }
     pub fn get(&mut self, set_layout: &DescriptorSetLayout) -> &mut DescriptorSetAllocator {

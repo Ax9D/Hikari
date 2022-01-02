@@ -1,138 +1,109 @@
-use std::{collections::HashSet, ffi::CStr, io::Read, sync::Arc};
+use std::{
+    collections::HashSet,
+    ffi::{CStr, CString},
+    io::Read,
+    sync::Arc,
+};
 
 use ash::{
     extensions::khr::{Surface, Swapchain},
     prelude::VkResult,
-    vk::{self},
+    vk::{self, QueueFamilyProperties},
 };
 use gpu_allocator::vulkan::*;
 use parking_lot::{Mutex, MutexGuard};
 
 use crate::descriptor::DescriptorSetLayoutCache;
 
-const N_DEVICE_FEATURES: usize =
-    std::mem::size_of::<vk::PhysicalDeviceFeatures>() / std::mem::size_of::<u32>();
-struct PhysicalDeviceInfo {
-    pub device: vk::PhysicalDevice,
-    pub graphics_queue: Option<u32>,
-    pub present_queue: Option<u32>,
-    pub compute_queue: Option<u32>,
-    pub swapchain_support_details: SwapchainSupportDetails,
+pub struct PhysicalDevice {
+    pub raw: vk::PhysicalDevice,
+    pub queue_families: Vec<QueueFamilyProperties>,
+    pub(crate) swapchain_support_details: SwapchainSupportDetails,
     pub properties: vk::PhysicalDeviceProperties,
-    pub suitable: bool,
-    pub features: [bool; N_DEVICE_FEATURES],
+    pub extensions: Vec<CString>,
+    pub mem_properties: vk::PhysicalDeviceMemoryProperties,
+    pub features: vk::PhysicalDeviceFeatures2,
 }
-impl PhysicalDeviceInfo {
-    pub fn process_device(
+impl PhysicalDevice {
+    pub fn enumerate(
+        instance: &ash::Instance,
+        surface: &vk::SurfaceKHR,
+        surface_loader: &Surface,
+    ) -> VkResult<Vec<PhysicalDevice>> {
+        let raw_devices = unsafe { instance.enumerate_physical_devices() }?;
+
+        let mut devices = Vec::new();
+        for device in raw_devices {
+            devices.push(Self::process_device(
+                device,
+                instance,
+                surface,
+                surface_loader,
+            )?)
+        }
+
+        Ok(devices)
+    }
+    fn process_device(
         device: vk::PhysicalDevice,
         instance: &ash::Instance,
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
-        required_extensions: &[&CStr],
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let graphics_queue = Self::get_graphics_queue(&device, instance);
-        let present_queue = Self::get_present_queue(&device, instance, surface, surface_loader);
-        let compute_queue = Self::get_compute_queue(&device, instance);
-
+    ) -> VkResult<Self> {
         let properties = unsafe { instance.get_physical_device_properties(device) };
+        let mem_properties = unsafe { instance.get_physical_device_memory_properties(device) };
 
         let is_discrete_gpu = properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU;
 
         let extensions = unsafe { instance.enumerate_device_extension_properties(device) }?;
 
-        let extensions_support = required_extensions.iter().all(|x| {
-            extensions
-                .iter()
-                .find(|&&y| {
-                    let weirdness = unsafe { &*{ x.to_bytes() as *const [u8] as *const [i8] } };
+        let extensions = extensions
+            .iter()
+            .map(|extension| {
+                let extension_cstr = unsafe {
+                    std::ffi::CStr::from_ptr(
+                        extension.extension_name.as_ptr() as *const std::os::raw::c_char
+                    )
+                };
+                extension_cstr.to_owned()
+            })
+            .collect();
 
-                    let other = &y.extension_name[..weirdness.len()];
-
-                    other.eq(weirdness)
-                })
-                .is_some()
-        });
-
+        let queue_families =
+            unsafe { instance.get_physical_device_queue_family_properties(device) };
         let swapchain_support_details =
             SwapchainSupportDetails::create(&device, surface, surface_loader)?;
 
-        log::info!(
-            "\ngraphics_queue: {}\npresent_queue: {}\nis_discrete_gpu: {}\nextension_support : {}",
-            graphics_queue.is_some(),
-            present_queue.is_some(),
-            is_discrete_gpu,
-            extensions_support
-        );
-
-        let suitable = graphics_queue.is_some()
-            && present_queue.is_some()
-            && compute_queue.is_some()
-            && extensions_support;
-
         let vk_features = unsafe { instance.get_physical_device_features(device) };
-        let mut features = [false; N_DEVICE_FEATURES];
 
-        features[DeviceFeature::SamplerAnisotropy as usize] = vk_features.sampler_anisotropy == 1;
-        features[DeviceFeature::GeometryShader as usize] = vk_features.geometry_shader == 1;
-        features[DeviceFeature::TesselationShader as usize] = vk_features.tessellation_shader == 1;
-        features[DeviceFeature::ShaderFloat64 as usize] = vk_features.shader_float64 == 1;
+        let mut vk_features2 = vk::PhysicalDeviceFeatures2::default();
+        unsafe {
+            instance.get_physical_device_features2(device, &mut vk_features2);
+        }
 
         Ok(Self {
-            device,
+            raw: device,
             properties,
-            graphics_queue,
-            present_queue,
-            compute_queue,
-            suitable,
+            queue_families,
             swapchain_support_details,
-            features,
+            features: vk_features2,
+            mem_properties,
+            extensions,
         })
     }
-    fn get_graphics_queue(device: &vk::PhysicalDevice, instance: &ash::Instance) -> Option<u32> {
-        let props = unsafe { instance.get_physical_device_queue_family_properties(*device) };
 
-        props
-            .iter()
-            .enumerate()
-            .filter_map(|(index, prop)| {
-                log::debug!("{:?}", prop.queue_flags);
-                if prop.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                    Some(index as u32)
-                } else {
-                    None
-                }
-            })
-            .next()
-    }
-    fn get_compute_queue(device: &vk::PhysicalDevice, instance: &ash::Instance) -> Option<u32> {
-        let props = unsafe { instance.get_physical_device_queue_family_properties(*device) };
-
-        props
-            .iter()
-            .enumerate()
-            .filter_map(|(index, prop)| {
-                if prop.queue_flags.contains(vk::QueueFlags::COMPUTE) {
-                    Some(index as u32)
-                } else {
-                    None
-                }
-            })
-            .next()
-    }
-    fn get_present_queue(
-        device: &vk::PhysicalDevice,
+    pub fn get_present_queue(
+        &self,
         instance: &ash::Instance,
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
     ) -> Option<u32> {
-        let props = unsafe { instance.get_physical_device_queue_family_properties(*device) };
-
-        props
+        self.queue_families
             .iter()
             .enumerate()
             .filter_map(|(index, prop)| unsafe {
                 match surface_loader
-                    .get_physical_device_surface_support(*device, index as u32, *surface)
+                    .get_physical_device_surface_support(self.raw, index as u32, *surface)
                     .unwrap()
                 {
                     true => Some(index as u32),
@@ -141,28 +112,30 @@ impl PhysicalDeviceInfo {
             })
             .next()
     }
-    fn to_physical_device(self) -> Option<PhysicalDevice> {
-        if self.suitable {
-            let mut unique_queues = HashSet::new();
-            let graphics = self.graphics_queue.unwrap();
-            let compute = self.compute_queue.unwrap();
 
-            unique_queues.insert(graphics);
-            unique_queues.insert(compute);
-
-            Some(PhysicalDevice {
-                graphics_queue_ix: graphics,
-                present_queue_ix: self.present_queue.unwrap(),
-                compute_queue_ix: compute,
-                device: self.device,
-                swapchain_suport_details: self.swapchain_support_details,
-                vk_props: self.properties,
-                features: self.features,
-                props: self.properties.into(),
-                unique_queue_ixs: unique_queues.drain().collect(),
+    pub fn get_unified_queue(&self) -> Option<u32> {
+        use vk::QueueFlags as qf;
+        self.queue_families
+            .iter()
+            .enumerate()
+            .find(|(_, props)| {
+                props
+                    .queue_flags
+                    .contains(qf::GRAPHICS | qf::COMPUTE | qf::TRANSFER)
             })
-        } else {
-            None
+            .map(|(ix, _)| ix as u32)
+    }
+
+    fn get_properties(&self) -> PhysicalDeviceProperties {
+        let props = &self.properties;
+        let name = String::from_utf8(props.device_name.iter().map(|&x| x as u8).collect()).unwrap();
+        let vendor_id = props.vendor_id;
+        let driver_version = props.driver_version;
+
+        PhysicalDeviceProperties {
+            name,
+            vendor_id,
+            driver_version,
         }
     }
 }
@@ -178,7 +151,7 @@ impl SwapchainSupportDetails {
         device: &vk::PhysicalDevice,
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> VkResult<Self> {
         let formats =
             unsafe { surface_loader.get_physical_device_surface_formats(*device, *surface) }?;
         let capabilities =
@@ -194,12 +167,6 @@ impl SwapchainSupportDetails {
     }
 }
 
-pub enum DeviceFeature {
-    SamplerAnisotropy = 0,
-    GeometryShader,
-    TesselationShader,
-    ShaderFloat64,
-}
 #[derive(Clone)]
 pub struct PhysicalDeviceProperties {
     name: String,
@@ -233,71 +200,6 @@ impl From<vk::PhysicalDeviceProperties> for PhysicalDeviceProperties {
         }
     }
 }
-pub(crate) struct PhysicalDevice {
-    device: vk::PhysicalDevice,
-    graphics_queue_ix: u32,
-    present_queue_ix: u32,
-    compute_queue_ix: u32,
-    unique_queue_ixs: Vec<u32>,
-    swapchain_suport_details: SwapchainSupportDetails,
-    vk_props: vk::PhysicalDeviceProperties,
-    features: [bool; N_DEVICE_FEATURES],
-
-    props: PhysicalDeviceProperties,
-}
-
-impl PhysicalDevice {
-    pub fn pick_optimal(
-        entry: &ash::Entry,
-        instance: &ash::Instance,
-        surface: &vk::SurfaceKHR,
-        surface_loader: &Surface,
-        required_extensions: &[&CStr],
-    ) -> Result<PhysicalDevice, Box<dyn std::error::Error>> {
-        let devices = unsafe { instance.enumerate_physical_devices()? };
-
-        for device in devices {
-            let device_info = PhysicalDeviceInfo::process_device(
-                device,
-                instance,
-                &surface,
-                &surface_loader,
-                &required_extensions,
-            )?;
-            let device = device_info.to_physical_device();
-            if let Some(device) = device {
-                return Ok(device);
-            }
-        }
-
-        Err("Failed to find suitable physical device".into())
-    }
-    pub fn raw(&self) -> vk::PhysicalDevice {
-        self.device
-    }
-    pub fn is_supported(&self, feature: DeviceFeature) -> bool {
-        self.features[feature as usize]
-    }
-    pub fn graphics_queue_index(&self) -> u32 {
-        self.graphics_queue_ix
-    }
-    pub fn present_queue_index(&self) -> u32 {
-        self.present_queue_ix
-    }
-    pub fn compute_queue_ix(&self) -> u32 {
-        self.compute_queue_ix
-    }
-    pub fn unique_queue_indices(&self) -> &[u32] {
-        &self.unique_queue_ixs
-    }
-
-    pub fn swapchain_support_details(&self) -> &SwapchainSupportDetails {
-        &self.swapchain_suport_details
-    }
-    pub fn properties(&self) -> &PhysicalDeviceProperties {
-        &self.props
-    }
-}
 struct RawDevice {
     inner: ash::Device,
     instance: ash::Instance,
@@ -321,6 +223,9 @@ const VK_PIPELINE_CACHE_FILE: &'static str = "vk_pipeline_cache";
 
 pub struct Device {
     physical_device: PhysicalDevice,
+    device_properties: PhysicalDeviceProperties,
+    pub(crate) unified_queue_ix: u32,
+    pub(crate) present_queue_ix: u32,
 
     shader_compiler: Mutex<shaderc::Compiler>,
     memory_allocator: Mutex<gpu_allocator::vulkan::Allocator>,
@@ -338,49 +243,52 @@ impl Device {
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
     ) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
-        let required_extensions = [Swapchain::name()];
-        let physical_device = PhysicalDevice::pick_optimal(
+        let required_extensions = [Swapchain::name(), vk::KhrSynchronization2Fn::name()];
+
+        let physical_device = Self::pick_optimal(
             entry,
             &instance,
             surface,
             surface_loader,
             &required_extensions,
-        )?;
+        )
+        .ok_or("Failed to find suitable physical device")?;
 
+        let props = physical_device.get_properties();
         log::debug!("Picked physical device");
-        log::info!("{}", physical_device.properties().name());
+        log::info!("{}", props.name());
 
         const QUEUE_PRIORITIES: [f32; 1] = [1.0];
-        let mut unique_queue = HashSet::new();
-        unique_queue.insert(physical_device.graphics_queue_index());
-        unique_queue.insert(physical_device.present_queue_index());
 
-        let queue_create_infos: Vec<_> = unique_queue
-            .iter()
-            .map(|&queue_ix| {
-                vk::DeviceQueueCreateInfo::builder()
-                    .queue_family_index(queue_ix as u32)
-                    .queue_priorities(&QUEUE_PRIORITIES)
-                    .build()
-            })
-            .collect();
+        let unified_queue_ix = physical_device.get_unified_queue().unwrap();
+        let present_queue_ix = physical_device.get_unified_queue().unwrap();
+
+        let queue_create_infos = [*vk::DeviceQueueCreateInfo::builder()
+            .queue_family_index(unified_queue_ix)
+            .queue_priorities(&QUEUE_PRIORITIES)];
 
         let required_extensions = &required_extensions
             .iter()
             .map(|&x| x.as_ptr())
             .collect::<Vec<_>>();
 
-        let enabled_features =
-            unsafe { instance.get_physical_device_features(physical_device.raw()) };
+        let enabled_features = vk::PhysicalDeviceFeatures {
+            sampler_anisotropy: 1,
 
+            ..Default::default()
+        };
+
+        let mut sync2 =
+            vk::PhysicalDeviceSynchronization2FeaturesKHR::builder().synchronization2(true);
         let device_create_info = vk::DeviceCreateInfo::builder()
             .enabled_extension_names(required_extensions)
             .queue_create_infos(&queue_create_infos)
             .enabled_features(&enabled_features)
+            .push_next(&mut sync2)
             .build();
 
         let device =
-            unsafe { instance.create_device(physical_device.raw(), &device_create_info, None) }?;
+            unsafe { instance.create_device(physical_device.raw, &device_create_info, None) }?;
 
         log::debug!("Created logical device");
 
@@ -389,7 +297,7 @@ impl Device {
         let memory_allocator = Mutex::new(Allocator::new(&AllocatorCreateDesc {
             instance: instance.clone(),
             device: ash_device.clone(),
-            physical_device: physical_device.raw(),
+            physical_device: physical_device.raw,
             debug_settings: Default::default(),
             buffer_device_address: false,
         })?);
@@ -421,6 +329,11 @@ impl Device {
         Ok(Arc::new(Self {
             raw_device,
             physical_device,
+            device_properties: props,
+
+            unified_queue_ix,
+            present_queue_ix,
+
             pipeline_cache,
             memory_allocator,
             descriptor_set_layout_cache,
@@ -429,12 +342,34 @@ impl Device {
             extensions,
         }))
     }
+    fn pick_optimal(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        surface: &vk::SurfaceKHR,
+        surface_loader: &Surface,
+        required_extensions: &[&'static CStr],
+    ) -> Option<PhysicalDevice> {
+        let physical_devices = PhysicalDevice::enumerate(instance, surface, surface_loader).ok()?;
+        for device in physical_devices {
+            let present_support = device
+                .get_present_queue(instance, surface, surface_loader)
+                .is_some();
+
+            let unified_queue = device.get_unified_queue().is_some();
+
+            if present_support && unified_queue {
+                return Some(device);
+            }
+        }
+
+        None
+    }
     pub fn vendor(&self) -> &str {
-        self.physical_device.properties().vendor_string()
+        self.device_properties.vendor_string()
     }
 
     pub fn model(&self) -> &str {
-        self.physical_device.properties().name()
+        self.device_properties.name()
     }
     fn setup_extension(instance: &ash::Instance, device: &ash::Device) -> VkExtensions {
         let synchronization2 = ash::extensions::khr::Synchronization2::new(instance, device);
@@ -521,11 +456,12 @@ impl Device {
     pub(crate) fn free_memory(&self, allocation: Allocation) -> gpu_allocator::Result<()> {
         self.memory_allocator.lock().free(allocation)
     }
+
     pub(crate) fn graphics_queue(&self) -> vk::Queue {
-        unsafe {
-            self.raw()
-                .get_device_queue(self.physical_device().graphics_queue_index(), 0)
-        }
+        unsafe { self.raw().get_device_queue(self.unified_queue_ix, 0) }
+    }
+    pub(crate) fn present_queue(&self) -> vk::Queue {
+        unsafe { self.raw().get_device_queue(self.present_queue_ix, 0) }
     }
     pub(crate) unsafe fn submit_commands_immediate(
         &self,
@@ -536,7 +472,7 @@ impl Device {
         let fence = device.create_fence(&vk::FenceCreateInfo::builder(), None)?;
 
         let create_info = vk::CommandPoolCreateInfo::builder()
-            .queue_family_index(self.physical_device().graphics_queue_index())
+            .queue_family_index(self.unified_queue_ix)
             .flags(vk::CommandPoolCreateFlags::TRANSIENT);
 
         let now = std::time::Instant::now();
@@ -579,15 +515,13 @@ impl Device {
         Ok(())
     }
 
-    #[deprecated]
-    pub fn is_anisotropy_supported(&self) -> bool {
-        self.physical_device
-            .is_supported(DeviceFeature::SamplerAnisotropy)
+    pub fn vk_features(&self) -> &vk::PhysicalDeviceFeatures {
+        &self.physical_device.features.features
     }
 }
 impl Drop for Device {
     fn drop(&mut self) {
-        self.write_pipeline_cache_to_disk();
+        self.write_pipeline_cache_to_disk().unwrap();
 
         log::debug!("Dropped Device");
     }

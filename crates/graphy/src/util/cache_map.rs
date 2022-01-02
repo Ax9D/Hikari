@@ -1,9 +1,8 @@
-use fxhash::{FxBuildHasher};
 use lru::LruCache;
 use std::{error::Error, hash::Hash};
 
 pub struct CacheMap<K, V> {
-    cache: LruCache<K, V, FxBuildHasher>,
+    cache: LruCache<K, V, crate::util::BuildHasher>,
 
     unused: Vec<V>,
 }

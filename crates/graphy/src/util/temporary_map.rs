@@ -1,5 +1,5 @@
 use arrayvec::ArrayVec;
-use std::{borrow::BorrowMut, hash::Hash, collections::HashMap};
+use std::{borrow::BorrowMut, collections::HashMap, hash::Hash};
 
 use crate::util::intrusive_linked_list::Node;
 

@@ -1,195 +1,184 @@
-use std::{collections::HashSet, sync::Arc};
-
-use indexmap::IndexMap;
-
 pub mod pipeline;
-pub use pipeline::Pipeline;
+use vk_sync_fork::AccessType;
 
-use crate::graph::CommandBuffer;
+use crate::{
+    graph::{command::RenderpassCommands, Handle},
+    texture::SampledImage,
+};
 
-use super::{ColorFormat, DepthStencilFormat, ImageSize, Input, Output};
+use super::{AttachmentConfig, ImageSize, Input, Output};
 
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum RenderpassValidationError {
-    #[error("In pass {0:?}: cyclic dependency detected!")]
-    CyclicDependency(String),
-    #[error("In pass {0:?}: Uniform {1:?} corresponding to color input {2:?}  was not found in fragment shader of: {3:?}!")]
-    ShaderUniformNotFound(String, String, String, String),
-    #[error("In pass {0:?}: Shader output {1:?} corresponding to color output {2:?} was not found in fragment shader of: {3:?}! Maybe it was optimized out?")]
-    ShaderOutputNotFound(String, String, String, String),
-    #[error("In pass {0:?}: No outputs provided!")]
-    NoOutputs(String),
-}
-
-#[derive(Clone)]
-pub struct ColorOutput {
-    pub format: ColorFormat,
-    pub clear: bool,
-}
-#[derive(Clone)]
-pub struct DepthStencilOutput {
-    pub format: DepthStencilFormat,
-    pub depth_clear: bool,
-    pub stencil_clear: bool,
-}
-
-pub struct RenderpassBuilder<Scene, PerFrame, Resources> {
-    pass: Renderpass<Scene, PerFrame, Resources>,
-}
-impl<Scene, PerFrame, Resources> RenderpassBuilder<Scene, PerFrame, Resources> {
-    pub fn new<D: 'static + Fn(&mut CommandBuffer, &Scene, &PerFrame, &Resources)>(
-        name: impl AsRef<str>,
-        size: ImageSize,
-        draw_fn: D,
-    ) -> Self {
-        Self {
-            pass: Renderpass {
-                name: name.as_ref().to_string(),
-                inputs: IndexMap::new(),
-                outputs: IndexMap::new(),
-                draw_fn: Box::new(draw_fn),
-                size,
-                is_final: false,
-                outputs_swapchain: false,
-            },
-        }
-    }
-    pub fn input(mut self, name: impl AsRef<str>) -> Self {
-        self.pass.inputs.insert(
-            name.as_ref().to_string(),
-            Input::Read(self.pass.inputs.len() as u32),
-        );
-
-        self
-    }
-    pub fn dependency(mut self, name: impl AsRef<str>) -> Self {
-        self.pass
-            .inputs
-            .insert(name.as_ref().to_string(), Input::Dependency);
-
-        self
-    }
-    pub fn color_output(mut self, name: impl AsRef<str>, output: ColorOutput) -> Self {
-        self.pass
-            .outputs
-            .insert(name.as_ref().to_string(), Output::Color(output));
-
-        self
-    }
-    pub fn depth_stencil_output(
-        mut self,
-        name: impl AsRef<str>,
-        output: DepthStencilOutput,
-    ) -> Self {
-        self.pass
-            .outputs
-            .insert(name.as_ref().to_string(), Output::DepthStencil(output));
-
-        self
-    }
-    pub fn mark_final(mut self) -> Self {
-        self.pass.is_final = true;
-
-        self
-    }
-    pub fn outputs_swapchain(mut self) -> Self {
-        self.pass.outputs_swapchain = true;
-
-        self
-    }
-
-    fn check_cyclic_deps(self) -> Result<Self, RenderpassValidationError> {
-        let mut names = HashSet::new();
-
-        let i_count = self.pass.inputs.len();
-        let o_count = self.pass.outputs.len();
-
-        for (input, _) in &self.pass.inputs {
-            names.insert(input.clone());
-        }
-
-        for (output, _) in &self.pass.outputs {
-            names.insert(output.clone());
-        }
-
-        if names.len() < i_count + o_count {
-            return Err(RenderpassValidationError::CyclicDependency(self.pass.name));
-        }
-
-        Ok(self)
-    }
-
-    fn sanity_checks(self) -> Result<Self, RenderpassValidationError> {
-        if self.pass.outputs.is_empty() && !self.pass.outputs_swapchain {
-            return Err(RenderpassValidationError::NoOutputs(self.pass.name));
-        }
-
-        Ok(self)
-    }
-    fn validate(self) -> Result<Self, RenderpassValidationError> {
-        Ok(self.sanity_checks()?.check_cyclic_deps()?)
-    }
-    pub fn build(
-        mut self,
-    ) -> Result<Renderpass<Scene, PerFrame, Resources>, Box<dyn std::error::Error>> {
-        if self.pass.outputs_swapchain {
-            self.pass.is_final = true;
-            self.pass.outputs.clear();
-        }
-
-        Ok(self.validate()?.pass)
-    }
-}
+pub use pipeline::*;
 
 pub struct Renderpass<Scene, PerFrame, Resources> {
     name: String,
-    inputs: IndexMap<String, Input>,
-    outputs: IndexMap<String, Output>,
-    size: ImageSize,
-    is_final: bool,
-    outputs_swapchain: bool,
-    pub(crate) draw_fn:
-        Box<dyn Fn(&mut crate::graph::CommandBuffer, &Scene, &PerFrame, &Resources)>,
+    id: u64,
+    pub(crate) render_area: ImageSize,
+    inputs: Vec<Input>,
+    outputs: Vec<Output>,
+    pub(crate) present_to_swapchain: bool,
+    pub(crate) draw_fn: Box<dyn FnMut(&mut RenderpassCommands, &Scene, &PerFrame, &Resources)>,
 }
 
 impl<Scene, PerFrame, Resources> Renderpass<Scene, PerFrame, Resources> {
+    pub fn new(
+        name: &str,
+        area: ImageSize,
+        draw_fn: impl FnMut(&mut RenderpassCommands, &Scene, &PerFrame, &Resources) + 'static,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            id: crate::util::quick_hash(name),
+            render_area: area,
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            present_to_swapchain: false,
+            draw_fn: Box::new(draw_fn),
+        }
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn inputs(&self) -> &IndexMap<String, Input> {
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+    pub fn inputs(&self) -> &[Input] {
         &self.inputs
     }
-    pub fn outputs(&self) -> &IndexMap<String, Output> {
+    pub fn outputs(&self) -> &[Output] {
         &self.outputs
     }
-    pub fn is_final(&self) -> bool {
-        self.is_final
-    }
-    pub fn outputs_swapchain(&self) -> bool {
-        self.outputs_swapchain
-    }
-    pub fn size(&self) -> &ImageSize {
-        &self.size
-    }
-}
-struct Rpass<Scene, PerFrame, Resources> {
-    name: String,
-    size: ImageSize,
-    inputs: Vec<Input>,
-    outputs: Vec<Output>,
-    is_final: bool,
-    pub(crate) draw_fn:
-        Box<dyn Fn(&mut crate::graph::CommandBuffer, &Scene, &PerFrame, &Resources)>,
-}
+    pub fn sample_image(
+        mut self,
+        image: &Handle<SampledImage>,
+        access_type: AccessType,
+        binding: u32,
+    ) -> Self {
+        if self.inputs.iter().any(|input| match input {
+            Input::SampleImage(existing_image, _, binding) => existing_image == image,
+            _ => false,
+        }) {
+            panic!("Image handle {:?} already registered for read", image);
+        }
 
-impl<Scene, PerFrame, Resources> Rpass<Scene, PerFrame, Resources> {
-    pub fn name(&self) -> &str {
-        &self.name
+        match access_type {
+            AccessType::AnyShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::VertexShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::TessellationControlShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::TessellationEvaluationShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::GeometryShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::FragmentShaderReadColorInputAttachment
+            | AccessType::FragmentShaderReadDepthStencilInputAttachment => {}
+            _ => panic!(
+                "Invalid access type {:?}, for renderpass sample_image",
+                access_type
+            ),
+        }
+
+        self.inputs
+            .push(Input::SampleImage(image.clone(), access_type, binding));
+        self
     }
-    pub fn input(mut self, input: ) -> Self{
-        self.inputs.push()
+    // pub fn read_image(mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) -> Self {
+    //     if self.inputs.iter().any(|input| {
+    //         match input {
+    //             Input::ReadImage(existing_image, _) => existing_image == image,
+    //             Input::SampleImage(existing_image, _, _) => existing_image == image,
+    //             _=> false
+    //         }
+    //     }) {
+    //         panic!("Image handle {:?} already registered for read", image);
+    //     }
+
+    //     match access_type {
+    //         AccessType::VertexShaderReadSampledImageOrUniformTexelBuffer |
+    //         AccessType::VertexShaderReadOther |
+    //         AccessType::TessellationControlShaderReadSampledImageOrUniformTexelBuffer |
+    //         AccessType::TessellationControlShaderReadOther |
+    //         AccessType::TessellationEvaluationShaderReadSampledImageOrUniformTexelBuffer |
+    //         AccessType::TessellationEvaluationShaderReadOther |
+    //         AccessType::GeometryShaderReadSampledImageOrUniformTexelBuffer |
+    //         AccessType::GeometryShaderReadOther |
+    //         AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer |
+    //         AccessType::FragmentShaderReadColorInputAttachment |
+    //         AccessType::FragmentShaderReadDepthStencilInputAttachment |
+    //         AccessType::FragmentShaderReadOther |
+    //         AccessType::ColorAttachmentRead |
+    //         AccessType::DepthStencilAttachmentRead |
+    //         AccessType::TransferRead |
+    //         AccessType::HostRead => {},
+    //         _=> panic!("Invalid access type {:?}, for renderpass read_image", access_type)
+
+    //     }
+
+    //     self.inputs.push(Input::ReadImage(image.clone(), access_type));
+    //     self
+    // }
+    // pub fn write_image(mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) -> Self {
+    //     if self.outputs.iter().any(|output| {
+    //         match output {
+    //             Output::WriteImage(existing_image, _) |
+    //             Output::DrawImage(existing_image, _, _) => existing_image == image,
+    //             _=> false
+    //         }
+    //     }) {
+    //         panic!("Image handle {:?} already registered for writes", image);
+    //     }
+
+    //     match access_type {
+    //         AccessType::VertexShaderWrite |
+    //         AccessType::TessellationControlShaderWrite |
+    //         AccessType::TessellationEvaluationShaderWrite |
+    //         AccessType::GeometryShaderWrite |
+    //         AccessType::FragmentShaderWrite |
+    //         AccessType::ColorAttachmentWrite |
+    //         AccessType::DepthStencilAttachmentWrite |
+    //         AccessType::DepthAttachmentWriteStencilReadOnly |
+    //         AccessType::StencilAttachmentWriteDepthReadOnly |
+    //         AccessType::HostWrite |
+    //         AccessType::ColorAttachmentReadWrite |
+    //         AccessType::General => {},
+    //         _=> panic!("Invalid access type {:?}, for renderpass write_image", access_type)
+    //     }
+
+    //     self.outputs.push(Output::WriteImage(image.clone(), access_type));
+    //     self
+    // }
+    pub fn draw_image(
+        mut self,
+        image: &Handle<SampledImage>,
+        attachment_config: AttachmentConfig,
+    ) -> Self {
+        // if self.outputs.iter().any(|output| match output {
+        //     Output::WriteImage(existing_image, _) | Output::DrawImage(existing_image, _) => {
+        //         existing_image == image
+        //     }
+        //     _ => false,
+        // }) {
+        //     panic!("Image handle {:?} already registered for writes", image);
+        // }
+
+        self.outputs
+            .push(Output::DrawImage(image.clone(), attachment_config));
+        self
+    }
+
+    pub fn present(mut self) -> Self {
+        self.present_to_swapchain = true;
+
+        if self
+            .outputs
+            .iter()
+            .find(|output| match output {
+                Output::DrawImage(_, _) => true,
+                _ => false,
+            })
+            .is_some()
+        {
+            panic!("Renderpass has been marked for presentation, draws to other images is not permitted");
+        }
+
         self
     }
 }

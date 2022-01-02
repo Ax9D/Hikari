@@ -231,8 +231,8 @@ mod tests {
         )
         .add_task(
             Task::new("Render")
-            .add_function(&render)
             .after("Update")
+            .add_function(&render)
         )
         .build().unwrap();
 

@@ -6,8 +6,8 @@ use gpu_allocator::{vulkan::Allocation, vulkan::AllocationCreateDesc, Allocation
 pub mod sampled_image;
 pub mod texture2d;
 
+pub use sampled_image::ImageConfig;
 pub use sampled_image::SampledImage;
-pub use sampled_image::VkTextureConfig;
 
 pub use texture2d::Texture2D;
 
@@ -98,8 +98,8 @@ impl TextureConfig {
     fn get_mip_count(width: u32, height: u32) -> u32 {
         ((u32::max(width, height) as f32).log2().floor() + 1.0) as u32
     }
-    pub fn into_vk_config(&self, width: u32, height: u32) -> VkTextureConfig {
-        VkTextureConfig {
+    pub fn into_vk_config(&self, width: u32, height: u32) -> ImageConfig {
+        ImageConfig {
             format: self.format.into_vk(),
             filtering: self.filtering.into_vk(),
             wrap_x: self.wrap_x.into_vk(),
@@ -111,9 +111,8 @@ impl TextureConfig {
                 1
             },
             mip_filtering: self.filtering.into_vk_mip(),
-            aspect_flags: vk::ImageAspectFlags::COLOR,
             usage: vk::ImageUsageFlags::SAMPLED,
-            primary_image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            image_type: vk::ImageType::TYPE_2D,
             host_readable: true,
         }
     }

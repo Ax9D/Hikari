@@ -1,5 +1,4 @@
 pub mod reflect;
-use ash::vk::{DescriptorSetLayoutBinding, MAX_DESCRIPTION_SIZE};
 use ash::{prelude::VkResult, vk};
 pub use reflect::CombinedImageSampler;
 pub use reflect::PushConstantRange;
@@ -7,11 +6,7 @@ pub use reflect::ReflectionData;
 pub use reflect::UniformBuffer;
 
 use std::hash::{Hash, Hasher};
-use std::{
-    borrow::BorrowMut,
-    ffi::{CStr, CString},
-    sync::Arc,
-};
+use std::sync::Arc;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ShaderDataType {
     Float,
@@ -50,7 +45,8 @@ impl ShaderDataType {
 use thiserror::Error;
 
 use crate::descriptor::DescriptorSetLayout;
-use crate::descriptor::{self, DescriptorSetLayoutBuilder, MAX_DESCRIPTOR_SETS};
+use crate::descriptor::MAX_BINDINGS_PER_SET;
+use crate::descriptor::{DescriptorSetLayoutBuilder, MAX_DESCRIPTOR_SETS};
 
 #[derive(Error, Debug)]
 pub enum ShaderCreateError {
@@ -239,6 +235,7 @@ impl PipelineLayout {
                     let descriptor_type =
                         reflect::spirv_desc_type_to_vk_desc_type(binding.descriptor_type);
 
+                    //println!("{:?}", descriptor_type);
                     layout_builder.with_binding(
                         binding.binding,
                         descriptor_type,
@@ -260,6 +257,12 @@ impl PipelineLayout {
                 }
             }
         }
+        // for (set, layout_builder) in layout_builders.iter().enumerate() {
+        //     for binding in 0..MAX_BINDINGS_PER_SET {
+        //         print!("{:?} ", layout_builder.binding(binding as u32));
+        //     }
+        //     println!();
+        // }
 
         let mut layouts = [DescriptorSetLayout::new().build(device)?; MAX_DESCRIPTOR_SETS];
 

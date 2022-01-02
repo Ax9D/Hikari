@@ -18,15 +18,16 @@ impl GlobalStateBuilder {
         Self {
             g_state: UnsafeGlobalState {
                 state_list: Default::default(),
-                _marker: PhantomPinned::default()
+                _marker: PhantomPinned::default(),
             },
         }
     }
     pub fn add_state<S: State>(mut self, state: S) -> Self {
-        if let Some(_) = self
+        if self
             .g_state
             .state_list
             .insert(TypeId::of::<S>(), StateCell::new(state))
+            .is_some()
         {
             panic!(
                 "State of type {} has already been registered",
@@ -49,7 +50,7 @@ unsafe impl Sync for UnsafeGlobalState {}
 //Access to Internal state is not guaranteed to be thread safe, because of thread_unsafety feature
 pub struct UnsafeGlobalState {
     state_list: FxHashMap<TypeId, StateCell>,
-    _marker: PhantomPinned
+    _marker: PhantomPinned,
 }
 
 impl UnsafeGlobalState {
@@ -57,12 +58,14 @@ impl UnsafeGlobalState {
         GlobalStateBuilder::new()
     }
     pub unsafe fn get<S: State>(self: Pin<&Self>) -> Option<Ref<S>> {
-        self.get_ref().state_list
+        self.get_ref()
+            .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast())
     }
     pub unsafe fn get_mut<S: State>(self: Pin<&Self>) -> Option<RefMut<S>> {
-        self.get_ref().state_list
+        self.get_ref()
+            .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_mut())
     }
@@ -88,22 +91,19 @@ impl GlobalState {
     }
     #[inline]
     pub unsafe fn get<S: State>(&self) -> Option<Ref<S>> {
-        self.raw().get() 
+        self.raw().get()
     }
     #[inline]
     pub unsafe fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
         UnsafeGlobalState::get_mut(self.raw())
     }
-
 }
 
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
 
-    use crate::{
-        GlobalState,
-    };
+    use crate::GlobalState;
 
     pub struct Renderer {
         x: i32,

@@ -28,7 +28,11 @@ unsafe impl<'a, S: State> Fetch<'a> for RefFetch<S> {
     type Item = Ref<'a, S>;
 
     fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
-        unsafe { g_state.get::<S>().expect(&format!("No state of type: {}", std::any::type_name::<S>())) }
+        unsafe {
+            g_state
+                .get::<S>()
+                .expect(&format!("No state of type: {}", std::any::type_name::<S>()))
+        }
     }
 }
 pub struct RefMutFetch<T> {
@@ -42,15 +46,18 @@ unsafe impl<'a, S: State> Fetch<'a> for RefMutFetch<S> {
     type Item = RefMut<'a, S>;
 
     fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
-        unsafe { UnsafeGlobalState::get_mut::<S>(g_state).expect(&format!("No state of type: {}", std::any::type_name::<S>())) }
+        unsafe {
+            UnsafeGlobalState::get_mut::<S>(g_state)
+                .expect(&format!("No state of type: {}", std::any::type_name::<S>()))
+        }
     }
 }
 
-impl<'a, S:State> Query for Option<Ref<'a, S>> {
+impl<'a, S: State> Query for Option<Ref<'a, S>> {
     type Fetch = MaybeRefFetch<S>;
 }
 pub struct MaybeRefFetch<T> {
-    _phantom: PhantomData<T>
+    _phantom: PhantomData<T>,
 }
 unsafe impl<'a, S: State> Fetch<'a> for MaybeRefFetch<S> {
     type Item = Option<Ref<'a, S>>;
@@ -60,11 +67,11 @@ unsafe impl<'a, S: State> Fetch<'a> for MaybeRefFetch<S> {
     }
 }
 
-impl<'a, S:State> Query for Option<RefMut<'a, S>> {
+impl<'a, S: State> Query for Option<RefMut<'a, S>> {
     type Fetch = MaybeRefMutFetch<S>;
 }
 pub struct MaybeRefMutFetch<T> {
-    _phantom: PhantomData<T>
+    _phantom: PhantomData<T>,
 }
 unsafe impl<'a, S: State> Fetch<'a> for MaybeRefMutFetch<S> {
     type Item = Option<RefMut<'a, S>>;
@@ -73,7 +80,6 @@ unsafe impl<'a, S: State> Fetch<'a> for MaybeRefMutFetch<S> {
         unsafe { g_state.get_mut::<S>() }
     }
 }
-
 
 impl Query for () {
     type Fetch = ();
@@ -89,7 +95,7 @@ unsafe impl<'a> Fetch<'a> for () {
 
 impl<'a> Query for &'a UnsafeGlobalState {
     type Fetch = UnsafeGlobalFetch;
-} 
+}
 pub struct UnsafeGlobalFetch;
 
 unsafe impl<'a> Fetch<'a> for UnsafeGlobalFetch {
@@ -98,7 +104,6 @@ unsafe impl<'a> Fetch<'a> for UnsafeGlobalFetch {
     fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
         g_state
     }
-    
 }
 
 macro_rules! impl_query {

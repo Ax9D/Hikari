@@ -10,7 +10,7 @@ pub struct Function {
 }
 impl Function {
     #[inline]
-    pub unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) {  
+    pub unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) {
         (self.exec)(g_state);
     }
 }
@@ -18,8 +18,8 @@ pub trait IntoFunction<Params>: 'static {
     fn into_function(self) -> Function;
 }
 
-use std::any::TypeId;
 use std::any::type_name;
+use std::any::TypeId;
 use std::pin::Pin;
 
 use crate::global::UnsafeGlobalState;

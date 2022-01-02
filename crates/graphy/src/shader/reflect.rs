@@ -4,28 +4,28 @@ use ash::vk;
 
 #[derive(Debug, Clone)]
 pub struct Attribute {
-    pub(crate) name: String,
-    pub(crate) location: u32,
+    pub name: String,
+    pub location: u32,
 }
 #[derive(Debug, Clone)]
 pub struct UniformBuffer {
-    pub(crate) name: String,
-    pub(crate) set: u32,
-    pub(crate) binding: u32,
+    pub name: String,
+    pub set: u32,
+    pub binding: u32,
 }
 
 #[derive(Debug, Clone)]
 pub struct PushConstantRange {
-    pub(crate) size: u32,
-    pub(crate) offset: u32,
+    pub size: u32,
+    pub offset: u32,
 }
 
 #[derive(Debug, Clone)]
 pub struct CombinedImageSampler {
-    pub(crate) name: String,
-    pub(crate) set: u32,
-    pub(crate) binding: u32,
-    pub(crate) count: usize,
+    pub name: String,
+    pub set: u32,
+    pub binding: u32,
+    pub count: usize,
 }
 #[derive(Clone)]
 pub struct ReflectionData {

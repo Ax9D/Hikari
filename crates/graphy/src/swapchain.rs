@@ -7,9 +7,12 @@ use ash::{
 };
 use winit::window::Window;
 
-use crate::texture::{SampledImage, VkTextureConfig};
+use crate::{
+    renderpass::PhysicalRenderpass,
+    texture::{ImageConfig, SampledImage},
+};
 
-pub(crate) struct Swapchain {
+pub struct Swapchain {
     device: Arc<crate::device::Device>,
     inner: vk::SwapchainKHR,
     loader: ash::extensions::khr::Swapchain,
@@ -18,7 +21,7 @@ pub(crate) struct Swapchain {
     format: vk::Format,
     depth_image: SampledImage,
 
-    renderpass: vk::RenderPass,
+    renderpass: PhysicalRenderpass,
     framebuffers: Vec<vk::Framebuffer>,
 
     width: u32,
@@ -33,24 +36,23 @@ impl Swapchain {
         surface_loader: Surface,
     ) -> Result<Swapchain, Box<dyn std::error::Error>> {
         let physical_device = device.physical_device();
-        //let swapchain_support_details = physical_device.swapchain_support_details();
 
-        let present_mode = Self::choose_present_mode(physical_device.swapchain_support_details());
+        let present_mode = Self::choose_present_mode(&physical_device.swapchain_support_details);
 
         let surface_format =
-            Self::choose_swapchain_format(physical_device.swapchain_support_details())?;
+            Self::choose_swapchain_format(&physical_device.swapchain_support_details)?;
 
         let swap_extent =
-            Self::choose_swap_extent(window, physical_device.swapchain_support_details());
+            Self::choose_swap_extent(window, &physical_device.swapchain_support_details);
 
         let mut image_count = physical_device
-            .swapchain_support_details()
+            .swapchain_support_details
             .capabilities
             .min_image_count
             + 1;
 
         let max_image_count = physical_device
-            .swapchain_support_details()
+            .swapchain_support_details
             .capabilities
             .max_image_count;
         if max_image_count > 0 && image_count > max_image_count {
@@ -71,16 +73,13 @@ impl Swapchain {
             .image_extent(swap_extent)
             .pre_transform(
                 physical_device
-                    .swapchain_support_details()
+                    .swapchain_support_details
                     .capabilities
                     .current_transform,
             )
             .clipped(true);
 
-        let queue_family_indices = [
-            physical_device.graphics_queue_index(),
-            physical_device.present_queue_index(),
-        ];
+        let queue_family_indices = [device.unified_queue_ix, device.present_queue_ix];
 
         swapchain_create_info = if queue_family_indices[0] != queue_family_indices[1] {
             swapchain_create_info
@@ -98,7 +97,7 @@ impl Swapchain {
             device,
             swap_extent.width,
             swap_extent.height,
-            VkTextureConfig {
+            ImageConfig {
                 format: vk::Format::D24_UNORM_S8_UINT,
                 filtering: vk::Filter::LINEAR,
                 wrap_x: vk::SamplerAddressMode::REPEAT,
@@ -106,10 +105,9 @@ impl Swapchain {
                 aniso_level: 0,
                 mip_levels: 1,
                 mip_filtering: vk::SamplerMipmapMode::LINEAR,
-                aspect_flags: vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
-                primary_image_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                host_readable: true,
                 usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+                image_type: vk::ImageType::TYPE_2D,
+                host_readable: true,
             },
         )?;
 
@@ -147,14 +145,14 @@ impl Swapchain {
         color_images: &Vec<vk::ImageView>,
         color_format: vk::Format,
         depth_stencil_image: &SampledImage,
-    ) -> VkResult<(vk::RenderPass, Vec<vk::Framebuffer>)> {
+    ) -> VkResult<(PhysicalRenderpass, Vec<vk::Framebuffer>)> {
         let create_info = vk::RenderPassCreateInfo::builder();
 
         let attachments = [
             *vk::AttachmentDescription::builder()
                 .format(color_format)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
-                .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .store_op(vk::AttachmentStoreOp::STORE)
                 .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
                 .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
                 .samples(vk::SampleCountFlags::TYPE_1)
@@ -163,8 +161,8 @@ impl Swapchain {
             *vk::AttachmentDescription::builder()
                 .format(depth_stencil_image.config().format)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
-                .store_op(vk::AttachmentStoreOp::DONT_CARE)
-                .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+                .store_op(vk::AttachmentStoreOp::STORE)
+                .stencil_store_op(vk::AttachmentStoreOp::STORE)
                 .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
                 .samples(vk::SampleCountFlags::TYPE_1)
                 .initial_layout(vk::ImageLayout::UNDEFINED)
@@ -189,14 +187,14 @@ impl Swapchain {
             .attachments(&attachments)
             .subpasses(&subpass_descs);
 
-        let renderpass = unsafe { device.raw().create_render_pass(&create_info, None)? };
+        let pass = unsafe { device.raw().create_render_pass(&create_info, None)? };
 
         let mut framebuffers = Vec::new();
         for &color_image in color_images {
             let attachments = [color_image, depth_stencil_image.image_view(1).unwrap()];
 
             let create_info = vk::FramebufferCreateInfo::builder()
-                .render_pass(renderpass)
+                .render_pass(pass)
                 .attachments(&attachments)
                 .width(width)
                 .height(height)
@@ -204,6 +202,25 @@ impl Swapchain {
 
             framebuffers.push(unsafe { device.raw().create_framebuffer(&create_info, None)? });
         }
+
+        let clear_values = vec![
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [1.0, 0.0, 0.0, 1.0],
+                },
+            },
+            vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
+                },
+            },
+        ];
+        let renderpass = PhysicalRenderpass {
+            pass,
+            n_color_attachments: 1,
+            clear_values,
+        };
 
         Ok((renderpass, framebuffers))
     }
@@ -291,7 +308,6 @@ impl Swapchain {
 
             image_views.push(image_view);
         }
-
         Ok(image_views)
     }
     pub fn depth_image(&self) -> &SampledImage {
@@ -306,11 +322,40 @@ impl Swapchain {
     pub fn images(&self) -> &[vk::ImageView] {
         &self.image_views
     }
-    pub fn renderpass(&self) -> vk::RenderPass {
-        self.renderpass
+    pub fn renderpass(&self) -> &PhysicalRenderpass {
+        &self.renderpass
     }
     pub fn framebuffers(&self) -> &[vk::Framebuffer] {
         &self.framebuffers
+    }
+    pub fn acquire_next_image_ix(
+        &mut self,
+        timeout: u64,
+        signal_semaphore: vk::Semaphore,
+        signal_fence: vk::Fence,
+    ) -> VkResult<u32> {
+        unsafe {
+            let (ix, _) = self.loader.acquire_next_image(
+                self.inner,
+                timeout,
+                signal_semaphore,
+                signal_fence,
+            )?;
+            Ok(ix)
+        }
+    }
+    pub fn present(&mut self, image_ix: u32, wait_semaphone: vk::Semaphore) -> VkResult<bool> {
+        let swapchains = [self.inner];
+        let wait_semaphones = [wait_semaphone];
+        let image_ixs = [image_ix];
+        let present_info = vk::PresentInfoKHR::builder()
+            .swapchains(&swapchains)
+            .wait_semaphores(&wait_semaphones)
+            .image_indices(&image_ixs);
+        unsafe {
+            self.loader
+                .queue_present(self.device.present_queue(), &present_info)
+        }
     }
     pub fn width(&self) -> u32 {
         self.width
@@ -332,7 +377,9 @@ impl Drop for Swapchain {
         }
 
         unsafe {
-            self.device.raw().destroy_render_pass(self.renderpass, None);
+            self.device
+                .raw()
+                .destroy_render_pass(self.renderpass.pass, None);
         };
 
         for image_view in self.image_views.drain(..) {

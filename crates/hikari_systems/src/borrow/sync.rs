@@ -1,4 +1,10 @@
-use std::{any::Any, cell::UnsafeCell, fmt, ops::{Deref, DerefMut}, sync::atomic::{self, AtomicUsize}};
+use std::{
+    any::Any,
+    cell::UnsafeCell,
+    fmt,
+    ops::{Deref, DerefMut},
+    sync::atomic::{self, AtomicUsize},
+};
 
 use crate::State;
 

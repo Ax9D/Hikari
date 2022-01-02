@@ -1,6 +1,5 @@
 use std::borrow::Cow;
-use std::mem::ManuallyDrop;
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 #[macro_export]
 macro_rules! rawToStr {
@@ -108,94 +107,8 @@ unsafe extern "system" fn vulkan_debug_callback(
 
     vk::FALSE
 }
-pub(crate) struct FrameData {
-    pub render_semaphore: vk::Semaphore,
-    pub present_semaphore: vk::Semaphore,
-    pub render_finished_fence: vk::Fence,
-
-    pub command_pool: vk::CommandPool,
-    pub command_buffer: vk::CommandBuffer,
-}
-impl FrameData {
-    pub fn new(device: &Arc<crate::Device>) -> VkResult<Self> {
-        unsafe {
-            let create_info = vk::CommandPoolCreateInfo::builder()
-                .queue_family_index(device.physical_device().graphics_queue_index())
-                .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
-
-            let command_pool = device.raw().create_command_pool(&create_info, None)?;
-
-            let create_info = vk::CommandBufferAllocateInfo::builder()
-                .command_pool(command_pool)
-                .command_buffer_count(1)
-                .level(vk::CommandBufferLevel::PRIMARY);
-
-            let command_buffer = device.raw().allocate_command_buffers(&create_info)?[0];
-
-            let create_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
-
-            let render_finished_fence = device.raw().create_fence(&create_info, None)?;
-
-            let create_info =
-                vk::SemaphoreCreateInfo::builder().flags(vk::SemaphoreCreateFlags::empty());
-
-            let render_semaphore = device.raw().create_semaphore(&create_info, None)?;
-            let present_semaphore = device.raw().create_semaphore(&create_info, None)?;
-
-            Ok(Self {
-                render_semaphore,
-                present_semaphore,
-                render_finished_fence,
-                command_pool,
-                command_buffer,
-            })
-        }
-    }
-    pub unsafe fn delete(&self, device: &Arc<crate::Device>) {
-        unsafe {
-            device.raw().destroy_command_pool(self.command_pool, None);
-            device.raw().destroy_fence(self.render_finished_fence, None);
-            device.raw().destroy_semaphore(self.render_semaphore, None);
-            device.raw().destroy_semaphore(self.present_semaphore, None);
-        }
-
-        log::debug!("Deleted Framedata");
-    }
-}
-pub(crate) struct FrameState {
-    frame_number: usize,
-    frames: [FrameData; 2],
-}
-
-impl FrameState {
-    pub fn new(device: &Arc<crate::Device>) -> VkResult<Self> {
-        Ok(Self {
-            frame_number: 1,
-            frames: [FrameData::new(device)?, FrameData::new(device)?],
-        })
-    }
-    pub fn current_frame(&self) -> &FrameData {
-        &self.frames[(self.frame_number % 2)]
-    }
-    pub fn last_frame(&self) -> &FrameData {
-        &self.frames[(self.frame_number.wrapping_sub(1) % 2)]
-    }
-    pub fn current_frame_number(&self) -> usize {
-        self.frame_number
-    }
-    pub fn update(&mut self) {
-        self.frame_number = self.frame_number.wrapping_add(1);
-    }
-
-    pub unsafe fn delete(&self, device: &Arc<crate::Device>) {
-        for frame in &self.frames {
-            frame.delete(device);
-        }
-    }
-}
 
 pub struct Gfx {
-    frame_state: FrameState,
     device: Arc<crate::Device>,
     swapchain: Arc<Mutex<Swapchain>>, //
     entry: ash::Entry,                //
@@ -289,12 +202,10 @@ impl Gfx {
         let swapchain = crate::Swapchain::create(&device, window, &surface, surface_loader)?;
         let swapchain = Arc::new(Mutex::new(swapchain));
 
-        let frame_state = FrameState::new(&device)?;
         Ok(Self {
             entry,
             device,
             swapchain,
-            frame_state,
         })
     }
     pub fn device(&self) -> &Arc<crate::Device> {
@@ -304,20 +215,9 @@ impl Gfx {
     pub(crate) fn swapchain(&self) -> &Arc<Mutex<Swapchain>> {
         &self.swapchain
     }
-    pub(crate) fn frame_state(&self) -> &FrameState {
-        &self.frame_state
-    }
-    pub(crate) fn frame_state_mut(&mut self) -> &mut FrameState {
-        &mut self.frame_state
-    }
 }
 impl Drop for Gfx {
     fn drop(&mut self) {
-        log::debug!("Dropping FrameState");
-        unsafe {
-            self.frame_state().delete(self.device());
-        }
-
         log::debug!("Dropped gfx");
     }
 }

@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "type": "lldb",
             "request": "launch",
@@ -22,6 +23,24 @@
                 }
             },
             //"program": "${workspaceRoot}/target/debug/deps/graphy-9b5fd30a8b1cd12c.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example",
+            // "cargo": {
+            //     "args": [
+            //         "run",
+            //         "--features",
+            //         "profile-puffin",
+            //         "--example",
+            //         "simplegraph"
+            //     ]
+            // },
+            "program": "${workspaceRoot}/target/debug/examples/simplegraph",
             "args": [],
             "cwd": "${workspaceFolder}"
         }
