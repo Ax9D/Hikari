@@ -12,12 +12,12 @@ pub enum MeshFormat {
     Fbx,
 }
 impl MeshFormat {
-    pub fn from_extension(ext: &OsStr) -> Result<MeshFormat, error::IOErrors> {
+    pub fn from_extension(ext: &OsStr) -> Result<MeshFormat, error::Error> {
         let ext_str = ext.to_str().unwrap().to_ascii_lowercase();
         match ext_str.as_str() {
             "fbx" => Ok(MeshFormat::Fbx),
             "gltf" | "glb" => Ok(MeshFormat::Gltf),
-            _ => Err(error::IOErrors::UnsupportedModelFormat(ext.to_owned())),
+            _ => Err(error::Error::UnsupportedModelFormat(ext.to_owned())),
         }
     }
 }
@@ -148,7 +148,7 @@ impl MeshData {
 
         let extension = path
             .extension()
-            .ok_or(error::IOErrors::FailedToIdentifyFormat(
+            .ok_or(error::Error::FailedToIdentifyFormat(
                 path.as_os_str().to_owned(),
             ))?;
 

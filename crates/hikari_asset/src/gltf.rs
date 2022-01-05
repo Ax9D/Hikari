@@ -70,7 +70,7 @@ fn parse_texture_data(
                     data,
                     crate::image::ImageFormat::Png,
                 )?),
-                _ => Err(crate::error::IOErrors::UnsupportedImageFormat(
+                _ => Err(crate::error::Error::UnsupportedImageFormat(
                     mime_type.split(r"/").last().unwrap().to_string(),
                     texture.name().unwrap_or("unknown").to_string(),
                 )),
@@ -105,7 +105,7 @@ fn parse_texture_data(
                         &data,
                         crate::image::ImageFormat::Png,
                     )?),
-                    _ => Err(crate::error::IOErrors::UnsupportedImageFormat(
+                    _ => Err(crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
                         texture.name().unwrap_or("unknown").to_string(),
                     )),
@@ -126,7 +126,7 @@ fn parse_texture_data(
                         &path,
                         crate::image::ImageFormat::Png,
                     )?),
-                    _ => Err(crate::error::IOErrors::UnsupportedImageFormat(
+                    _ => Err(crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
                         texture.name().unwrap_or("unknown").to_string(),
                     )),
@@ -184,7 +184,6 @@ fn load_texture_data(
     //println!("Loading texture {}", name);
 
     //Albedo textures are treated as SRGB
-    //TODO: Find a simpler way to do this
     let is_albedo = gltf.document().materials().find(|mat| {
         if let Some(albedo) = mat.pbr_metallic_roughness().base_color_texture() {
             albedo.texture().index() == texture.index()
@@ -194,21 +193,21 @@ fn load_texture_data(
     });
 
     let format = if is_albedo.is_some() {
-        graphy::texture::Format::RGBA8
+        graphy::texture::Format::SRGBA
     } else {
         graphy::texture::Format::RGBA8
     };
 
-    let config = graphy::texture::TextureConfig {
+    Ok(Texture {
+        name,
+        width,
+        height,
+        data,
         filtering,
         wrap_x,
         wrap_y,
-        aniso_level: 0,
         format,
-        generate_mips: false
-    };
-
-    Ok(Texture { name, width, height, data, config })
+    })
 }
 fn load_textures(import_data: &ImportData) -> Result<Vec<Texture>, Box<dyn std::error::Error>> {
     use rayon::prelude::*;
@@ -266,7 +265,7 @@ fn load_materials(textures: &Vec<Texture>, import_data: &ImportData) -> Vec<Mate
         let roughness = material.pbr_metallic_roughness().roughness_factor();
 
         println!("{}", roughness);
-        
+
         let metallic_map = if let Some(info) = material
             .pbr_metallic_roughness()
             .metallic_roughness_texture()
@@ -403,11 +402,13 @@ fn load_models(import_data: &ImportData) -> Vec<crate::mesh::Model> {
     //     }
     // }
 }
-pub fn load_scene(path: &Path) -> Result<crate::Scene, Box<dyn std::error::Error>> {
-    let import_data = ImportData::new(path)?;
+pub fn load_scene(path: &Path) -> Result<crate::Scene, crate::Error> {
+    let import_data = ImportData::new(path)
+        .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
 
     let now = std::time::Instant::now();
-    let textures = load_textures(&import_data)?;
+    let textures = load_textures(&import_data)
+        .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
 
     println!("Textures {:?}", now.elapsed());
     //println!("First import texture {}", importData.document().textures().next().unwrap().index());
@@ -433,7 +434,7 @@ pub fn load_scene(path: &Path) -> Result<crate::Scene, Box<dyn std::error::Error
 mod tests {
     use crate::*;
     #[test]
-    fn roughness() {
-        let model = gltf::load_scene("godzilla.glb".as_ref());
+    fn godzilla() {
+        let model = gltf::load_scene("godzilla.glb".as_ref()).unwrap();
     }
 }

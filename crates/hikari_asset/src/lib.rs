@@ -2,18 +2,15 @@
 #![allow(unused_variables)]
 #![allow(unused_unsafe)]
 
-
-pub mod asset;
 pub mod error;
 pub mod gltf;
 pub mod image;
 pub mod material;
 pub mod mesh;
-pub mod pool;
 pub mod scene;
 pub mod texture;
 
-pub use asset::Asset;
+pub use error::Error;
 pub use material::Material;
 pub use mesh::Mesh;
 pub use mesh::Model;

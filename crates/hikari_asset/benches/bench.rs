@@ -1,3 +1,1 @@
-mod benches {
-    
-}
+mod benches {}

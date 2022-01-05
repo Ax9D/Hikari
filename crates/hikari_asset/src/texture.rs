@@ -1,11 +1,14 @@
-use graphy::texture::TextureConfig;
+use graphy::*;
 
 pub struct Texture {
     pub(crate) name: String,
     pub(crate) data: Vec<u8>,
     pub(crate) width: u32,
     pub(crate) height: u32,
-    pub(crate) config: graphy::texture::TextureConfig,
+    pub(crate) filtering: graphy::FilterMode,
+    pub(crate) wrap_x: graphy::WrapMode,
+    pub(crate) wrap_y: graphy::WrapMode,
+    pub(crate) format: graphy::Format,
 }
 
 impl Texture {
@@ -21,7 +24,16 @@ impl Texture {
     pub fn height(&self) -> u32 {
         self.height
     }
-    pub fn config(&self) -> TextureConfig {
-        self.config.clone()
+    pub fn filtering(&self) -> FilterMode {
+        self.filtering
+    }
+    pub fn wrap_x(&self) -> WrapMode {
+        self.wrap_x
+    }
+    pub fn wrap_y(&self) -> WrapMode {
+        self.wrap_y
+    }
+    pub fn format(&self) -> Format {
+        self.format
     }
 }

@@ -7,11 +7,11 @@ pub struct Scene {
     pub(crate) models: Vec<crate::Model>,
 }
 impl Scene {
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, crate::Error> {
         let path = path.as_ref();
         let extension = path
             .extension()
-            .ok_or(error::IOErrors::FailedToIdentifyFormat(
+            .ok_or(error::Error::FailedToIdentifyFormat(
                 path.as_os_str().to_owned(),
             ))?;
 
