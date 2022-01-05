@@ -1,12 +1,11 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
     hash::{Hash, Hasher},
     sync::Arc,
 };
 
 use ash::vk;
 
-use crate::{shader::Shader, ShaderData, ShaderDataType};
+use crate::ShaderDataType;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum PrimitiveTopology {
@@ -87,7 +86,7 @@ impl StencilOp {
 }
 fn bad_float_equal_rep(x: f32) -> u32 {
     let rounded = (x * 100.0).round() / 100.0;
-    unsafe { std::mem::transmute(rounded) }
+    rounded.to_bits()
 }
 fn bad_float_hash(x: f32, hasher: &mut impl std::hash::Hasher) {
     bad_float_equal_rep(x).hash(hasher);
@@ -257,7 +256,12 @@ pub struct BlendState {
 impl BlendState {
     pub fn into_vk(&self) -> vk::PipelineColorBlendAttachmentState {
         *vk::PipelineColorBlendAttachmentState::builder()
-            .color_write_mask(vk::ColorComponentFlags::all())
+            .color_write_mask(
+                vk::ColorComponentFlags::R
+                    | vk::ColorComponentFlags::G
+                    | vk::ColorComponentFlags::B
+                    | vk::ColorComponentFlags::A,
+            )
             .blend_enable(self.enabled)
             .src_color_blend_factor(self.src_color_blend_factor.into_vk())
             .dst_color_blend_factor(self.dst_color_blend_factor.into_vk())
@@ -271,8 +275,8 @@ const MAX_VERTEX_BINDINGS: usize = 5;
 const MAX_VERTEX_ATTRIBUTES: usize = 10;
 #[derive(Debug, Default, Clone)]
 pub struct VertexInputLayout {
-    binding_descs: Vec<vk::VertexInputBindingDescription>,
-    attribute_descs: Vec<vk::VertexInputAttributeDescription>,
+    binding_descs: arrayvec::ArrayVec<vk::VertexInputBindingDescription, MAX_VERTEX_BINDINGS>,
+    attribute_descs: arrayvec::ArrayVec<vk::VertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES>,
 }
 
 impl PartialEq for VertexInputLayout {
@@ -303,6 +307,22 @@ impl PartialEq for VertexInputLayout {
 }
 impl Eq for VertexInputLayout {}
 
+impl Hash for VertexInputLayout {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for binding_desc in &self.binding_descs {
+            binding_desc.binding.hash(state);
+            binding_desc.input_rate.hash(state);
+            binding_desc.stride.hash(state);
+        }
+        for attribute in &self.attribute_descs {
+            attribute.binding.hash(state);
+            attribute.location.hash(state);
+            attribute.format.hash(state);
+            attribute.offset.hash(state);
+        }
+    }
+}
+
 impl VertexInputLayout {
     pub fn into_vk(&self) -> vk::PipelineVertexInputStateCreateInfo {
         *vk::PipelineVertexInputStateCreateInfo::builder()
@@ -329,8 +349,8 @@ impl VertexInputLayoutBuilder {
         self
     }
     pub fn build(self) -> VertexInputLayout {
-        let mut binding_descs = Vec::new();
-        let mut attribute_descs = Vec::new();
+        let mut binding_descs = arrayvec::ArrayVec::new();
+        let mut attribute_descs = arrayvec::ArrayVec::new();
 
         let mut location = 0;
         for (binding, layout) in self.layouts.iter().enumerate() {
@@ -363,7 +383,7 @@ impl VertexInputLayoutBuilder {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PipelineState {
     pub input_layout: VertexInputLayout,
     pub primitive_topology: PrimitiveTopology,
@@ -379,6 +399,7 @@ impl std::hash::Hash for PipelineState {
         self.rasterizer_state.hash(state);
         self.depth_stencil_state.hash(state);
         self.blend_state.hash(state);
+        self.input_layout.hash(state);
     }
 }
 
@@ -426,8 +447,6 @@ impl PipelineState {
 
         let stages = shader.vk_stages();
 
-        log::debug!("{:?}", stages);
-
         let depth_stencil = self.depth_stencil_state.into_vk();
 
         let layout = shader.pipeline_layout().raw();
@@ -445,6 +464,7 @@ impl PipelineState {
             .dynamic_state(&dynamic_state)
             .layout(layout);
 
+        log::debug!("Creating pipeline: {:#?}", self);
         let create_infos = [*create_info];
         device
             .raw()

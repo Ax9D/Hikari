@@ -30,11 +30,8 @@ impl<K: Hash + Eq + Clone, V: Copy> CacheMap<K, V> {
             let will_evict = self.cache.len() == self.cache.cap();
 
             if will_evict {
-                match self.cache.peek_lru() {
-                    Some((_, value)) => {
-                        self.unused.push(unsafe { Self::unsafe_copy(value) });
-                    }
-                    None => {}
+                if let Some((_, value)) = self.cache.peek_lru() {
+                    self.unused.push(unsafe { Self::unsafe_copy(value) });
                 }
             }
 

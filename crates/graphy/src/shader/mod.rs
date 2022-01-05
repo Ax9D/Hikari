@@ -45,7 +45,6 @@ impl ShaderDataType {
 use thiserror::Error;
 
 use crate::descriptor::DescriptorSetLayout;
-use crate::descriptor::MAX_BINDINGS_PER_SET;
 use crate::descriptor::{DescriptorSetLayoutBuilder, MAX_DESCRIPTOR_SETS};
 
 #[derive(Error, Debug)]
@@ -212,7 +211,7 @@ impl PipelineLayout {
         push_constant_ranges: &[vk::PushConstantRange],
     ) -> VkResult<vk::PipelineLayout> {
         let create_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(&vk_set_layouts)
+            .set_layouts(vk_set_layouts)
             .push_constant_ranges(&push_constant_ranges);
 
         unsafe { device.raw().create_pipeline_layout(&create_info, None) }
@@ -446,14 +445,13 @@ impl<'a> ShaderProgramBuilder<'a> {
             ShaderData::Spirv(data) => unsafe {
                 let ptr_u32 = data.as_ptr() as *const u32;
                 let len = data.len() / (std::mem::size_of::<u32>() / std::mem::size_of::<u8>());
-                let slice_u32 = std::slice::from_raw_parts(ptr_u32, len);
 
-                slice_u32
+                std::slice::from_raw_parts(ptr_u32, len)
             },
             ShaderData::Glsl(glsl) => {
                 data = Self::compile_shader(
                     &mut device.shader_compiler(),
-                    &glsl,
+                    glsl,
                     &shader.entry_point,
                     kind,
                     &debug_name,
@@ -465,7 +463,7 @@ impl<'a> ShaderProgramBuilder<'a> {
         let reflection_data = super::ReflectionData::new(spirv)
             .map_err(|err| ShaderCreateError::ValidationError(debug_name.clone(), err))?;
 
-        let module = Self::create_vk_module(device.raw(), &spirv).map_err(|error| {
+        let module = Self::create_vk_module(device.raw(), spirv).map_err(|error| {
             ShaderCreateError::CompilationError(debug_name.clone(), error.to_string())
         })?;
 

@@ -101,6 +101,10 @@ impl<T: Pod> CpuBuffer<T> {
     pub fn len(&self) -> usize {
         self.len
     }
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     pub fn mapped_slice<'a>(&'a self) -> &'a [T] {
         let ptr = self.allocation.mapped_ptr().unwrap().as_ptr(); //Host coherent so no invalidate

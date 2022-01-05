@@ -2,7 +2,6 @@ use ash::vk;
 use bytemuck::Pod;
 
 use crate::buffer::Buffer;
-use crate::descriptor::DescriptorPool;
 use crate::graph::graphics::pipeline::*;
 use crate::texture::SampledImage;
 use crate::PhysicalRenderpass;
@@ -42,7 +41,7 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
 
         Self {
             cmd,
-            renderpass: &begin_info.renderpass,
+            renderpass: begin_info.renderpass,
             pipeline_ctx: PipelineContext::default(),
         }
     }
@@ -60,7 +59,7 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
                 return;
             }
         }
-        
+
         self.pipeline_ctx.pipeline_dirty = true;
     }
     pub fn set_pipeline_state(&mut self, pipeline_state: PipelineState) {
@@ -168,12 +167,8 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         let descriptor_pool = &mut self.cmd.saved_state.descriptor_pool;
         let renderpass = &self.renderpass;
 
-        self.pipeline_ctx.flush(
-            self.cmd.device,
-            cmd,
-            renderpass,
-            pipeline_lookup,
-        );
+        self.pipeline_ctx
+            .flush(self.cmd.device, cmd, renderpass, pipeline_lookup);
 
         self.cmd.saved_state.descriptor_state.flush(
             self.cmd.device,
@@ -266,7 +261,7 @@ impl PipelineLookup {
         let pipeline = self.pipelines.get(pipeline_state_vector, |psv| unsafe {
             Ok(psv.pipeline_state.create_pipeline(
                 device,
-                &psv.shader.as_ref().expect("Shader must not be None"),
+                psv.shader.as_ref().expect("Shader must not be None"),
                 renderpass,
                 n_color_attachments,
             ))
@@ -309,13 +304,10 @@ impl PipelineContext {
         }
     }
     pub fn set_shader(&mut self, shader: &Arc<Shader>) -> Option<Arc<Shader>> {
-        match self.psv.shader.as_mut() {
-            Some(current_shader) => {
-                let old_shader = std::mem::replace(current_shader, shader.clone());
+        if let Some(current_shader) = self.psv.shader.as_mut() {
+            let old_shader = std::mem::replace(current_shader, shader.clone());
 
-                return Some(old_shader);
-            }
-            None => {}
+            return Some(old_shader);
         }
 
         self.psv.shader.replace(shader.clone())

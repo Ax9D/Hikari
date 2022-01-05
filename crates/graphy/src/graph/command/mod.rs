@@ -60,6 +60,7 @@ impl DescriptorState {
 
         set_exists && binding_exists
     }
+    #[inline]
     pub fn set_image(
         &mut self,
         image_view: vk::ImageView,
@@ -72,6 +73,7 @@ impl DescriptorState {
 
         self.sets[set as usize].set_image(binding, ix, image_view, sampler);
     }
+    #[inline]
     pub fn set_uniform_buffer(
         &mut self,
         buffer: vk::Buffer,
@@ -220,6 +222,7 @@ impl<'a> CommandBuffer<'a> {
             );
         }
     }
+    #[inline]
     pub(crate) fn set_image(&mut self, image: &SampledImage, set: u32, binding: u32) {
         self.saved_state.descriptor_state.set_image(
             image.image_view(1).unwrap(),

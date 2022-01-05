@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
 use vec_map::VecMap;
@@ -108,17 +108,14 @@ impl AllocationData {
         };
 
         for (ix, pass) in passes.iter().enumerate() {
-            match pass {
-                AnyPass::Render(pass) => {
-                    if !pass.present_to_swapchain {
-                        alloc.create_renderpass(device, pass, ix, resources)?;
-                        alloc.allocate_framebuffers(device, pass, ix, resources)?;
-                    }
+            if let AnyPass::Render(pass) = pass {
+                if !pass.present_to_swapchain {
+                    alloc.create_renderpass(device, pass, ix, resources)?;
+                    alloc.allocate_framebuffers(device, pass, ix, resources)?;
                 }
-                _ => {}
             }
         }
-        alloc.create_barriers(device, passes, &resources);
+        alloc.create_barriers(device, passes, resources);
 
         Ok(alloc)
     }
@@ -150,59 +147,56 @@ impl AllocationData {
         let mut clear_values = Vec::new();
 
         for output in pass.outputs() {
-            match output {
-                super::pass::Output::DrawImage(handle, attachment_config) => {
-                    let image = graph_resources.get_image(&handle).unwrap();
+            if let super::pass::Output::DrawImage(handle, attachment_config) = output {
+                let image = graph_resources.get_image(handle).unwrap();
 
-                    let (final_layout, clear_value) = match attachment_config.kind {
-                        AttachmentKind::Color(location) => {
-                            color_attachment_refs[location as usize] =
-                                *vk::AttachmentReference::builder()
-                                    .attachment(attachments.len() as u32)
-                                    .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+                let (final_layout, clear_value) = match attachment_config.kind {
+                    AttachmentKind::Color(location) => {
+                        color_attachment_refs[location as usize] =
+                            *vk::AttachmentReference::builder()
+                                .attachment(attachments.len() as u32)
+                                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
 
-                            (
-                                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                                vk::ClearValue {
-                                    color: vk::ClearColorValue {
-                                        float32: [1.0, 0.0, 0.0, 1.0],
-                                    },
+                        (
+                            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                            vk::ClearValue {
+                                color: vk::ClearColorValue {
+                                    float32: [1.0, 0.0, 0.0, 1.0],
                                 },
-                            )
-                        }
-                        AttachmentKind::DepthStencil => {
-                            depth_attachment_ref.replace(
-                                *vk::AttachmentReference::builder()
-                                    .attachment(attachments.len() as u32)
-                                    .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
-                            );
+                            },
+                        )
+                    }
+                    AttachmentKind::DepthStencil => {
+                        depth_attachment_ref.replace(
+                            *vk::AttachmentReference::builder()
+                                .attachment(attachments.len() as u32)
+                                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+                        );
 
-                            (
-                                vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-                                vk::ClearValue {
-                                    depth_stencil: vk::ClearDepthStencilValue {
-                                        depth: 1.0,
-                                        stencil: 0,
-                                    },
+                        (
+                            vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                            vk::ClearValue {
+                                depth_stencil: vk::ClearDepthStencilValue {
+                                    depth: 1.0,
+                                    stencil: 0,
                                 },
-                            )
-                        }
-                    };
+                            },
+                        )
+                    }
+                };
 
-                    clear_values.push(clear_value);
-                    let attachment = *vk::AttachmentDescription::builder()
-                        .format(image.config().format)
-                        .load_op(attachment_config.load_op)
-                        .store_op(attachment_config.store_op)
-                        .stencil_store_op(attachment_config.stencil_store_op)
-                        .stencil_load_op(attachment_config.stencil_load_op)
-                        .samples(vk::SampleCountFlags::TYPE_1)
-                        .initial_layout(vk::ImageLayout::UNDEFINED)
-                        .final_layout(final_layout);
+                clear_values.push(clear_value);
+                let attachment = *vk::AttachmentDescription::builder()
+                    .format(image.config().format)
+                    .load_op(attachment_config.load_op)
+                    .store_op(attachment_config.store_op)
+                    .stencil_store_op(attachment_config.stencil_store_op)
+                    .stencil_load_op(attachment_config.stencil_load_op)
+                    .samples(vk::SampleCountFlags::TYPE_1)
+                    .initial_layout(vk::ImageLayout::UNDEFINED)
+                    .final_layout(final_layout);
 
-                    attachments.push(attachment);
-                }
-                _ => {}
+                attachments.push(attachment);
             }
         }
 
@@ -245,11 +239,8 @@ impl AllocationData {
     ) -> VkResult<()> {
         let mut image_handles = Vec::new();
         for output in pass.outputs() {
-            match output {
-                super::pass::Output::DrawImage(handle, attachment_config) => {
-                    image_handles.push(handle.clone());
-                }
-                _ => {}
+            if let super::pass::Output::DrawImage(handle, attachment_config) = output {
+                image_handles.push(handle.clone());
             }
         }
 
@@ -262,7 +253,7 @@ impl AllocationData {
             renderpass.pass,
         )?;
 
-        if let Some(_) = self.framebuffers.insert(ix, framebuffer) {
+        if self.framebuffers.insert(ix, framebuffer).is_some() {
             panic!("Framebuffer with same index already exists");
         }
 
@@ -289,13 +280,13 @@ impl AllocationData {
                     | crate::graph::pass::Input::SampleImage(handle, access, _) => current_accesses
                         .entry(handle.clone())
                         .or_default()
-                        .push(access.clone()),
+                        .push(*access),
                 }
             }
             for output in pass.outputs() {
                 let (handle, access) = match output {
                     crate::graph::pass::Output::WriteImage(handle, access) => {
-                        (handle.clone(), access.clone())
+                        (handle.clone(), *access)
                     }
                     crate::graph::pass::Output::DrawImage(handle, config) => {
                         let access = match config.kind {
@@ -318,11 +309,11 @@ impl AllocationData {
             for (handle, current_accesses) in current_accesses {
                 let prev_accesses = prev_accesses.get_mut(&handle).unwrap();
 
-                if crate::barrier::is_hazard(&prev_accesses, &current_accesses) {
+                if crate::barrier::is_hazard(prev_accesses, &current_accesses) {
                     //Add Transition
                     barrier_storage.add_image_barrier(
                         graph_resources.get_image(&handle).unwrap(),
-                        &prev_accesses,
+                        prev_accesses,
                         &current_accesses,
                         device.unified_queue_ix,
                     );
@@ -331,7 +322,7 @@ impl AllocationData {
                 let old_accesses = std::mem::replace(prev_accesses, current_accesses);
             }
 
-            if let Some(_) = self.barriers.insert(ix, barrier_storage) {
+            if self.barriers.insert(ix, barrier_storage).is_some() {
                 panic!("Barrier with same index already exists");
             }
         }

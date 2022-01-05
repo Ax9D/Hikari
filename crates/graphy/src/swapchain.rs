@@ -142,7 +142,7 @@ impl Swapchain {
         device: &Arc<crate::Device>,
         width: u32,
         height: u32,
-        color_images: &Vec<vk::ImageView>,
+        color_images: &[vk::ImageView],
         color_format: vk::Format,
         depth_stencil_image: &SampledImage,
     ) -> VkResult<(PhysicalRenderpass, Vec<vk::Framebuffer>)> {
@@ -230,8 +230,7 @@ impl Swapchain {
         let mailbox_supported = swapchain_support_details
             .present_modes
             .iter()
-            .find(|&&mode| mode == vk::PresentModeKHR::MAILBOX)
-            .is_some();
+            .any(|&mode| mode == vk::PresentModeKHR::MAILBOX);
 
         if mailbox_supported {
             vk::PresentModeKHR::MAILBOX
@@ -252,7 +251,7 @@ impl Swapchain {
             .formats
             .iter()
             .find(|format| format.format == vk::Format::B8G8R8A8_UNORM)
-            .ok_or("B8G8R8A8_UNORM surface format is not supported by device".into())
+            .ok_or_else(|| "B8G8R8A8_UNORM surface format is not supported by device".into())
     }
     fn choose_swap_extent(
         window: &Window,
@@ -277,7 +276,7 @@ impl Swapchain {
     }
     fn create_image_views(
         device: &crate::device::Device,
-        images: &Vec<vk::Image>,
+        images: &[vk::Image],
         format: vk::Format,
     ) -> Result<Vec<vk::ImageView>, Box<dyn std::error::Error>> {
         let mut image_views = Vec::new();

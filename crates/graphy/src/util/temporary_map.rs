@@ -1,5 +1,5 @@
 use arrayvec::ArrayVec;
-use std::{borrow::BorrowMut, collections::HashMap, hash::Hash};
+use std::{collections::HashMap, hash::Hash};
 
 use crate::util::intrusive_linked_list::Node;
 
@@ -107,6 +107,8 @@ impl<K: Hash + Eq, V, const N: usize> TemporaryMap<K, V, N> {
         }
     }
     pub fn get<'a>(&'a mut self, key: &K) -> Option<&'a V> {
+        hikari_dev::profile_function!();
+
         match self.hashmap.get(&KeyRef { key }) {
             Some(&node) => {
                 self.touch(node);

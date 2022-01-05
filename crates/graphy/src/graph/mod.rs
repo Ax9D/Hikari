@@ -8,7 +8,6 @@ mod storage;
 
 use crate::texture::SampledImage;
 use ash::prelude::VkResult;
-use ash::vk;
 
 use self::allocation::AllocationData;
 use self::pass::graphics;
@@ -26,6 +25,7 @@ pub use pass::AttachmentKind;
 pub use pass::ImageSize;
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -57,6 +57,9 @@ impl<'a, S, P, R> GraphBuilder<'a, S, P, R> {
             size: (width, height),
         }
     }
+    /// Allocates a new image, with the provided config and size
+    /// Images are automatically resized when the graph is resized when created with an `ImageSize::Relative(.., ..)`
+    /// A unique name must also be provided to the image (used for debugging)
     pub fn create_image(
         &mut self,
         name: &str,
@@ -110,7 +113,7 @@ impl<'a, S, P, R> GraphBuilder<'a, S, P, R> {
             Ok(())
         }
     }
-    pub fn validate(&mut self) -> Result<(), GraphCreationError> {
+    fn validate(&mut self) -> Result<(), GraphCreationError> {
         self.check_duplicate_pass_names()?;
         self.check_only_last_pass_presents_to_swapchain()?;
 
@@ -175,6 +178,7 @@ impl<'a, S, P, R> GraphBuilder<'a, S, P, R> {
 
     //     stack
     // }
+    /// Allocates required resources and returns a Graph
     pub fn build(mut self) -> Result<Graph<S, P, R>, GraphCreationError> {
         self.validate()?;
 
@@ -183,22 +187,37 @@ impl<'a, S, P, R> GraphBuilder<'a, S, P, R> {
 
         let executor = GraphExecutor::new(self.gfx.device()).unwrap();
 
+        let outputs_swapchain = self.passes.iter().any(|pass| match pass {
+            AnyPass::Render(pass) => pass.present_to_swapchain,
+            AnyPass::Compute(_) => false,
+        });
+
         Ok(Graph {
+            device: self.gfx.device().clone(),
             passes: self.passes,
             resources: self.resources,
             allocation_data,
             executor,
             size: self.size,
+            outputs_swapchain,
         })
     }
 }
-
+/// A Graph is a collection of passes (Renderpasses + Compute passes), that execute ensuring proper resource synchronization as defined during Graph creation.
+/// A Graph is created using the GraphBuilder, and is immutable, meaning new passes cannot be added after creation.
+/// The generic parameters S, P, and R refer to the data that the Graph is to be provided when executing
+/// S: Scene related data
+/// P: Per Frame resources
+/// R: Graph external resources, such as textures/models which are needed for rendering
+/// These parameters are provided for ease of use and compliance to the above mentioned schema is not necessary
 pub struct Graph<S, P, R> {
+    device: Arc<crate::Device>,
     passes: Vec<AnyPass<S, P, R>>,
     resources: GraphResources,
     allocation_data: AllocationData,
     executor: GraphExecutor,
     size: (u32, u32),
+    outputs_swapchain: bool,
 }
 
 impl<S, P, R> Graph<S, P, R> {
@@ -209,18 +228,39 @@ impl<S, P, R> Graph<S, P, R> {
         perframe: &P,
         resources: &R,
     ) -> VkResult<()> {
-        self.executor.execute(
-            scene,
-            perframe,
-            resources,
-            self.size,
-            &mut self.passes,
-            &self.resources,
-            &self.allocation_data,
-            &mut gfx.swapchain().lock(),
-        )
+        if self.outputs_swapchain {
+            self.executor.execute_and_present(
+                scene,
+                perframe,
+                resources,
+                self.size,
+                &mut self.passes,
+                &self.resources,
+                &self.allocation_data,
+                &mut gfx.swapchain().lock(),
+            )
+        } else {
+            self.executor.execute(
+                scene,
+                perframe,
+                resources,
+                self.size,
+                &mut self.passes,
+                &self.resources,
+                &self.allocation_data,
+            )
+        }
     }
+    /// Finishes rendering the previous frame
+    /// Calling this manually is not recommended as this stalls the GPU
+    /// Resources(images, buffers etc.) used during the previous frame should be reusable after calling this
     pub fn finish(&mut self) -> VkResult<()> {
         self.executor.finish()
+    }
+    ///Should be called after done using the graph just before its dropped to ensure gpu resources can be safely deallocated
+    pub fn prepare_exit(&mut self) {
+        unsafe {
+            self.device.raw().device_wait_idle().unwrap();
+        }
     }
 }

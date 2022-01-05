@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     ffi::{CStr, CString},
     io::Read,
     sync::Arc,
@@ -15,6 +14,8 @@ use parking_lot::{Mutex, MutexGuard};
 
 use crate::descriptor::DescriptorSetLayoutCache;
 
+const VK_PIPELINE_CACHE_FILE: &str = "vk_pipeline_cache";
+
 pub struct PhysicalDevice {
     pub raw: vk::PhysicalDevice,
     pub queue_families: Vec<QueueFamilyProperties>,
@@ -22,7 +23,8 @@ pub struct PhysicalDevice {
     pub properties: vk::PhysicalDeviceProperties,
     pub extensions: Vec<CString>,
     pub mem_properties: vk::PhysicalDeviceMemoryProperties,
-    pub features: vk::PhysicalDeviceFeatures2,
+    pub vk_features: vk::PhysicalDeviceFeatures2,
+    pub features: Features,
 }
 impl PhysicalDevice {
     pub fn enumerate(
@@ -81,12 +83,15 @@ impl PhysicalDevice {
             instance.get_physical_device_features2(device, &mut vk_features2);
         }
 
+        let features = vk_features2.features.into();
+
         Ok(Self {
             raw: device,
             properties,
             queue_families,
             swapchain_support_details,
-            features: vk_features2,
+            vk_features: vk_features2,
+            features,
             mem_properties,
             extensions,
         })
@@ -219,8 +224,11 @@ pub struct VkExtensions {
     pub synchronization2: ash::extensions::khr::Synchronization2,
 }
 
-const VK_PIPELINE_CACHE_FILE: &'static str = "vk_pipeline_cache";
+unsafe impl Send for Device {}
+unsafe impl Sync for Device {}
 
+/// Represents the GPU device being used
+/// Is used to allocate resources on the GPU
 pub struct Device {
     physical_device: PhysicalDevice,
     device_properties: PhysicalDeviceProperties,
@@ -242,6 +250,7 @@ impl Device {
         instance: ash::Instance,
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
+        enable_features: Features,
     ) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         let required_extensions = [Swapchain::name(), vk::KhrSynchronization2Fn::name()];
 
@@ -251,6 +260,7 @@ impl Device {
             surface,
             surface_loader,
             &required_extensions,
+            enable_features,
         )
         .ok_or("Failed to find suitable physical device")?;
 
@@ -272,11 +282,7 @@ impl Device {
             .map(|&x| x.as_ptr())
             .collect::<Vec<_>>();
 
-        let enabled_features = vk::PhysicalDeviceFeatures {
-            sampler_anisotropy: 1,
-
-            ..Default::default()
-        };
+        let enabled_features = enable_features.into();
 
         let mut sync2 =
             vk::PhysicalDeviceSynchronization2FeaturesKHR::builder().synchronization2(true);
@@ -284,6 +290,7 @@ impl Device {
             .enabled_extension_names(required_extensions)
             .queue_create_infos(&queue_create_infos)
             .enabled_features(&enabled_features)
+            //VK_KHR_synchronization2
             .push_next(&mut sync2)
             .build();
 
@@ -307,7 +314,8 @@ impl Device {
             .report_memory_leaks(log::Level::Debug);
 
         let shader_compiler = Mutex::new(
-            shaderc::Compiler::new().ok_or("Failed to initialize shaderc compiler".to_owned())?,
+            shaderc::Compiler::new()
+                .ok_or_else(|| "Failed to initialize shaderc compiler".to_owned())?,
         );
 
         //let frame_res = FrameResources::new(device.inner.clone(), &physical_device)?;
@@ -322,7 +330,7 @@ impl Device {
         let descriptor_set_layout_cache = Mutex::new(DescriptorSetLayoutCache::new(&ash_device));
         let raw_device = RawDevice {
             inner: ash_device,
-            instance: instance,
+            instance,
         };
 
         //let device = RawDevice { inner: ash_device.clone() };
@@ -348,6 +356,7 @@ impl Device {
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
         required_extensions: &[&'static CStr],
+        required_features: Features,
     ) -> Option<PhysicalDevice> {
         let physical_devices = PhysicalDevice::enumerate(instance, surface, surface_loader).ok()?;
         for device in physical_devices {
@@ -357,7 +366,7 @@ impl Device {
 
             let unified_queue = device.get_unified_queue().is_some();
 
-            if present_support && unified_queue {
+            if present_support && unified_queue && device.features.contains(required_features) {
                 return Some(device);
             }
         }
@@ -396,20 +405,6 @@ impl Device {
         );
         data
     }
-    fn write_pipeline_cache_to_disk(&self) -> VkResult<()> {
-        let data = unsafe { self.raw().get_pipeline_cache_data(self.pipeline_cache())? };
-
-        log::debug!(
-            "Writing {} bytes to pipeline cache, {}",
-            data.len(),
-            VK_PIPELINE_CACHE_FILE
-        );
-
-        std::fs::write(VK_PIPELINE_CACHE_FILE, data)
-            .expect("Couldn't write to pipeline cache file");
-
-        Ok(())
-    }
     fn create_pipeline_cache(device: &ash::Device) -> VkResult<vk::PipelineCache> {
         let pipeline_cache_data = Self::read_pipeline_cache_from_disk();
         let create_info = vk::PipelineCacheCreateInfo::builder().initial_data(&pipeline_cache_data);
@@ -427,6 +422,20 @@ impl Device {
                 unsafe { device.create_pipeline_cache(&create_info, None) }
             }
         }
+    }
+    pub fn write_pipeline_cache_to_disk(&self) -> VkResult<()> {
+        let data = unsafe { self.raw().get_pipeline_cache_data(self.pipeline_cache())? };
+
+        log::debug!(
+            "Writing {} bytes to pipeline cache, {}",
+            data.len(),
+            VK_PIPELINE_CACHE_FILE
+        );
+
+        std::fs::write(VK_PIPELINE_CACHE_FILE, data)
+            .expect("Couldn't write to pipeline cache file");
+
+        Ok(())
     }
     pub(crate) fn pipeline_cache(&self) -> vk::PipelineCache {
         self.pipeline_cache
@@ -515,8 +524,11 @@ impl Device {
         Ok(())
     }
 
-    pub fn vk_features(&self) -> &vk::PhysicalDeviceFeatures {
-        &self.physical_device.features.features
+    pub fn features(&self) -> Features {
+        self.physical_device.features
+    }
+    pub fn is_feature_supported(&self, feature: Features) -> bool {
+        self.physical_device.features.contains(feature)
     }
 }
 impl Drop for Device {
@@ -524,5 +536,420 @@ impl Drop for Device {
         self.write_pipeline_cache_to_disk().unwrap();
 
         log::debug!("Dropped Device");
+    }
+}
+
+bitflags::bitflags! {
+    ///Bit flag representing the Features that the Device may support (although not guaranteed).
+    /// Maps 1:1 to Vulkans VkPhysicalDeviceFeatures
+    pub struct Features: u64 {
+        const ROBUST_BUFFER_ACCESS = 1 << 0;
+        const FULL_DRAW_INDEX_UINT32 = 1 << 1;
+        const IMAGE_CUBE_ARRAY = 1 << 2;
+        const INDEPENDENT_BLEND = 1 << 3;
+        const GEOMETRY_SHADER = 1 << 4;
+        const TESSELLATION_SHADER = 1 << 5;
+        const SAMPLE_RATE_SHADING = 1 << 6;
+        const DUAL_SRC_BLEND = 1 << 7;
+        const LOGIC_OP = 1 << 8;
+        const MULTI_DRAW_INDIRECT = 1 << 9;
+        const DRAW_INDIRECT_FIRST_INSTANCE = 1 << 10;
+        const DEPTH_CLAMP = 1 << 11;
+        const DEPTH_BIAS_CLAMP = 1 << 12;
+        const FILL_MODE_NON_SOLID = 1 << 13;
+        const DEPTH_BOUNDS = 1 << 14;
+        const WIDE_LINES = 1 << 15;
+        const LARGE_POINTS = 1 << 16;
+        const ALPHA_TO_ONE = 1 << 17;
+        const MULTI_VIEWPORT = 1 << 18;
+        const SAMPLER_ANISOTROPY = 1 << 19;
+        const TEXTURE_COMPRESSION_ETC2 = 1 << 20;
+        const TEXTURE_COMPRESSION_ASTC_LDR = 1 << 21;
+        const TEXTURE_COMPRESSION_BC = 1 << 22;
+        const OCCLUSION_QUERY_PRECISE = 1 << 23;
+        const PIPELINE_STATISTICS_QUERY = 1 << 24;
+        const VERTEX_PIPELINE_STORES_AND_ATOMICS = 1 << 25;
+        const FRAGMENT_STORES_AND_ATOMICS = 1 << 26;
+        const SHADER_TESSELLATION_AND_GEOMETRY_POINT_SIZE = 1 << 27;
+        const SHADER_IMAGE_GATHER_EXTENDED = 1 << 28;
+        const SHADER_STORAGE_IMAGE_EXTENDED_FORMATS = 1 << 29;
+        const SHADER_STORAGE_IMAGE_MULTISAMPLE = 1 << 30;
+        const SHADER_STORAGE_IMAGE_READ_WITHOUT_FORMAT = 1 << 31;
+        const SHADER_STORAGE_IMAGE_WRITE_WITHOUT_FORMAT = 1 << 32;
+        const SHADER_UNIFORM_BUFFER_ARRAY_DYNAMIC_INDEXING = 1 << 33;
+        const SHADER_SAMPLED_IMAGE_ARRAY_DYNAMIC_INDEXING = 1 << 34;
+        const SHADER_STORAGE_BUFFER_ARRAY_DYNAMIC_INDEXING = 1 << 35;
+        const SHADER_STORAGE_IMAGE_ARRAY_DYNAMIC_INDEXING = 1 << 36;
+        const SHADER_CLIP_DISTANCE = 1 << 37;
+        const SHADER_CULL_DISTANCE = 1 << 38;
+        const SHADER_FLOAT64 = 1 << 39;
+        const SHADER_INT64 = 1 << 40;
+        const SHADER_INT16 = 1 << 41;
+        const SHADER_RESOURCE_RESIDENCY = 1 << 42;
+        const SHADER_RESOURCE_MIN_LOD = 1 << 43;
+        const SPARSE_BINDING = 1 << 44;
+        const SPARSE_RESIDENCY_BUFFER = 1 << 45;
+        const SPARSE_RESIDENCY_IMAGE_2D = 1 << 46;
+        const SPARSE_RESIDENCY_IMAGE_3D = 1 << 47;
+        const SPARSE_RESIDENCY_2_SAMPLES = 1 << 48;
+        const SPARSE_RESIDENCY_4_SAMPLES = 1 << 49;
+        const SPARSE_RESIDENCY_8_SAMPLES = 1 << 50;
+        const SPARSE_RESIDENCY_16_SAMPLES = 1 << 51;
+        const SPARSE_RESIDENCY_ALIASED = 1 << 52;
+        const VARIABLE_MULTISAMPLE_RATE = 1 << 53;
+        const INHERITED_QUERIES = 1 << 54;
+
+    }
+}
+
+impl Default for Features {
+    fn default() -> Self {
+        Features::SAMPLER_ANISOTROPY | Features::FILL_MODE_NON_SOLID
+    }
+}
+impl From<vk::PhysicalDeviceFeatures> for Features {
+    fn from(vk_features: vk::PhysicalDeviceFeatures) -> Self {
+        let mut features = Features::empty();
+
+        if vk_features.robust_buffer_access == 1 {
+            features |= Features::ROBUST_BUFFER_ACCESS
+        };
+        if vk_features.full_draw_index_uint32 == 1 {
+            features |= Features::FULL_DRAW_INDEX_UINT32
+        };
+        if vk_features.image_cube_array == 1 {
+            features |= Features::IMAGE_CUBE_ARRAY
+        };
+        if vk_features.independent_blend == 1 {
+            features |= Features::INDEPENDENT_BLEND
+        };
+        if vk_features.geometry_shader == 1 {
+            features |= Features::GEOMETRY_SHADER
+        };
+        if vk_features.tessellation_shader == 1 {
+            features |= Features::TESSELLATION_SHADER
+        };
+        if vk_features.sample_rate_shading == 1 {
+            features |= Features::SAMPLE_RATE_SHADING
+        };
+        if vk_features.dual_src_blend == 1 {
+            features |= Features::DUAL_SRC_BLEND
+        };
+        if vk_features.logic_op == 1 {
+            features |= Features::LOGIC_OP
+        };
+        if vk_features.multi_draw_indirect == 1 {
+            features |= Features::MULTI_DRAW_INDIRECT
+        };
+        if vk_features.draw_indirect_first_instance == 1 {
+            features |= Features::DRAW_INDIRECT_FIRST_INSTANCE
+        };
+        if vk_features.depth_clamp == 1 {
+            features |= Features::DEPTH_CLAMP
+        };
+        if vk_features.depth_bias_clamp == 1 {
+            features |= Features::DEPTH_BIAS_CLAMP
+        };
+        if vk_features.fill_mode_non_solid == 1 {
+            features |= Features::FILL_MODE_NON_SOLID
+        };
+        if vk_features.depth_bounds == 1 {
+            features |= Features::DEPTH_BOUNDS
+        };
+        if vk_features.wide_lines == 1 {
+            features |= Features::WIDE_LINES
+        };
+        if vk_features.large_points == 1 {
+            features |= Features::LARGE_POINTS
+        };
+        if vk_features.alpha_to_one == 1 {
+            features |= Features::ALPHA_TO_ONE
+        };
+        if vk_features.multi_viewport == 1 {
+            features |= Features::MULTI_VIEWPORT
+        };
+        if vk_features.sampler_anisotropy == 1 {
+            features |= Features::SAMPLER_ANISOTROPY
+        };
+        if vk_features.texture_compression_etc2 == 1 {
+            features |= Features::TEXTURE_COMPRESSION_ETC2
+        };
+        if vk_features.texture_compression_astc_ldr == 1 {
+            features |= Features::TEXTURE_COMPRESSION_ASTC_LDR
+        };
+        if vk_features.texture_compression_bc == 1 {
+            features |= Features::TEXTURE_COMPRESSION_BC
+        };
+        if vk_features.occlusion_query_precise == 1 {
+            features |= Features::OCCLUSION_QUERY_PRECISE
+        };
+        if vk_features.pipeline_statistics_query == 1 {
+            features |= Features::PIPELINE_STATISTICS_QUERY
+        };
+        if vk_features.vertex_pipeline_stores_and_atomics == 1 {
+            features |= Features::VERTEX_PIPELINE_STORES_AND_ATOMICS
+        };
+        if vk_features.fragment_stores_and_atomics == 1 {
+            features |= Features::FRAGMENT_STORES_AND_ATOMICS
+        };
+        if vk_features.shader_tessellation_and_geometry_point_size == 1 {
+            features |= Features::SHADER_TESSELLATION_AND_GEOMETRY_POINT_SIZE
+        };
+        if vk_features.shader_image_gather_extended == 1 {
+            features |= Features::SHADER_IMAGE_GATHER_EXTENDED
+        };
+        if vk_features.shader_storage_image_extended_formats == 1 {
+            features |= Features::SHADER_STORAGE_IMAGE_EXTENDED_FORMATS
+        };
+        if vk_features.shader_storage_image_multisample == 1 {
+            features |= Features::SHADER_STORAGE_IMAGE_MULTISAMPLE
+        };
+        if vk_features.shader_storage_image_read_without_format == 1 {
+            features |= Features::SHADER_STORAGE_IMAGE_READ_WITHOUT_FORMAT
+        };
+        if vk_features.shader_storage_image_write_without_format == 1 {
+            features |= Features::SHADER_STORAGE_IMAGE_WRITE_WITHOUT_FORMAT
+        };
+        if vk_features.shader_uniform_buffer_array_dynamic_indexing == 1 {
+            features |= Features::SHADER_UNIFORM_BUFFER_ARRAY_DYNAMIC_INDEXING
+        };
+        if vk_features.shader_sampled_image_array_dynamic_indexing == 1 {
+            features |= Features::SHADER_SAMPLED_IMAGE_ARRAY_DYNAMIC_INDEXING
+        };
+        if vk_features.shader_storage_buffer_array_dynamic_indexing == 1 {
+            features |= Features::SHADER_STORAGE_BUFFER_ARRAY_DYNAMIC_INDEXING
+        };
+        if vk_features.shader_storage_image_array_dynamic_indexing == 1 {
+            features |= Features::SHADER_STORAGE_IMAGE_ARRAY_DYNAMIC_INDEXING
+        };
+        if vk_features.shader_clip_distance == 1 {
+            features |= Features::SHADER_CLIP_DISTANCE
+        };
+        if vk_features.shader_cull_distance == 1 {
+            features |= Features::SHADER_CULL_DISTANCE
+        };
+        if vk_features.shader_float64 == 1 {
+            features |= Features::SHADER_FLOAT64
+        };
+        if vk_features.shader_int64 == 1 {
+            features |= Features::SHADER_INT64
+        };
+        if vk_features.shader_int16 == 1 {
+            features |= Features::SHADER_INT16
+        };
+        if vk_features.shader_resource_residency == 1 {
+            features |= Features::SHADER_RESOURCE_RESIDENCY
+        };
+        if vk_features.shader_resource_min_lod == 1 {
+            features |= Features::SHADER_RESOURCE_MIN_LOD
+        };
+        if vk_features.sparse_binding == 1 {
+            features |= Features::SPARSE_BINDING
+        };
+        if vk_features.sparse_residency_buffer == 1 {
+            features |= Features::SPARSE_RESIDENCY_BUFFER
+        };
+        if vk_features.sparse_residency_image2_d == 1 {
+            features |= Features::SPARSE_RESIDENCY_IMAGE_2D
+        };
+        if vk_features.sparse_residency_image3_d == 1 {
+            features |= Features::SPARSE_RESIDENCY_IMAGE_3D
+        };
+        if vk_features.sparse_residency2_samples == 1 {
+            features |= Features::SPARSE_RESIDENCY_2_SAMPLES
+        };
+        if vk_features.sparse_residency4_samples == 1 {
+            features |= Features::SPARSE_RESIDENCY_4_SAMPLES
+        };
+        if vk_features.sparse_residency8_samples == 1 {
+            features |= Features::SPARSE_RESIDENCY_8_SAMPLES
+        };
+        if vk_features.sparse_residency16_samples == 1 {
+            features |= Features::SPARSE_RESIDENCY_16_SAMPLES
+        };
+        if vk_features.sparse_residency_aliased == 1 {
+            features |= Features::SPARSE_RESIDENCY_ALIASED
+        };
+        if vk_features.variable_multisample_rate == 1 {
+            features |= Features::VARIABLE_MULTISAMPLE_RATE
+        };
+        if vk_features.inherited_queries == 1 {
+            features |= Features::INHERITED_QUERIES
+        };
+
+        features
+    }
+}
+impl From<Features> for vk::PhysicalDeviceFeatures {
+    fn from(features: Features) -> vk::PhysicalDeviceFeatures {
+        let mut vk_features = vk::PhysicalDeviceFeatures::default();
+
+        if features.contains(Features::ROBUST_BUFFER_ACCESS) {
+            vk_features.robust_buffer_access = 1
+        };
+        if features.contains(Features::FULL_DRAW_INDEX_UINT32) {
+            vk_features.full_draw_index_uint32 = 1
+        };
+        if features.contains(Features::IMAGE_CUBE_ARRAY) {
+            vk_features.image_cube_array = 1
+        };
+        if features.contains(Features::INDEPENDENT_BLEND) {
+            vk_features.independent_blend = 1
+        };
+        if features.contains(Features::GEOMETRY_SHADER) {
+            vk_features.geometry_shader = 1
+        };
+        if features.contains(Features::TESSELLATION_SHADER) {
+            vk_features.tessellation_shader = 1
+        };
+        if features.contains(Features::SAMPLE_RATE_SHADING) {
+            vk_features.sample_rate_shading = 1
+        };
+        if features.contains(Features::DUAL_SRC_BLEND) {
+            vk_features.dual_src_blend = 1
+        };
+        if features.contains(Features::LOGIC_OP) {
+            vk_features.logic_op = 1
+        };
+        if features.contains(Features::MULTI_DRAW_INDIRECT) {
+            vk_features.multi_draw_indirect = 1
+        };
+        if features.contains(Features::DRAW_INDIRECT_FIRST_INSTANCE) {
+            vk_features.draw_indirect_first_instance = 1
+        };
+        if features.contains(Features::DEPTH_CLAMP) {
+            vk_features.depth_clamp = 1
+        };
+        if features.contains(Features::DEPTH_BIAS_CLAMP) {
+            vk_features.depth_bias_clamp = 1
+        };
+        if features.contains(Features::FILL_MODE_NON_SOLID) {
+            vk_features.fill_mode_non_solid = 1
+        };
+        if features.contains(Features::DEPTH_BOUNDS) {
+            vk_features.depth_bounds = 1
+        };
+        if features.contains(Features::WIDE_LINES) {
+            vk_features.wide_lines = 1
+        };
+        if features.contains(Features::LARGE_POINTS) {
+            vk_features.large_points = 1
+        };
+        if features.contains(Features::ALPHA_TO_ONE) {
+            vk_features.alpha_to_one = 1
+        };
+        if features.contains(Features::MULTI_VIEWPORT) {
+            vk_features.multi_viewport = 1
+        };
+        if features.contains(Features::SAMPLER_ANISOTROPY) {
+            vk_features.sampler_anisotropy = 1
+        };
+        if features.contains(Features::TEXTURE_COMPRESSION_ETC2) {
+            vk_features.texture_compression_etc2 = 1
+        };
+        if features.contains(Features::TEXTURE_COMPRESSION_ASTC_LDR) {
+            vk_features.texture_compression_astc_ldr = 1
+        };
+        if features.contains(Features::TEXTURE_COMPRESSION_BC) {
+            vk_features.texture_compression_bc = 1
+        };
+        if features.contains(Features::OCCLUSION_QUERY_PRECISE) {
+            vk_features.occlusion_query_precise = 1
+        };
+        if features.contains(Features::PIPELINE_STATISTICS_QUERY) {
+            vk_features.pipeline_statistics_query = 1
+        };
+        if features.contains(Features::VERTEX_PIPELINE_STORES_AND_ATOMICS) {
+            vk_features.vertex_pipeline_stores_and_atomics = 1
+        };
+        if features.contains(Features::FRAGMENT_STORES_AND_ATOMICS) {
+            vk_features.fragment_stores_and_atomics = 1
+        };
+        if features.contains(Features::SHADER_TESSELLATION_AND_GEOMETRY_POINT_SIZE) {
+            vk_features.shader_tessellation_and_geometry_point_size = 1
+        };
+        if features.contains(Features::SHADER_IMAGE_GATHER_EXTENDED) {
+            vk_features.shader_image_gather_extended = 1
+        };
+        if features.contains(Features::SHADER_STORAGE_IMAGE_EXTENDED_FORMATS) {
+            vk_features.shader_storage_image_extended_formats = 1
+        };
+        if features.contains(Features::SHADER_STORAGE_IMAGE_MULTISAMPLE) {
+            vk_features.shader_storage_image_multisample = 1
+        };
+        if features.contains(Features::SHADER_STORAGE_IMAGE_READ_WITHOUT_FORMAT) {
+            vk_features.shader_storage_image_read_without_format = 1
+        };
+        if features.contains(Features::SHADER_STORAGE_IMAGE_WRITE_WITHOUT_FORMAT) {
+            vk_features.shader_storage_image_write_without_format = 1
+        };
+        if features.contains(Features::SHADER_UNIFORM_BUFFER_ARRAY_DYNAMIC_INDEXING) {
+            vk_features.shader_uniform_buffer_array_dynamic_indexing = 1
+        };
+        if features.contains(Features::SHADER_SAMPLED_IMAGE_ARRAY_DYNAMIC_INDEXING) {
+            vk_features.shader_sampled_image_array_dynamic_indexing = 1
+        };
+        if features.contains(Features::SHADER_STORAGE_BUFFER_ARRAY_DYNAMIC_INDEXING) {
+            vk_features.shader_storage_buffer_array_dynamic_indexing = 1
+        };
+        if features.contains(Features::SHADER_STORAGE_IMAGE_ARRAY_DYNAMIC_INDEXING) {
+            vk_features.shader_storage_image_array_dynamic_indexing = 1
+        };
+        if features.contains(Features::SHADER_CLIP_DISTANCE) {
+            vk_features.shader_clip_distance = 1
+        };
+        if features.contains(Features::SHADER_CULL_DISTANCE) {
+            vk_features.shader_cull_distance = 1
+        };
+        if features.contains(Features::SHADER_FLOAT64) {
+            vk_features.shader_float64 = 1
+        };
+        if features.contains(Features::SHADER_INT64) {
+            vk_features.shader_int64 = 1
+        };
+        if features.contains(Features::SHADER_INT16) {
+            vk_features.shader_int16 = 1
+        };
+        if features.contains(Features::SHADER_RESOURCE_RESIDENCY) {
+            vk_features.shader_resource_residency = 1
+        };
+        if features.contains(Features::SHADER_RESOURCE_MIN_LOD) {
+            vk_features.shader_resource_min_lod = 1
+        };
+        if features.contains(Features::SPARSE_BINDING) {
+            vk_features.sparse_binding = 1
+        };
+        if features.contains(Features::SPARSE_RESIDENCY_BUFFER) {
+            vk_features.sparse_residency_buffer = 1
+        };
+        if features.contains(Features::SPARSE_RESIDENCY_IMAGE_2D) {
+            vk_features.sparse_residency_image2_d = 1
+        };
+        if features.contains(Features::SPARSE_RESIDENCY_IMAGE_3D) {
+            vk_features.sparse_residency_image3_d = 1
+        };
+        if features.contains(Features::SPARSE_RESIDENCY_2_SAMPLES) {
+            vk_features.sparse_residency2_samples = 1
+        };
+        if features.contains(Features::SPARSE_RESIDENCY_4_SAMPLES) {
+            vk_features.sparse_residency4_samples = 1
+        };
+        if features.contains(Features::SPARSE_RESIDENCY_8_SAMPLES) {
+            vk_features.sparse_residency8_samples = 1
+        };
+        if features.contains(Features::SPARSE_RESIDENCY_16_SAMPLES) {
+            vk_features.sparse_residency16_samples = 1
+        };
+        if features.contains(Features::SPARSE_RESIDENCY_ALIASED) {
+            vk_features.sparse_residency_aliased = 1
+        };
+        if features.contains(Features::VARIABLE_MULTISAMPLE_RATE) {
+            vk_features.variable_multisample_rate = 1
+        };
+        if features.contains(Features::INHERITED_QUERIES) {
+            vk_features.inherited_queries = 1
+        };
+
+        vk_features
     }
 }

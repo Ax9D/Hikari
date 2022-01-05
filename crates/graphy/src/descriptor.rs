@@ -68,7 +68,7 @@ impl DescriptorSetLayout {
             return None;
         }
 
-        if self.combined_image_sampler_mask & 1 << id == 1 {
+        if self.combined_image_sampler_mask >> id & 1 == 1 {
             return Some((
                 vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 self.counts()[id as usize],
@@ -76,7 +76,7 @@ impl DescriptorSetLayout {
             ));
         }
 
-        if self.uniform_buffer_mask & 1 << id == 1 {
+        if self.uniform_buffer_mask >> id & 1 == 1 {
             return Some((
                 vk::DescriptorType::UNIFORM_BUFFER,
                 self.counts()[id as usize],
@@ -175,7 +175,7 @@ impl DescriptorSetLayoutCache {
             None => {
                 let new_layout = self.create_set_layout(layout)?;
 
-                self.layouts.insert(layout.clone(), new_layout);
+                self.layouts.insert(*layout, new_layout);
 
                 new_layout
             }
@@ -231,7 +231,7 @@ impl Drop for DescriptorSetLayoutCache {
 
 pub const MAX_IMAGE_COUNT: usize = 5;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Eq, Default)]
 struct ImageState {
     images: [(vk::ImageView, vk::Sampler); MAX_IMAGE_COUNT],
     image_update_mask: u32,
@@ -247,6 +247,25 @@ impl Hash for ImageState {
                 self.images[image_ix as usize].hash(state);
             },
         );
+    }
+}
+impl PartialEq for ImageState {
+    fn eq(&self, other: &Self) -> bool {
+        let mut same = true;
+
+        if self.image_update_mask != other.image_update_mask {
+            return false;
+        }
+
+        crate::util::for_each_bit_in_range(
+            self.image_update_mask,
+            0..MAX_IMAGE_COUNT,
+            |image_ix| {
+                same = self.images[image_ix as usize] == other.images[image_ix as usize];
+            },
+        );
+
+        same
     }
 }
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
@@ -286,6 +305,7 @@ impl DescriptorSetState {
             bindings: [BindingState::default(); MAX_BINDINGS_PER_SET],
         }
     }
+    #[inline]
     pub fn set_image(
         &mut self,
         binding: u32,
@@ -295,6 +315,7 @@ impl DescriptorSetState {
     ) {
         self.bindings[binding as usize].set_image(ix, image_view, sampler);
     }
+    #[inline]
     pub fn set_buffer(
         &mut self,
         binding: u32,
@@ -400,6 +421,7 @@ impl DescriptorSetAllocator {
         self.pools[self.pools.len() - 1]
     }
     fn allocate(&mut self, vk_set_layout: vk::DescriptorSetLayout) -> VkResult<vk::DescriptorSet> {
+        hikari_dev::profile_function!();
         unsafe {
             let layouts = [vk_set_layout];
             let create_info = vk::DescriptorSetAllocateInfo::builder()
@@ -421,16 +443,16 @@ impl DescriptorSetAllocator {
         }
     }
     fn update_set(&self, set: vk::DescriptorSet, state: &DescriptorSetState) {
+        hikari_dev::profile_function!();
+
         const MAX_WRITES: usize = MAX_BINDINGS_PER_SET * MAX_IMAGE_COUNT;
 
         let mut writes = ArrayVec::<vk::WriteDescriptorSet, MAX_WRITES>::new();
 
-        
         crate::util::for_each_bit_in_range(
             self.set_layout.combined_image_sampler_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
-
                 let image_state = &state.bindings[binding as usize].image_state;
 
                 crate::util::for_each_bit_in_range(
@@ -480,10 +502,13 @@ impl DescriptorSetAllocator {
             },
         );
         unsafe {
+            hikari_dev::profile_scope!("Update descriptor set");
             self.device.raw().update_descriptor_sets(&writes, &[]);
         }
     }
     pub fn get(&mut self, state: &DescriptorSetState) -> vk::DescriptorSet {
+        hikari_dev::profile_function!();
+
         if let Some(reusable_set) = self.resuable_sets.pop() {
             self.update_set(reusable_set, state);
 
@@ -535,10 +560,13 @@ impl DescriptorPool {
         }
     }
     pub fn get(&mut self, set_layout: &DescriptorSetLayout) -> &mut DescriptorSetAllocator {
+        hikari_dev::profile_function!();
+
         match self.set_allocators.entry(set_layout.raw()) {
             Entry::Occupied(allocator) => allocator.into_mut(),
-            Entry::Vacant(vacant) => vacant
-                .insert(DescriptorSetAllocator::new(&self.device, set_layout.clone()).unwrap()),
+            Entry::Vacant(vacant) => {
+                vacant.insert(DescriptorSetAllocator::new(&self.device, *set_layout).unwrap())
+            }
         }
     }
     pub fn new_frame(&mut self) {

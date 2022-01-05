@@ -125,11 +125,7 @@ impl Gfx {
 
         base_extensions.iter().map(|x| x.as_ptr()).collect()
     }
-    fn create_instance(
-        entry: &Entry,
-        window: &Window,
-        debug: bool,
-    ) -> Result<ash::Instance, ash::InstanceError> {
+    fn create_instance(entry: &Entry, window: &Window, debug: bool) -> VkResult<ash::Instance> {
         unsafe {
             let app_name = CString::new("Hikari").unwrap();
 
@@ -146,9 +142,8 @@ impl Gfx {
 
             let create_info = vk::InstanceCreateInfo::builder()
                 .application_info(&app_info)
-                .enabled_extension_names(&&extension_names);
+                .enabled_extension_names(&extension_names);
 
-            #[cfg(debug_assertions)]
             let create_info = create_info.enabled_layer_names(&layer_names);
 
             entry.create_instance(&create_info, None)
@@ -160,9 +155,10 @@ impl Gfx {
         callback: vk::PFN_vkDebugUtilsMessengerCallbackEXT,
     ) -> VkResult<vk::DebugUtilsMessengerEXT> {
         use vk::DebugUtilsMessageSeverityFlagsEXT as severity;
+        use vk::DebugUtilsMessageTypeFlagsEXT as mtype;
         let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(severity::INFO | severity::ERROR | severity::WARNING)
-            .message_type(vk::DebugUtilsMessageTypeFlagsEXT::all())
+            .message_type(mtype::GENERAL | mtype::PERFORMANCE | mtype::VALIDATION)
             .pfn_user_callback(callback);
         let debug_utils_loader = DebugUtils::new(entry, instance);
 
@@ -175,8 +171,8 @@ impl Gfx {
     ) -> Result<vk::SurfaceKHR, ash::vk::Result> {
         unsafe { ash_window::create_surface(entry, instance, window, None) }
     }
-    pub fn new(window: &Window, debug: bool) -> Result<Self, Box<dyn std::error::Error>> {
-        let entry = unsafe { Entry::new() }?;
+    pub fn new(window: &Window, config: GfxConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        let entry = unsafe { Entry::load() }?;
 
         log::debug!("Available instance extension properties: ");
         entry
@@ -188,16 +184,17 @@ impl Gfx {
                 });
             });
 
-        let instance = Self::create_instance(&entry, window, debug)?;
+        let instance = Self::create_instance(&entry, window, config.debug)?;
 
-        if debug {
+        if config.debug {
             Self::create_debug_messenger(&entry, &instance, Some(vulkan_debug_callback))?;
         }
 
-        let surface = Self::create_surface(&entry, &instance, &window)?;
+        let surface = Self::create_surface(&entry, &instance, window)?;
         let surface_loader = Surface::new(&entry, &instance);
 
-        let device = crate::Device::create(&entry, instance, &surface, &surface_loader)?;
+        let device =
+            crate::Device::create(&entry, instance, &surface, &surface_loader, config.features)?;
 
         let swapchain = crate::Swapchain::create(&device, window, &surface, surface_loader)?;
         let swapchain = Arc::new(Mutex::new(swapchain));
@@ -220,4 +217,9 @@ impl Drop for Gfx {
     fn drop(&mut self) {
         log::debug!("Dropped gfx");
     }
+}
+#[derive(Debug, Default)]
+pub struct GfxConfig {
+    pub debug: bool,
+    pub features: crate::Features,
 }

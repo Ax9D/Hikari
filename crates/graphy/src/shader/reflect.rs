@@ -128,13 +128,10 @@ impl ReflectionData {
         let push_constants = shader_module.enumerate_push_constant_blocks(entry_point)?;
         let push_constants = push_constants.first();
 
-        let push_constant = match push_constants {
-            Some(push_constant) => Some(PushConstantRange {
-                size: push_constant.size,
-                offset: push_constant.offset,
-            }),
-            None => None,
-        };
+        let push_constant = push_constants.map(|push_constant| PushConstantRange {
+            size: push_constant.size,
+            offset: push_constant.offset,
+        });
 
         let mut uniform_buffers = HashMap::new();
         let mut combined_image_samplers = HashMap::new();

@@ -119,7 +119,9 @@ impl SampledImage {
             create_info.max_lod = vkconfig.mip_levels as f32;
         }
 
-        if vkconfig.aniso_level > 0 && device.vk_features().sampler_anisotropy == 1 {
+        if vkconfig.aniso_level > 0
+            && device.is_feature_supported(crate::device::Features::SAMPLER_ANISOTROPY)
+        {
             create_info.max_anisotropy = vkconfig.aniso_level as f32;
             create_info.anisotropy_enable = vk::TRUE;
         }
@@ -199,8 +201,8 @@ impl SampledImage {
             gpu_allocator::MemoryLocation::GpuOnly,
         )?;
 
-        let sampler = Self::create_sampler(device, &vkconfig)?;
-        let image_views = Self::create_views(device, image, &vkconfig)?;
+        let sampler = Self::create_sampler(device, vkconfig)?;
+        let image_views = Self::create_views(device, image, vkconfig)?;
 
         Ok((image, allocation, sampler, image_views))
     }
@@ -541,7 +543,7 @@ impl SampledImage {
         self.image
     }
     pub fn image_view(&self, mip_level: usize) -> Option<vk::ImageView> {
-        self.image_views.get(mip_level - 1).map(|view| *view)
+        self.image_views.get(mip_level - 1).copied()
     }
     pub fn sampler(&self) -> vk::Sampler {
         self.sampler

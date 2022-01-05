@@ -145,6 +145,8 @@ impl<Scene, PerFrame, Resources> Renderpass<Scene, PerFrame, Resources> {
     //     self.outputs.push(Output::WriteImage(image.clone(), access_type));
     //     self
     // }
+
+    /// Draws to the particular image as a render attachment when the renderpass is executed
     pub fn draw_image(
         mut self,
         image: &Handle<SampledImage>,

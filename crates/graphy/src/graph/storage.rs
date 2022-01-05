@@ -1,6 +1,7 @@
 use std::any::TypeId;
 use std::marker::PhantomData;
 
+/// An opaque handle to resources used by the Graph
 #[derive(Copy)]
 pub struct Handle<T> {
     pub(crate) id: usize,
@@ -9,7 +10,7 @@ pub struct Handle<T> {
 impl<T> Clone for Handle<T> {
     fn clone(&self) -> Self {
         Self {
-            id: self.id.clone(),
+            id: self.id,
             _phantom: self._phantom.clone(),
         }
     }
@@ -57,7 +58,7 @@ impl<T> Handle<T> {
     }
 }
 
-#[derive(Copy, Hash)]
+#[derive(Copy, Hash, PartialEq, Eq)]
 pub struct ErasedHandle {
     pub(crate) id: usize,
     pub(crate) type_id: TypeId,
@@ -80,17 +81,11 @@ impl ErasedHandle {
 impl Clone for ErasedHandle {
     fn clone(&self) -> Self {
         Self {
-            id: self.id.clone(),
-            type_id: self.type_id.clone(),
+            id: self.id,
+            type_id: self.type_id,
         }
     }
 }
-impl PartialEq for ErasedHandle {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.type_id == other.type_id
-    }
-}
-impl Eq for ErasedHandle {}
 
 pub trait Resource: 'static {
     type Metadata: 'static;

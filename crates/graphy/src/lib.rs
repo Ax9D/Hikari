@@ -3,9 +3,6 @@
 #![allow(unused_unsafe)]
 
 #[macro_use]
-extern crate lazy_static;
-
-#[macro_use]
 extern crate const_cstr;
 
 extern crate simple_logger;
@@ -19,8 +16,10 @@ pub mod shader;
 pub mod texture;
 
 pub use device::Device;
+pub use device::Features;
 pub use error::*;
 pub use gfx::Gfx;
+pub use gfx::GfxConfig;
 
 pub use shader::*;
 pub use texture::sampled_image::*;

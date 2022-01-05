@@ -9,6 +9,16 @@ use super::{storage::ErasedHandle, Handle};
 pub mod compute;
 pub mod graphics;
 
+/// Represents the size of an Image
+/// Relative means that the image will always be a certain fraction relative to the Graph's size
+/// Absolute means that the image will always be of a constant width and height in pixels irrespective of what size the Graph is
+///  
+/// For e.g. if the output resolution of the graph is (800, 600), and an image is created with `ImageSize::Relative(0.5, 0.4)`,
+/// Its physical size will be (0.5 * 800, 0.4 * 600) = (400, 240) pixels; moreover if the graph is resized to say (1920, 1080),
+/// the image will be resized to (0.5 * 1920, 0.4 * 1080) = (960, 432)
+///
+/// If however an image is created with `ImageSize::Absolute(800, 600)`, it will always be of a size (800, 600) no matter the
+/// output size of the graph
 #[derive(Debug, Clone, Copy)]
 pub enum ImageSize {
     Relative(f32, f32), //Ratio
@@ -33,6 +43,9 @@ impl ImageSize {
     }
 }
 
+/// Defines how the attachment will be used
+/// `AttachmentKind::Color(2)` means it is a color attachment which will be addressed at output location 2 in the fragment shader
+/// `AttachmentKind::DepthStencil` means it is a depth stencil attachment
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum AttachmentKind {
     Color(u32),

@@ -28,7 +28,7 @@ pub fn for_each_bit(mut mask: u32, mut f: impl FnMut(u32)) {
             (f)(ix);
         }
         mask >>= 1;
-        ix+=1;
+        ix += 1;
     }
 }
 

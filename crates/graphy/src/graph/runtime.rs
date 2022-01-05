@@ -60,6 +60,11 @@ impl FrameData {
     }
     pub unsafe fn delete(&self, device: &Arc<crate::Device>) {
         unsafe {
+            device
+                .raw()
+                .wait_for_fences(&[self.render_finished_fence], true, 1000000000)
+                .unwrap();
+
             device.raw().destroy_command_pool(self.command_pool, None);
             device.raw().destroy_fence(self.render_finished_fence, None);
             device
@@ -134,7 +139,6 @@ impl GraphExecutor {
         unsafe {
             hikari_dev::profile_scope!("Waiting on GPU");
             let fences = &[self.frame_state.last_frame().render_finished_fence];
-            log::debug!("Fetched render finished fence");
             self.device
                 .raw()
                 .wait_for_fences(fences, true, 1000000000)?;
@@ -146,7 +150,7 @@ impl GraphExecutor {
 
         Ok(())
     }
-    pub fn execute<S, P, R>(
+    pub fn execute_and_present<S, P, R>(
         &mut self,
         scene: &S,
         pf: &P,
@@ -159,13 +163,7 @@ impl GraphExecutor {
     ) -> VkResult<()> {
         self.finish()?;
 
-        let swapchain_image_ix = swapchain.acquire_next_image_ix(
-            1000000000,
-            self.frame_state.current_frame().image_available_semaphore,
-            vk::Fence::null(),
-        )?;
-
-        log::debug!("Reset fences");
+        //log::debug!("Reset fences");
         let current_frame = self.frame_state.current_frame();
 
         let device = &self.device;
@@ -182,12 +180,18 @@ impl GraphExecutor {
         cmd.reset()?;
         cmd.begin()?;
 
+        let swapchain_image_ix = swapchain.acquire_next_image_ix(
+            1000000000,
+            self.frame_state.current_frame().image_available_semaphore,
+            vk::Fence::null(),
+        )?;
+
         for (ix, pass) in passes.iter_mut().enumerate() {
             match pass {
                 AnyPass::Render(pass) => {
                     hikari_dev::profile_scope!("Renderpass", pass.name());
 
-                    log::debug!("Executing pass {}", pass.name());
+                    //log::debug!("Executing pass {}", pass.name());
                     Self::execute_renderpass(
                         &device,
                         &mut cmd,
@@ -199,8 +203,7 @@ impl GraphExecutor {
                         pass,
                         resources,
                         allocation_data,
-                        swapchain,
-                        swapchain_image_ix,
+                        Some((swapchain, swapchain_image_ix)),
                     )?;
                 }
                 AnyPass::Compute(_) => todo!(),
@@ -222,6 +225,75 @@ impl GraphExecutor {
 
         Ok(())
     }
+    pub fn execute<S, P, R>(
+        &mut self,
+        scene: &S,
+        pf: &P,
+        res: &R,
+        size: (u32, u32),
+        passes: &mut [AnyPass<S, P, R>],
+        resources: &GraphResources,
+        allocation_data: &AllocationData,
+    ) -> VkResult<()> {
+        self.finish()?;
+
+        //log::debug!("Reset fences");
+        let current_frame = self.frame_state.current_frame();
+
+        let device = &self.device;
+        let mut cmd = CommandBuffer::from_existing(
+            &device,
+            current_frame.command_buffer,
+            CommandBufferSavedState {
+                pipeline_lookup: &mut self.pipeline_lookup,
+                descriptor_pool: &mut self.descriptor_pool,
+                descriptor_state: &mut self.descriptor_state,
+            },
+        );
+
+        cmd.reset()?;
+        cmd.begin()?;
+
+        for (ix, pass) in passes.iter_mut().enumerate() {
+            match pass {
+                AnyPass::Render(pass) => {
+                    hikari_dev::profile_scope!("Renderpass", pass.name());
+
+                    //log::debug!("Executing pass {}", pass.name());
+                    Self::execute_renderpass(
+                        &device,
+                        &mut cmd,
+                        scene,
+                        pf,
+                        res,
+                        size,
+                        ix,
+                        pass,
+                        resources,
+                        allocation_data,
+                        None,
+                    )?;
+                }
+                AnyPass::Compute(_) => todo!(),
+            }
+        }
+
+        cmd.end()?;
+
+        Self::submit(
+            device,
+            &cmd,
+            &[],
+            &[],
+            self.frame_state.current_frame().render_finished_fence,
+        )?;
+
+        self.frame_state.update();
+        self.descriptor_pool.new_frame();
+        self.pipeline_lookup.new_frame();
+
+        Ok(())
+    }
 
     fn execute_renderpass<'cmd, 'graph, S, P, R>(
         device: &Arc<crate::Device>,
@@ -234,13 +306,13 @@ impl GraphExecutor {
         pass: &mut Renderpass<S, P, R>,
         resources: &GraphResources,
         allocation_data: &AllocationData,
-        swapchain: &mut Swapchain,
-        swapchain_image_ix: u32,
+        swapchain_data: Option<(&mut Swapchain, u32)>,
     ) -> VkResult<()> {
         let (vk_pass, framebuffer) = if pass.present_to_swapchain {
+            let (swapchain, image_ix) = swapchain_data.expect("Swapchain not provided");
             (
                 swapchain.renderpass(),
-                swapchain.framebuffers()[swapchain_image_ix as usize],
+                swapchain.framebuffers()[image_ix as usize],
             )
         } else {
             (
@@ -270,7 +342,7 @@ impl GraphExecutor {
         rcmd.set_viewport(0.0, 0.0, width as f32, height as f32);
         rcmd.set_scissor(0, 0, width, height);
 
-        log::debug!("Binding renderpass resources");
+        //log::debug!("Binding renderpass resources");
         for input in pass.inputs() {
             match input {
                 crate::graph::pass::Input::SampleImage(handle, _, binding) => {
@@ -286,6 +358,26 @@ impl GraphExecutor {
 
         Ok(())
     }
+    fn submit(
+        device: &Arc<crate::Device>,
+        cmd: &CommandBuffer,
+        wait_semaphores: &[vk::Semaphore],
+        signal_semaphores: &[vk::Semaphore],
+        fence: vk::Fence,
+    ) -> VkResult<()> {
+        let cbs = [cmd.raw()];
+        let submit_info = vk::SubmitInfo::builder()
+            .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
+            .wait_semaphores(&wait_semaphores)
+            .signal_semaphores(&signal_semaphores)
+            .command_buffers(&cbs);
+
+        unsafe {
+            device
+                .raw()
+                .queue_submit(device.graphics_queue(), &[*submit_info], fence)
+        }
+    }
     fn submit_and_present(
         device: &Arc<crate::Device>,
         frame_state: &FrameState,
@@ -297,22 +389,14 @@ impl GraphExecutor {
         let wait_semaphores = [frame_state.current_frame().image_available_semaphore];
         //Signal end of render so that the swapchain can present
         let signal_semaphores = [frame_state.current_frame().render_finished_semaphore];
-        let cbs = [cmd.raw()];
 
-        let submit_info = vk::SubmitInfo::builder()
-            .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
-            .wait_semaphores(&wait_semaphores)
-            .signal_semaphores(&signal_semaphores)
-            .command_buffers(&cbs);
-
-        unsafe {
-            device.raw().queue_submit(
-                device.graphics_queue(),
-                &[*submit_info],
-                frame_state.current_frame().render_finished_fence,
-            )?;
-        }
-
+        Self::submit(
+            device,
+            cmd,
+            &wait_semaphores,
+            &signal_semaphores,
+            frame_state.current_frame().render_finished_fence,
+        )?;
         let suboptimal = swapchain.present(
             image_ix,
             frame_state.current_frame().render_finished_semaphore,
@@ -330,6 +414,7 @@ impl Drop for GraphExecutor {
     fn drop(&mut self) {
         log::debug!("Dropping FrameState");
         unsafe {
+            self.device.raw().device_wait_idle().unwrap();
             self.frame_state.delete(&self.device);
         }
     }
