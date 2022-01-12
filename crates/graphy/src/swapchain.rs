@@ -206,7 +206,7 @@ impl Swapchain {
         let clear_values = vec![
             vk::ClearValue {
                 color: vk::ClearColorValue {
-                    float32: [1.0, 0.0, 0.0, 1.0],
+                    float32: [0.12, 0.12, 0.12, 1.0],
                 },
             },
             vk::ClearValue {
@@ -230,7 +230,7 @@ impl Swapchain {
         let mailbox_supported = swapchain_support_details
             .present_modes
             .iter()
-            .any(|&mode| mode == vk::PresentModeKHR::MAILBOX);
+            .any(|&mode| mode == vk::PresentModeKHR::FIFO);
 
         if mailbox_supported {
             vk::PresentModeKHR::MAILBOX

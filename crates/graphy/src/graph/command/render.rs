@@ -1,10 +1,9 @@
 use ash::vk;
-use bytemuck::Pod;
 
 use crate::buffer::Buffer;
 use crate::graph::graphics::pipeline::*;
 use crate::texture::SampledImage;
-use crate::PhysicalRenderpass;
+use crate::{IndexType, PhysicalRenderpass};
 
 use super::CommandBuffer;
 
@@ -68,6 +67,12 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
 
         pctx.pipeline_dirty = true;
     }
+    pub fn set_vertex_input_layout(&mut self, input_layout: VertexInputLayout) {
+        let pctx = &mut self.pipeline_ctx;
+        pctx.psv.pipeline_state.input_layout = input_layout;
+
+        pctx.pipeline_dirty = true;
+    }
     pub fn set_primitive_topology(&mut self, primitive_topology: PrimitiveTopology) {
         let pctx = &mut self.pipeline_ctx;
         pctx.psv.pipeline_state.primitive_topology = primitive_topology;
@@ -100,30 +105,44 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
     pub fn set_image(&mut self, image: &SampledImage, set: u32, binding: u32) {
         self.cmd.set_image(image, set, binding);
     }
-    pub fn set_vertex_buffer<B: Buffer>(&mut self, binding: u32, buffer: &B) {
+    pub fn set_uniform_buffer<B: Buffer>(
+        &mut self,
+        buffer: &B,
+        span: Range<usize>,
+        set: u32,
+        binding: u32,
+    ) {
+        self.cmd.set_uniform_buffer(buffer, span, set, binding);
+    }
+    pub fn set_vertex_buffer<B: Buffer>(&mut self, buffer: &B, binding: u32) {
         unsafe {
             self.cmd.device.raw().cmd_bind_vertex_buffers(
                 self.cmd.raw(),
                 binding,
                 &[buffer.buffer()],
-                &[buffer.base_offset()],
+                &[0],
             );
         }
     }
-    pub fn set_index_buffer<B: Buffer>(&mut self, buffer: &B, index_type: vk::IndexType) {
+    pub fn set_index_buffer<B: Buffer + IndexType>(&mut self, buffer: &B) {
         unsafe {
             self.cmd.device.raw().cmd_bind_index_buffer(
                 self.cmd.raw(),
                 buffer.buffer(),
-                buffer.base_offset(),
-                index_type,
+                0,
+                B::index_type(),
             );
         }
     }
-    pub fn push_constants<T: Pod>(&mut self, data: &T) {
-        self.cmd.saved_state.descriptor_state.push_constants(data);
+    pub fn push_constants<T: Copy>(&mut self, data: &T, offset: usize) {
+        self.cmd
+            .saved_state
+            .descriptor_state
+            .push_constants(data, offset);
     }
-    pub fn draw(&mut self, vertices: Range<u32>, instances: Range<u32>) {
+    pub fn draw(&mut self, vertices: Range<usize>, instances: Range<usize>) {
+        hikari_dev::profile_function!();
+
         let pipeline_lookup = &mut self.cmd.saved_state.pipeline_lookup;
         let descriptor_pool = &mut self.cmd.saved_state.descriptor_pool;
         let cmd = self.cmd.raw();
@@ -131,16 +150,24 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         self.flush_render_state();
 
         unsafe {
+            hikari_dev::profile_scope!("vkCmdDraw");
             self.cmd.device.raw().cmd_draw(
                 cmd,
                 vertices.len() as u32,
                 instances.len() as u32,
-                vertices.start,
-                instances.start,
+                vertices.start as u32,
+                instances.start as u32,
             );
         }
     }
-    pub fn draw_indexed(&mut self, indices: Range<u32>, base_vertex: i32, instances: Range<u32>) {
+    pub fn draw_indexed(
+        &mut self,
+        indices: Range<usize>,
+        base_vertex: i32,
+        instances: Range<usize>,
+    ) {
+        hikari_dev::profile_function!();
+
         let pipeline_lookup = &mut self.cmd.saved_state.pipeline_lookup;
         let descriptor_pool = &mut self.cmd.saved_state.descriptor_pool;
         let cmd = self.cmd.raw();
@@ -148,13 +175,14 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         self.flush_render_state();
 
         unsafe {
+            hikari_dev::profile_scope!("vkCmdDrawIndexed");
             self.cmd.device.raw().cmd_draw_indexed(
                 cmd,
                 indices.len() as u32,
                 instances.len() as u32,
-                indices.start,
+                indices.start as u32,
                 base_vertex,
-                instances.start,
+                instances.start as u32,
             );
         }
     }

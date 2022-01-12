@@ -5,7 +5,13 @@ layout(location = 2) in vec2 tc0Fs;
 layout(location = 3) in vec2 tc1Fs;
 
 layout(location = 0) out vec4 color;
-layout(location = 1) out vec4 debugNormal;
+//layout(location = 1) out vec4 debugNormal;
+
+layout(std140, set = 0, binding = 0) uniform UBO {
+    vec3 cameraPosition;
+    mat4 viewProj;
+    float exposure;
+} ubo;
 
 struct DirectionalLight {
     float intensity;
@@ -13,16 +19,6 @@ struct DirectionalLight {
     vec3 direction;
 };
 
-layout(std140, set=0, binding = 0) uniform UBO {
-    vec3 cameraPosition;
-    mat4 viewProj;
-    mat4 transform;
-    float exposure;
-} ubo;
-
-layout(std140, binding = 1) uniform Lights {
-    DirectionalLight dirLight;
-} lights;
 
 
 layout(set = 1, binding = 0) uniform sampler2D albedoMap;
@@ -30,8 +26,7 @@ layout(set = 1, binding = 1) uniform sampler2D roughnessMap;
 layout(set = 1, binding = 2) uniform sampler2D metallicMap;
 layout(set = 1, binding = 3) uniform sampler2D normalMap;
 
-
-layout(push_constant) uniform Material {
+struct Material {
     vec4 albedo;
     float roughness;
     float metallic;
@@ -39,7 +34,12 @@ layout(push_constant) uniform Material {
     int roughnessUVSet;
     int metallicUVSet;
     int normalUVSet;
-} material;
+};
+
+layout(push_constant) uniform Constants {
+    mat4 transform;
+    Material material;
+} pc;
 
 const float PI = 3.14159265359;
 // ----------------------------------------------------------------------------
@@ -130,7 +130,7 @@ vec3 getValueFloat(sampler2D map, float value, int set) {
         return vec3(value);
 }
 vec3 calculateNormal() {
-    vec2 tc = getTc(material.normalUVSet);
+    vec2 tc = getTc(pc.material.normalUVSet);
     vec3 tangentNormal = texture(normalMap, tc).rgb * 2.0 - 1.0;
         vec3 q1 = dFdx(worldPosition);
         vec3 q2 = dFdy(worldPosition);
@@ -142,7 +142,13 @@ vec3 calculateNormal() {
         mat3 TBN = mat3(T, B, N);
         return normalize(TBN * tangentNormal);
 }
+const DirectionalLight dirLight =  {
+    10,
+    vec3(1.0, 1.0, 1.0),
+    vec3(0.0, -1.0, 0.0)
+};
 void main() {
+    Material material = pc.material;
     vec3 albedoValue = getValueRGBA(albedoMap, material.albedo, material.albedoUVSet).rgb;
     float roughnessValue = getValueFloat(roughnessMap, material.roughness, material.roughnessUVSet).g;
     //roughnessValue/=roughness + 0.001;
@@ -154,9 +160,9 @@ void main() {
     vec3 F0 = vec3(0.04);
     F0 = mix(F0, albedoValue, metallicValue);
     vec3 Lo = vec3(0.0);
-    vec3 L = -lights.dirLight.direction;
+    vec3 L = -dirLight.direction;
     vec3 H = normalize( V + L);
-    vec3 radiance = lights.dirLight.color ;//* dirLight.intensity;
+    vec3 radiance = dirLight.color ;//* dirLight.intensity;
     float NDF = DistributionGGX(N, H, roughnessValue);
     float G = GeometrySmith(N, V, L, roughnessValue);
     vec3 F = fresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);
@@ -175,11 +181,11 @@ void main() {
     kD *= 1.0 - metallicValue;
     // scale light by NdotL
     float NdotL = max(dot(N, L), 0.0);
-    float illuminance = lights.dirLight.intensity * NdotL;
+    float illuminance = dirLight.intensity * NdotL;
     Lo += (kD * albedoValue / PI + specular) * radiance * NdotL;
     Lo *= illuminance;
     vec3 ambient = vec3(0.03) * albedoValue;
     vec3 outputColor = ambient + Lo;
-    color = vec4( pow(tonemap(outputColor), vec3(1.0/2.2)), 1.0);
-    debugNormal = vec4(normal, 1.0);
+    color = vec4( pow(tonemap(outputColor), vec3(1.0/2.2)) , 1.0);
+    //debugNormal = vec4(normal, 1.0);
 }

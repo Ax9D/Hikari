@@ -1,7 +1,6 @@
 use std::{ops::Range, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
-use bytemuck::Pod;
 
 use crate::{
     buffer::Buffer,
@@ -19,13 +18,14 @@ pub use render::RenderpassBeginInfo;
 pub use render::RenderpassCommands;
 
 const PUSH_CONSTANT_SIZE: usize = 128;
+const PUSH_CONSTANT_SIZEU32: usize = PUSH_CONSTANT_SIZE / std::mem::size_of::<u32>();
 
 #[derive(Clone, Copy)]
 pub struct DescriptorState {
     sets: [DescriptorSetState; MAX_DESCRIPTOR_SETS],
     push_constant_data: [u8; PUSH_CONSTANT_SIZE],
     dirty_sets: u32,
-    push_constant_dirty: bool,
+    push_constant_update_range: Option<(usize, usize)>,
 }
 
 impl Default for DescriptorState {
@@ -34,7 +34,7 @@ impl Default for DescriptorState {
             sets: Default::default(),
             push_constant_data: [0; PUSH_CONSTANT_SIZE],
             dirty_sets: 0,
-            push_constant_dirty: false,
+            push_constant_update_range: None,
         }
     }
 }
@@ -51,7 +51,7 @@ impl DescriptorState {
             sets,
             dirty_sets: 0,
             push_constant_data: [0; PUSH_CONSTANT_SIZE],
-            push_constant_dirty: false,
+            push_constant_update_range: None,
         }
     }
     fn set_and_binding_exists(shader: &Arc<Shader>, mask: u32, set: u32, binding: u32) -> bool {
@@ -86,9 +86,20 @@ impl DescriptorState {
 
         self.sets[set as usize].set_buffer(binding, buffer, start, range);
     }
-    pub fn push_constants<T: Pod>(&mut self, data: &T) {
-        let byte_slice = bytemuck::bytes_of(data);
-        self.push_constant_data[0..byte_slice.len()].copy_from_slice(byte_slice);
+
+    /// Update once the whole range
+    /// Data must be aligned according to GLSL std430
+    /// Offset is in bytes and must be 4 byte aligned
+    pub fn push_constants<T: Copy>(&mut self, data: &T, offset: usize) {
+        debug_assert!(offset % 4 == 0);
+        debug_assert!(std::mem::align_of::<T>() % 4 == 0);
+
+        let byte_slice = unsafe {
+            std::slice::from_raw_parts(data as *const T as *const u8, std::mem::size_of::<T>())
+        };
+        self.push_constant_data[offset..byte_slice.len()].copy_from_slice(byte_slice);
+
+        self.push_constant_update_range = Some((offset, byte_slice.len()));
     }
     pub fn reset(&mut self) {
         for set in &mut self.sets {
@@ -104,45 +115,45 @@ impl DescriptorState {
         descriptor_pool: &mut DescriptorPool,
     ) {
         hikari_dev::profile_function!();
-        crate::util::for_each_bit(
-            self.dirty_sets & shader.pipeline_layout().set_mask(),
-            |set| {
-                let set_layout = &shader.pipeline_layout().set_layouts()[set as usize];
+        //let mut sets = crate::util::ArrayVecCopy::<vk::DescriptorSet, MAX_DESCRIPTOR_SETS>::new();
+        let sets_to_update = self.dirty_sets & shader.pipeline_layout().set_mask();
+        crate::util::for_each_bit(sets_to_update, |set| {
+            let set_layout = &shader.pipeline_layout().set_layouts()[set as usize];
 
-                let allocator = descriptor_pool.get(set_layout);
-                let state = &self.sets[set as usize];
+            let allocator = descriptor_pool.get(set_layout);
+            let state = &self.sets[set as usize];
 
-                //assert!(set_layout == &state.set_layout);
+            //assert!(set_layout == &state.set_layout);
 
-                let set = allocator.get(state);
-                let sets = [set];
+            let vk_set = allocator.get(state);
+            let sets = [vk_set];
 
-                unsafe {
-                    hikari_dev::profile_scope!("Binding descriptor set");
-                    device.raw().cmd_bind_descriptor_sets(
-                        cmd,
-                        bind_point,
-                        shader.pipeline_layout().raw(),
-                        0,
-                        &sets,
-                        &[],
-                    );
-                }
-            },
-        );
+            unsafe {
+                hikari_dev::profile_scope!("Binding descriptor set");
+                device.raw().cmd_bind_descriptor_sets(
+                    cmd,
+                    bind_point,
+                    shader.pipeline_layout().raw(),
+                    set,
+                    &sets,
+                    &[],
+                );
+            }
+        });
+        if let Some((start, len)) = self.push_constant_update_range {
+            //println!("{:?}", &self.push_constant_data[start..len]);
 
-        if self.push_constant_dirty {
             unsafe {
                 device.raw().cmd_push_constants(
                     cmd,
                     shader.pipeline_layout().raw(),
                     shader.pipeline_layout().push_constant_stage_flags(),
                     0,
-                    &self.push_constant_data,
+                    &self.push_constant_data[start..len],
                 );
             }
 
-            self.push_constant_dirty = false;
+            self.push_constant_update_range = None;
         }
 
         self.dirty_sets = 0;
@@ -197,9 +208,9 @@ impl<'a> CommandBuffer<'a> {
                 0,
                 &[vk::Viewport {
                     x,
-                    y,
+                    y: height - y,
                     width,
-                    height,
+                    height: -height,
                     min_depth: 0.0,
                     max_depth: 1.0,
                 }],

@@ -305,7 +305,10 @@ impl Device {
             instance: instance.clone(),
             device: ash_device.clone(),
             physical_device: physical_device.raw,
-            debug_settings: Default::default(),
+            debug_settings: gpu_allocator::AllocatorDebugSettings {
+                log_leaks_on_shutdown: true,
+                ..Default::default()
+            },
             buffer_device_address: false,
         })?);
 
@@ -488,7 +491,7 @@ impl Device {
 
         let cmd_pool = unsafe { device.create_command_pool(&create_info, None) }?;
 
-        println!("Command pool creation took: {:?}", now.elapsed());
+        //println!("Command pool creation took: {:?}", now.elapsed());
 
         let create_info = vk::CommandBufferAllocateInfo::builder()
             .command_pool(cmd_pool)
@@ -520,7 +523,7 @@ impl Device {
 
         self.raw().destroy_command_pool(cmd_pool, None);
 
-        println!("Submitted commands, took: {:?}", now.elapsed());
+        //println!("Submitted commands, took: {:?}", now.elapsed());
         Ok(())
     }
 

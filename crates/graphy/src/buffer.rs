@@ -1,21 +1,35 @@
 use ash::{prelude::VkResult, vk};
-use bytemuck::Pod;
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
 
 use std::{marker::PhantomData, sync::Arc};
 
 pub trait Buffer {
     fn buffer(&self) -> vk::Buffer;
-    fn base_offset(&self) -> vk::DeviceSize;
     fn byte_step(&self) -> vk::DeviceSize;
     fn size(&self) -> vk::DeviceSize;
 
     fn offset(&self, ix: usize) -> vk::DeviceSize {
-        self.base_offset() + ix as u64 * self.byte_step()
+        ix as u64 * self.byte_step()
+    }
+}
+pub trait IndexType {
+    fn index_type() -> vk::IndexType;
+}
+
+impl IndexType for GpuBuffer<u32> {
+    #[inline(always)]
+    fn index_type() -> vk::IndexType {
+        vk::IndexType::UINT32
+    }
+}
+impl IndexType for GpuBuffer<u16> {
+    #[inline(always)]
+    fn index_type() -> vk::IndexType {
+        vk::IndexType::UINT16
     }
 }
 
-pub fn create_uniform_buffer<T: Pod>(
+pub fn create_uniform_buffer<T: Copy>(
     device: &Arc<crate::Device>,
     len: usize,
 ) -> Result<CpuBuffer<T>, Box<dyn std::error::Error>> {
@@ -26,16 +40,16 @@ pub fn create_uniform_buffer<T: Pod>(
         gpu_allocator::MemoryLocation::CpuToGpu,
     )
 }
-pub fn create_vertex_buffer<T: Pod>(
+pub fn create_vertex_buffer<T: Copy>(
     device: &Arc<crate::Device>,
     len: usize,
 ) -> Result<GpuBuffer<T>, Box<dyn std::error::Error>> {
     GpuBuffer::new(device, len, vk::BufferUsageFlags::VERTEX_BUFFER)
 }
-pub fn create_index_buffer<T: Pod>(
+pub fn create_index_buffer(
     device: &Arc<crate::Device>,
     len: usize,
-) -> Result<GpuBuffer<T>, Box<dyn std::error::Error>> {
+) -> Result<GpuBuffer<u32>, Box<dyn std::error::Error>> {
     GpuBuffer::new(device, len, vk::BufferUsageFlags::INDEX_BUFFER)
 }
 
@@ -47,7 +61,7 @@ pub struct CpuBuffer<T> {
     _phantom: PhantomData<T>,
 }
 
-impl<T: Pod> CpuBuffer<T> {
+impl<T: Copy> CpuBuffer<T> {
     pub fn new(
         device: &Arc<crate::Device>,
         len: usize,
@@ -141,14 +155,10 @@ impl<T> Drop for CpuBuffer<T> {
     }
 }
 
-impl<T: Pod> Buffer for CpuBuffer<T> {
+impl<T: Copy> Buffer for CpuBuffer<T> {
     #[inline]
     fn buffer(&self) -> vk::Buffer {
         self.inner
-    }
-    #[inline]
-    fn base_offset(&self) -> vk::DeviceSize {
-        self.allocation.offset()
     }
     #[inline]
     fn byte_step(&self) -> vk::DeviceSize {
@@ -167,7 +177,7 @@ pub struct GpuBuffer<T> {
     upload_buffer: CpuBuffer<T>,
 }
 
-impl<T: Pod> GpuBuffer<T> {
+impl<T: Copy> GpuBuffer<T> {
     pub fn new(
         device: &Arc<crate::Device>,
         len: usize,
@@ -267,14 +277,10 @@ impl<T> Drop for GpuBuffer<T> {
     }
 }
 
-impl<T: Pod> Buffer for GpuBuffer<T> {
+impl<T: Copy> Buffer for GpuBuffer<T> {
     #[inline]
     fn buffer(&self) -> vk::Buffer {
         self.inner
-    }
-    #[inline]
-    fn base_offset(&self) -> vk::DeviceSize {
-        self.allocation.offset()
     }
     #[inline]
     fn byte_step(&self) -> vk::DeviceSize {
@@ -283,5 +289,44 @@ impl<T: Pod> Buffer for GpuBuffer<T> {
     #[inline]
     fn size(&self) -> vk::DeviceSize {
         self.offset(self.len())
+    }
+}
+
+pub struct UniformBuffer<T> {
+    inner: [CpuBuffer<T>; 2],
+    frame: usize
+}
+
+impl<T: Copy> UniformBuffer<T> {
+    pub fn new(
+        device: &Arc<crate::Device>,
+        len: usize,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let inner = [
+            CpuBuffer::new(
+                device,
+                len,
+                vk::BufferUsageFlags::UNIFORM_BUFFER,
+                gpu_allocator::MemoryLocation::CpuToGpu,
+            )?,
+            CpuBuffer::new(
+                device,
+                len,
+                vk::BufferUsageFlags::UNIFORM_BUFFER,
+                gpu_allocator::MemoryLocation::CpuToGpu,
+            )?,
+        ];
+        Ok(Self { inner, frame: 0 })
+    }
+    #[inline]
+    pub fn mapped_slice(&self) -> &[T] {
+        self.inner[self.frame].mapped_slice()
+    }
+    #[inline]
+    pub fn mapped_slice_mut(&mut self) -> &mut [T] {
+        self.inner[self.frame].mapped_slice_mut()
+    }
+    pub fn new_frame(&mut self) {
+        self.frame = self.frame.wrapping_add(1) % 2;
     }
 }

@@ -56,7 +56,7 @@ impl Format {
     pub fn into_vk(&self) -> vk::Format {
         match self {
             //Format::RGB8 => vk::Format::R8G8B8_SNORM,
-            Format::RGBA8 => vk::Format::R8G8B8A8_SNORM,
+            Format::RGBA8 => vk::Format::R8G8B8A8_UNORM,
             //Format::SRGB => vk::Format::R8G8B8_SRGB,
             Format::SRGBA => vk::Format::R8G8B8A8_SRGB,
             Format::RGBAFloat16 => vk::Format::R16G16B16A16_SFLOAT,

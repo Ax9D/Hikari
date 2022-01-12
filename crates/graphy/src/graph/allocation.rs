@@ -95,9 +95,9 @@ pub struct AllocationData {
 }
 
 impl AllocationData {
-    pub fn new<S, P, R>(
+    pub fn new<S, A, R>(
         device: &Arc<crate::Device>,
-        passes: &[AnyPass<S, P, R>],
+        passes: &[AnyPass<S, A, R>],
         resources: &GraphResources,
     ) -> VkResult<Self> {
         let mut alloc = Self {
@@ -230,10 +230,10 @@ impl AllocationData {
 
         Ok(())
     }
-    fn allocate_framebuffers<S, P, R>(
+    fn allocate_framebuffers<S, A, R>(
         &mut self,
         device: &Arc<crate::Device>,
-        pass: &Renderpass<S, P, R>,
+        pass: &Renderpass<S, A, R>,
         ix: usize,
         graph_resources: &GraphResources,
     ) -> VkResult<()> {
@@ -259,10 +259,10 @@ impl AllocationData {
 
         Ok(())
     }
-    fn create_barriers<S, P, R>(
+    fn create_barriers<S, A, R>(
         &mut self,
         device: &Arc<crate::Device>,
-        passes: &[AnyPass<S, P, R>],
+        passes: &[AnyPass<S, A, R>],
         graph_resources: &GraphResources,
     ) {
         let mut prev_accesses: HashMap<_, Vec<AccessType>> = graph_resources

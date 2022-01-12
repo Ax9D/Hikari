@@ -4,11 +4,11 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::sync::Arc;
 
-use arrayvec::ArrayVec;
 use ash::prelude::VkResult;
 use ash::vk;
 use ash::vk::DescriptorPoolSize;
 
+use crate::util::ArrayVecCopy;
 use crate::util::TemporaryMap;
 
 pub const MAX_DESCRIPTOR_SETS: usize = 4;
@@ -334,9 +334,7 @@ impl DescriptorSetState {
             set_layout.combined_image_sampler_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
-                self.bindings[self.set as usize]
-                    .image_state
-                    .hash(&mut state);
+                self.bindings[binding as usize].image_state.hash(&mut state);
             },
         );
 
@@ -344,7 +342,7 @@ impl DescriptorSetState {
             set_layout.uniform_buffer_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
-                self.bindings[self.set as usize]
+                self.bindings[binding as usize]
                     .buffer_state
                     .hash(&mut state);
             },
@@ -447,7 +445,23 @@ impl DescriptorSetAllocator {
 
         const MAX_WRITES: usize = MAX_BINDINGS_PER_SET * MAX_IMAGE_COUNT;
 
-        let mut writes = ArrayVec::<vk::WriteDescriptorSet, MAX_WRITES>::new();
+        //let mut writes = ArrayVec::<vk::WriteDescriptorSet, MAX_WRITES>::new();
+
+        #[derive(Debug, Copy, Clone)]
+        struct ImageWrite {
+            binding: u32,
+            ix: u32,
+            image_info: vk::DescriptorImageInfo,
+        }
+        let mut image_writes = ArrayVecCopy::<ImageWrite, MAX_WRITES>::new();
+
+        #[derive(Debug, Copy, Clone)]
+        struct BufferWrite {
+            binding: u32,
+            buffer_info: vk::DescriptorBufferInfo,
+        }
+
+        let mut buffer_writes = ArrayVecCopy::<BufferWrite, MAX_BINDINGS_PER_SET>::new();
 
         crate::util::for_each_bit_in_range(
             self.set_layout.combined_image_sampler_mask(),
@@ -460,20 +474,27 @@ impl DescriptorSetAllocator {
                     0..MAX_IMAGE_COUNT,
                     |image_ix| {
                         let (image_view, sampler) = image_state.images[image_ix as usize];
-
                         let write = [vk::DescriptorImageInfo {
                             image_view,
                             sampler,
                             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                         }];
-                        let write = *vk::WriteDescriptorSet::builder()
-                            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                            .dst_set(set)
-                            .dst_binding(binding)
-                            .dst_array_element(image_ix)
-                            .image_info(&write);
+                        // let write = *vk::WriteDescriptorSet::builder()
+                        //     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                        //     .dst_set(set)
+                        //     .dst_binding(binding)
+                        //     .dst_array_element(image_ix)
+                        //     .image_info(&write);
 
-                        writes.push(write);
+                        image_writes.push(ImageWrite {
+                            binding,
+                            ix: image_ix,
+                            image_info: *vk::DescriptorImageInfo::builder()
+                                .image_view(image_view)
+                                .sampler(sampler)
+                                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+                        });
+                        //writes.push(write);
                     },
                 );
             },
@@ -486,47 +507,79 @@ impl DescriptorSetAllocator {
                 let buffer_state = &state.bindings[binding as usize].buffer_state;
 
                 if buffer_state.buffer != vk::Buffer::null() {
-                    let write = *vk::WriteDescriptorSet::builder()
-                        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                        .dst_set(set)
-                        .dst_binding(binding)
-                        .dst_array_element(0)
-                        .buffer_info(&[vk::DescriptorBufferInfo {
-                            buffer: buffer_state.buffer,
-                            offset: buffer_state.offset,
-                            range: buffer_state.range,
-                        }]);
+                    // let write = *vk::WriteDescriptorSet::builder()
+                    //     .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    //     .dst_set(set)
+                    //     .dst_binding(binding)
+                    //     .dst_array_element(0)
+                    //     .buffer_info(&[vk::DescriptorBufferInfo {
+                    //         buffer: buffer_state.buffer,
+                    //         offset: buffer_state.offset,
+                    //         range: buffer_state.range,
+                    //     }]);
 
-                    writes.push(write);
+                    buffer_writes.push(BufferWrite {
+                        binding,
+                        buffer_info: *vk::DescriptorBufferInfo::builder()
+                            .buffer(buffer_state.buffer)
+                            .offset(buffer_state.offset)
+                            .range(buffer_state.range),
+                    });
                 }
             },
         );
+
+        let mut writes = ArrayVecCopy::<vk::WriteDescriptorSet, MAX_WRITES>::new();
+
+        for write in &image_writes {
+            let mut vk_write = *vk::WriteDescriptorSet::builder()
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .dst_set(set)
+                .dst_binding(write.binding)
+                .dst_array_element(write.ix);
+
+            vk_write.p_image_info = &write.image_info;
+            vk_write.descriptor_count = 1;
+
+            writes.push(vk_write);
+        }
+
+        for write in &buffer_writes {
+            let mut vk_write = *vk::WriteDescriptorSet::builder()
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .dst_set(set)
+                .dst_binding(write.binding)
+                .dst_array_element(0);
+
+            vk_write.p_buffer_info = &write.buffer_info;
+            vk_write.descriptor_count = 1;
+
+            writes.push(vk_write);
+        }
         unsafe {
             hikari_dev::profile_scope!("Update descriptor set");
+            //println!("Writes {:#?}", writes);
             self.device.raw().update_descriptor_sets(&writes, &[]);
         }
     }
     pub fn get(&mut self, state: &DescriptorSetState) -> vk::DescriptorSet {
         hikari_dev::profile_function!();
 
-        if let Some(reusable_set) = self.resuable_sets.pop() {
-            self.update_set(reusable_set, state);
+        //TODO: Investigate potential hash collisions
+        let hash = state.hash(&self.set_layout);
 
-            reusable_set
-        } else {
-            //TODO: Investigate potential hash collisions
-            let hash = state.hash(&self.set_layout);
+        match self.temp_map.get(&hash) {
+            Some(&set) => set,
+            None => {
+                let new_set = self.resuable_sets.pop().unwrap_or_else(|| {
+                    self.allocate(self.set_layout.raw())
+                        .expect("Failed to allocate descriptor set")
+                });
+                self.temp_map.insert(hash, new_set);
 
-            match self.temp_map.get(&hash) {
-                Some(&set) => set,
-                None => {
-                    let allocated = self.allocate(self.set_layout.raw()).unwrap();
-                    self.temp_map.insert(hash, allocated);
+                self.update_set(new_set, state);
 
-                    self.update_set(allocated, state);
-
-                    allocated
-                }
+                new_set
             }
         }
     }

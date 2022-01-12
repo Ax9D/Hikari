@@ -102,6 +102,7 @@ impl SampledImage {
         device: &Arc<crate::Device>,
         vkconfig: &ImageConfig,
     ) -> VkResult<vk::Sampler> {
+        //TODO: use a sampler cache
         let mut create_info = *vk::SamplerCreateInfo::builder()
             .min_filter(vkconfig.filtering)
             .mag_filter(vkconfig.filtering)
@@ -245,37 +246,6 @@ impl SampledImage {
         height: u32,
         mut vkconfig: ImageConfig,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        //log::warn!("Mip levels: {}", mip_levels);
-
-        // let image_create_info = vk::ImageCreateInfo::builder()
-        //     .image_type(vk::ImageType::TYPE_2D)
-        //     .format(vkconfig.format)
-        //     .mip_levels(vkconfig.mip_levels)
-        //     .array_layers(1)
-        //     .samples(vk::SampleCountFlags::TYPE_1)
-        //     .tiling(vk::ImageTiling::OPTIMAL)
-        //     .sharing_mode(vk::SharingMode::EXCLUSIVE /**/)
-        //     .initial_layout(vk::ImageLayout::UNDEFINED)
-        //     .extent(vk::Extent3D {
-        //         width,
-        //         height,
-        //         depth: 1,
-        //     })
-        //     .usage(
-        //         vk::ImageUsageFlags::TRANSFER_DST
-        //             | vk::ImageUsageFlags::TRANSFER_SRC
-        //             | vk::ImageUsageFlags::SAMPLED,
-        //     );
-
-        // let (image, allocation) = crate::texture::create_image(
-        //     device,
-        //     &image_create_info,
-        //     gpu_allocator::MemoryLocation::GpuOnly,
-        // )?;
-
-        // let sampler = Self::create_sampler(device, &vkconfig)?;
-        // let image_views = Self::create_views(device, image, &vkconfig)?;
-
         vkconfig.usage |= vk::ImageUsageFlags::TRANSFER_DST;
 
         if vkconfig.host_readable {
@@ -313,6 +283,7 @@ impl SampledImage {
         unsafe {
             let slice = staging_buffer.mapped_slice_mut();
 
+            
             slice.copy_from_slice(data);
         }
         unsafe {

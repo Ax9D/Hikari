@@ -408,7 +408,6 @@ impl<'a> ShaderProgramBuilder<'a> {
         let mut options = shaderc::CompileOptions::new().unwrap();
 
         //options.set_optimization_level(shaderc::OptimizationLevel::Zero);
-
         let artifact = compiler
             .compile_into_spirv(glsl, shader_kind, debug_name, entry_point, Some(&options))
             .map_err(|err| {

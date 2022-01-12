@@ -10,21 +10,21 @@ use super::{AttachmentConfig, ImageSize, Input, Output};
 
 pub use pipeline::*;
 
-pub struct Renderpass<Scene, PerFrame, Resources> {
+pub struct Renderpass<Scene, Args, Resources> {
     name: String,
     id: u64,
     pub(crate) render_area: ImageSize,
     inputs: Vec<Input>,
     outputs: Vec<Output>,
     pub(crate) present_to_swapchain: bool,
-    pub(crate) draw_fn: Box<dyn FnMut(&mut RenderpassCommands, &Scene, &PerFrame, &Resources)>,
+    pub(crate) draw_fn: Box<dyn FnMut(&mut RenderpassCommands, &Scene, &Args, &Resources)>,
 }
 
-impl<Scene, PerFrame, Resources> Renderpass<Scene, PerFrame, Resources> {
+impl<Scene, Args, Resources> Renderpass<Scene, Args, Resources> {
     pub fn new(
         name: &str,
         area: ImageSize,
-        draw_fn: impl FnMut(&mut RenderpassCommands, &Scene, &PerFrame, &Resources) + 'static,
+        draw_fn: impl FnMut(&mut RenderpassCommands, &Scene, &Args, &Resources) + 'static,
     ) -> Self {
         Self {
             name: name.to_string(),

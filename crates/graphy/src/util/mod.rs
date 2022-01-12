@@ -1,10 +1,14 @@
+mod arrayvec_copy;
 mod cache_map;
 mod intrusive_linked_list;
+mod perframe;
 mod temporary_map;
 
 use std::ops::Range;
 
+pub use arrayvec_copy::ArrayVecCopy;
 pub use cache_map::CacheMap;
+pub use perframe::PerFrame;
 pub use temporary_map::TemporaryMap;
 
 #[inline]

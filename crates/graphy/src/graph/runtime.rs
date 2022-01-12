@@ -136,16 +136,17 @@ impl GraphExecutor {
         })
     }
     pub fn finish(&mut self) -> VkResult<()> {
+        Self::finish_internal(&self.device, &mut self.frame_state)
+    }
+    fn finish_internal(device: &Arc<crate::Device>, frame_state: &mut FrameState) -> VkResult<()> {
         unsafe {
             hikari_dev::profile_scope!("Waiting on GPU");
-            let fences = &[self.frame_state.last_frame().render_finished_fence];
-            self.device
-                .raw()
-                .wait_for_fences(fences, true, 1000000000)?;
+            let fences = &[frame_state.last_frame().render_finished_fence];
+            device.raw().wait_for_fences(fences, true, 1000000000)?;
 
-            self.device
+            device
                 .raw()
-                .reset_fences(&[self.frame_state.current_frame().render_finished_fence])?;
+                .reset_fences(&[frame_state.current_frame().render_finished_fence])?;
         }
 
         Ok(())
@@ -161,7 +162,8 @@ impl GraphExecutor {
         allocation_data: &AllocationData,
         swapchain: &mut Swapchain,
     ) -> VkResult<()> {
-        self.finish()?;
+        hikari_dev::profile_function!();
+        //self.finish()?;
 
         //log::debug!("Reset fences");
         let current_frame = self.frame_state.current_frame();
@@ -212,6 +214,8 @@ impl GraphExecutor {
 
         cmd.end()?;
 
+        Self::finish_internal(&self.device, &mut self.frame_state)?;
+
         Self::submit_and_present(
             &device,
             &self.frame_state,
@@ -225,17 +229,17 @@ impl GraphExecutor {
 
         Ok(())
     }
-    pub fn execute<S, P, R>(
+    pub fn execute<S, A, R>(
         &mut self,
         scene: &S,
-        pf: &P,
+        args: &A,
         res: &R,
         size: (u32, u32),
-        passes: &mut [AnyPass<S, P, R>],
+        passes: &mut [AnyPass<S, A, R>],
         resources: &GraphResources,
         allocation_data: &AllocationData,
     ) -> VkResult<()> {
-        self.finish()?;
+        //self.finish()?;
 
         //log::debug!("Reset fences");
         let current_frame = self.frame_state.current_frame();
@@ -264,7 +268,7 @@ impl GraphExecutor {
                         &device,
                         &mut cmd,
                         scene,
-                        pf,
+                        args,
                         res,
                         size,
                         ix,
@@ -279,6 +283,7 @@ impl GraphExecutor {
         }
 
         cmd.end()?;
+        Self::finish_internal(&self.device, &mut self.frame_state)?;
 
         Self::submit(
             device,
@@ -295,19 +300,21 @@ impl GraphExecutor {
         Ok(())
     }
 
-    fn execute_renderpass<'cmd, 'graph, S, P, R>(
+    fn execute_renderpass<'cmd, 'graph, S, A, R>(
         device: &Arc<crate::Device>,
         cmd: &'cmd mut CommandBuffer<'graph>,
         scene: &S,
-        pf: &P,
+        args: &A,
         res: &R,
         size: (u32, u32),
         ix: usize,
-        pass: &mut Renderpass<S, P, R>,
+        pass: &mut Renderpass<S, A, R>,
         resources: &GraphResources,
         allocation_data: &AllocationData,
         swapchain_data: Option<(&mut Swapchain, u32)>,
     ) -> VkResult<()> {
+        hikari_dev::profile_function!();
+
         let (vk_pass, framebuffer) = if pass.present_to_swapchain {
             let (swapchain, image_ix) = swapchain_data.expect("Swapchain not provided");
             (
@@ -354,7 +361,7 @@ impl GraphExecutor {
             }
         }
 
-        (pass.draw_fn)(&mut rcmd, scene, pf, res);
+        (pass.draw_fn)(&mut rcmd, scene, args, res);
 
         Ok(())
     }

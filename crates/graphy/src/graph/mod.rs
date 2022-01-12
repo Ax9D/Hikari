@@ -41,14 +41,14 @@ pub enum GraphCreationError {
     AllocationFailed(String),
 }
 
-pub struct GraphBuilder<'a, S, P, R> {
+pub struct GraphBuilder<'a, S, A, R> {
     gfx: &'a mut Gfx,
-    passes: Vec<AnyPass<S, P, R>>,
+    passes: Vec<AnyPass<S, A, R>>,
     resources: GraphResources,
     size: (u32, u32),
 }
 
-impl<'a, S, P, R> GraphBuilder<'a, S, P, R> {
+impl<'a, S, A, R> GraphBuilder<'a, S, A, R> {
     pub fn new(gfx: &'a mut Gfx, width: u32, height: u32) -> Self {
         Self {
             gfx,
@@ -75,7 +75,7 @@ impl<'a, S, P, R> GraphBuilder<'a, S, P, R> {
     pub fn resources(&self) -> &GraphResources {
         &self.resources
     }
-    pub fn add_renderpass(&mut self, pass: Renderpass<S, P, R>) -> &mut Self {
+    pub fn add_renderpass(&mut self, pass: Renderpass<S, A, R>) -> &mut Self {
         self.passes.push(AnyPass::Render(pass));
 
         self
@@ -179,7 +179,7 @@ impl<'a, S, P, R> GraphBuilder<'a, S, P, R> {
     //     stack
     // }
     /// Allocates required resources and returns a Graph
-    pub fn build(mut self) -> Result<Graph<S, P, R>, GraphCreationError> {
+    pub fn build(mut self) -> Result<Graph<S, A, R>, GraphCreationError> {
         self.validate()?;
 
         let allocation_data = AllocationData::new(self.gfx.device(), &self.passes, &self.resources)
@@ -205,14 +205,14 @@ impl<'a, S, P, R> GraphBuilder<'a, S, P, R> {
 }
 /// A Graph is a collection of passes (Renderpasses + Compute passes), that execute ensuring proper resource synchronization as defined during Graph creation.
 /// A Graph is created using the GraphBuilder, and is immutable, meaning new passes cannot be added after creation.
-/// The generic parameters S, P, and R refer to the data that the Graph is to be provided when executing
+/// The generic parameters S, A, and R refer to the data that the Graph is to be provided when executing
 /// S: Scene related data
-/// P: Per Frame resources
+/// A: Rendering args
 /// R: Graph external resources, such as textures/models which are needed for rendering
 /// These parameters are provided for ease of use and compliance to the above mentioned schema is not necessary
-pub struct Graph<S, P, R> {
+pub struct Graph<S, A, R> {
     device: Arc<crate::Device>,
-    passes: Vec<AnyPass<S, P, R>>,
+    passes: Vec<AnyPass<S, A, R>>,
     resources: GraphResources,
     allocation_data: AllocationData,
     executor: GraphExecutor,
@@ -220,12 +220,12 @@ pub struct Graph<S, P, R> {
     outputs_swapchain: bool,
 }
 
-impl<S, P, R> Graph<S, P, R> {
+impl<S, A, R> Graph<S, A, R> {
     pub fn execute(
         &mut self,
         gfx: &crate::Gfx,
         scene: &S,
-        perframe: &P,
+        perframe: &A,
         resources: &R,
     ) -> VkResult<()> {
         if self.outputs_swapchain {
@@ -257,10 +257,12 @@ impl<S, P, R> Graph<S, P, R> {
     pub fn finish(&mut self) -> VkResult<()> {
         self.executor.finish()
     }
+
+    pub fn wait_idle(&mut self) -> VkResult<()> {
+        unsafe { self.device.raw().device_wait_idle() }
+    }
     ///Should be called after done using the graph just before its dropped to ensure gpu resources can be safely deallocated
     pub fn prepare_exit(&mut self) {
-        unsafe {
-            self.device.raw().device_wait_idle().unwrap();
-        }
+        self.wait_idle().unwrap();
     }
 }

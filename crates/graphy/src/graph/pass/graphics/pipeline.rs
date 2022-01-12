@@ -94,23 +94,23 @@ fn bad_float_hash(x: f32, hasher: &mut impl std::hash::Hasher) {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct DepthStencilState {
-    depth_test_enabled: bool,
-    depth_write_enabled: bool,
-    depth_compare_op: CompareOp,
+    pub depth_test_enabled: bool,
+    pub depth_write_enabled: bool,
+    pub depth_compare_op: CompareOp,
 
-    depth_bound_test_enabled: bool,
+    pub depth_bound_test_enabled: bool,
 
-    stencil_test_enabled: bool,
-    stencil_test_compare_op: CompareOp,
-    stencil_test_fail_op: StencilOp,
-    stencil_test_depth_fail_op: StencilOp,
-    stencil_test_pass_op: StencilOp,
-    stencil_test_compare_mask: u32,
-    stencil_test_write_mark: u32,
-    stencil_test_reference: u32,
+    pub stencil_test_enabled: bool,
+    pub stencil_test_compare_op: CompareOp,
+    pub stencil_test_fail_op: StencilOp,
+    pub stencil_test_depth_fail_op: StencilOp,
+    pub stencil_test_pass_op: StencilOp,
+    pub stencil_test_compare_mask: u32,
+    pub stencil_test_write_mark: u32,
+    pub stencil_test_reference: u32,
 
-    min_depth_bounds: f32,
-    max_depth_bounds: f32,
+    pub min_depth_bounds: f32,
+    pub max_depth_bounds: f32,
 }
 impl std::hash::Hash for DepthStencilState {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -244,13 +244,13 @@ impl BlendOp {
 
 #[derive(Debug, Clone, Copy, Default, Hash, PartialEq, Eq)]
 pub struct BlendState {
-    enabled: bool,
-    src_color_blend_factor: BlendFactor,
-    dst_color_blend_factor: BlendFactor,
-    color_blend_op: BlendOp,
-    src_alpha_blend_factor: BlendFactor,
-    dst_alpha_blend_factor: BlendFactor,
-    alpha_blend_op: BlendOp,
+    pub enabled: bool,
+    pub src_color_blend_factor: BlendFactor,
+    pub dst_color_blend_factor: BlendFactor,
+    pub color_blend_op: BlendOp,
+    pub src_alpha_blend_factor: BlendFactor,
+    pub dst_alpha_blend_factor: BlendFactor,
+    pub alpha_blend_op: BlendOp,
 }
 
 impl BlendState {
@@ -271,12 +271,13 @@ impl BlendState {
     }
 }
 
-const MAX_VERTEX_BINDINGS: usize = 5;
-const MAX_VERTEX_ATTRIBUTES: usize = 10;
-#[derive(Debug, Default, Clone)]
+use crate::util::ArrayVecCopy;
+const MAX_VERTEX_BINDINGS: usize = 4;
+const MAX_VERTEX_ATTRIBUTES: usize = 8;
+#[derive(Debug, Default, Clone, Copy)]
 pub struct VertexInputLayout {
-    binding_descs: arrayvec::ArrayVec<vk::VertexInputBindingDescription, MAX_VERTEX_BINDINGS>,
-    attribute_descs: arrayvec::ArrayVec<vk::VertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES>,
+    pub binding_descs: ArrayVecCopy<vk::VertexInputBindingDescription, MAX_VERTEX_BINDINGS>,
+    pub attribute_descs: ArrayVecCopy<vk::VertexInputAttributeDescription, MAX_VERTEX_ATTRIBUTES>,
 }
 
 impl PartialEq for VertexInputLayout {
@@ -338,27 +339,46 @@ impl VertexInputLayout {
         }
     }
 }
+#[derive(Copy, Clone, Debug)]
+pub enum StepMode {
+    Vertex,
+    Instance,
+}
+impl Default for StepMode {
+    fn default() -> Self {
+        Self::Vertex
+    }
+}
+
+impl From<StepMode> for vk::VertexInputRate {
+    fn from(step: StepMode) -> Self {
+        match step {
+            StepMode::Vertex => vk::VertexInputRate::VERTEX,
+            StepMode::Instance => vk::VertexInputRate::INSTANCE,
+        }
+    }
+}
 
 pub struct VertexInputLayoutBuilder {
-    layouts: Vec<Vec<ShaderDataType>>,
+    layouts: Vec<(Vec<ShaderDataType>, StepMode)>,
 }
 impl VertexInputLayoutBuilder {
-    pub fn buffer(mut self, layout: &[ShaderDataType]) -> Self {
-        self.layouts.push(layout.to_vec());
+    pub fn buffer(mut self, layout: &[ShaderDataType], step_mode: StepMode) -> Self {
+        self.layouts.push((layout.to_vec(), step_mode));
 
         self
     }
     pub fn build(self) -> VertexInputLayout {
-        let mut binding_descs = arrayvec::ArrayVec::new();
-        let mut attribute_descs = arrayvec::ArrayVec::new();
+        let mut binding_descs = ArrayVecCopy::new();
+        let mut attribute_descs = ArrayVecCopy::new();
 
         let mut location = 0;
-        for (binding, layout) in self.layouts.iter().enumerate() {
+        for (binding, (layout, step_mode)) in self.layouts.iter().enumerate() {
             binding_descs.push(
                 *vk::VertexInputBindingDescription::builder()
                     .binding(binding as u32)
                     .stride(layout.iter().fold(0, |acc, x| acc + x.size() as u32))
-                    .input_rate(vk::VertexInputRate::VERTEX), //
+                    .input_rate((*step_mode).into()), //
             );
 
             let mut offset = 0;

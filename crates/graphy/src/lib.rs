@@ -5,8 +5,6 @@
 #[macro_use]
 extern crate const_cstr;
 
-extern crate simple_logger;
-
 pub mod buffer;
 pub mod device;
 pub mod error;
@@ -44,4 +42,5 @@ mod util;
 use renderpass::PhysicalRenderpass;
 
 pub use ash::vk;
+pub use util::PerFrame;
 pub use vk_sync_fork::AccessType;
