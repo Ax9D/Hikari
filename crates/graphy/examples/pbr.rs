@@ -739,7 +739,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut graph = gb.build()?;
 
-    let mut sponza = load_mesh(&device, "/home/atri/sponza/sponza.glb")?;
+    let mut sponza = load_mesh(&device, "../../assets/models/sponza/sponza.glb")?;
 
     let mut scene = Scene {
         objects: vec![GameObject::new(&Arc::new(
@@ -749,7 +749,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         camera: Camera {
             transform: Transform::default(),
             near: 0.1,
-            far: 100.0,
+            far: 1000.0,
             exposure: 1.0,
             projection: Projection::Perspective(45.0),
         },
