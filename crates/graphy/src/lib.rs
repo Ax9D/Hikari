@@ -13,6 +13,9 @@ pub mod graph;
 pub mod shader;
 pub mod texture;
 
+#[cfg(feature = "imgui-support")]
+pub mod imgui_support;
+
 pub use device::Device;
 pub use device::Features;
 pub use error::*;
@@ -42,5 +45,6 @@ mod util;
 use renderpass::PhysicalRenderpass;
 
 pub use ash::vk;
+pub use imgui;
 pub use util::PerFrame;
 pub use vk_sync_fork::AccessType;

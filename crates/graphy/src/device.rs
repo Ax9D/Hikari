@@ -19,7 +19,6 @@ const VK_PIPELINE_CACHE_FILE: &str = "vk_pipeline_cache";
 pub struct PhysicalDevice {
     pub raw: vk::PhysicalDevice,
     pub queue_families: Vec<QueueFamilyProperties>,
-    pub(crate) swapchain_support_details: SwapchainSupportDetails,
     pub properties: vk::PhysicalDeviceProperties,
     pub extensions: Vec<CString>,
     pub mem_properties: vk::PhysicalDeviceMemoryProperties,
@@ -73,8 +72,6 @@ impl PhysicalDevice {
 
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(device) };
-        let swapchain_support_details =
-            SwapchainSupportDetails::create(&device, surface, surface_loader)?;
 
         let vk_features = unsafe { instance.get_physical_device_features(device) };
 
@@ -89,7 +86,6 @@ impl PhysicalDevice {
             raw: device,
             properties,
             queue_families,
-            swapchain_support_details,
             vk_features: vk_features2,
             features,
             mem_properties,
@@ -116,6 +112,14 @@ impl PhysicalDevice {
                 }
             })
             .next()
+    }
+
+    pub(crate) fn get_swapchain_support_details(
+        &self,
+        surface: &vk::SurfaceKHR,
+        surface_loader: &Surface,
+    ) -> VkResult<SwapchainSupportDetails> {
+        SwapchainSupportDetails::create(&self.raw, surface, surface_loader)
     }
 
     pub fn get_unified_queue(&self) -> Option<u32> {
@@ -236,7 +240,7 @@ pub struct Device {
     pub(crate) present_queue_ix: u32,
 
     shader_compiler: Mutex<shaderc::Compiler>,
-    memory_allocator: Mutex<gpu_allocator::vulkan::Allocator>,
+    memory_allocator: Arc<std::sync::Mutex<gpu_allocator::vulkan::Allocator>>, //Using std::sync::Mutex for better compatibility
     descriptor_set_layout_cache: Mutex<DescriptorSetLayoutCache>,
     extensions: VkExtensions,
     pipeline_cache: vk::PipelineCache,
@@ -301,7 +305,7 @@ impl Device {
 
         let ash_device = device;
 
-        let memory_allocator = Mutex::new(Allocator::new(&AllocatorCreateDesc {
+        let memory_allocator = std::sync::Mutex::new(Allocator::new(&AllocatorCreateDesc {
             instance: instance.clone(),
             device: ash_device.clone(),
             physical_device: physical_device.raw,
@@ -312,8 +316,11 @@ impl Device {
             buffer_device_address: false,
         })?);
 
+        let memory_allocator = Arc::new(memory_allocator);
+
         memory_allocator
             .lock()
+            .unwrap()
             .report_memory_leaks(log::Level::Debug);
 
         let shader_compiler = Mutex::new(
@@ -393,13 +400,14 @@ impl Device {
     }
     fn read_pipeline_cache_from_disk() -> Vec<u8> {
         let mut data = Vec::new();
-
-        let file = std::fs::OpenOptions::new()
+        std::fs::OpenOptions::new()
             .create(true)
+            .read(true)
             .write(true)
             .open(VK_PIPELINE_CACHE_FILE)
             .expect("Couldn't create pipeline cache file")
-            .read_to_end(&mut data);
+            .read_to_end(&mut data)
+            .expect("Failed to read pipeline cache file");
 
         log::debug!(
             "Read {} bytes from pipeline cache, {}",
@@ -456,23 +464,29 @@ impl Device {
         self.descriptor_set_layout_cache.lock()
     }
 
-    pub(crate) fn physical_device(&self) -> &PhysicalDevice {
+    pub fn physical_device(&self) -> &PhysicalDevice {
         &self.physical_device
     }
-    pub(crate) fn allocate_memory(
-        &self,
-        desc: AllocationCreateDesc,
-    ) -> gpu_allocator::Result<Allocation> {
-        self.memory_allocator.lock().allocate(&desc)
+    pub fn allocate_memory(&self, desc: AllocationCreateDesc) -> gpu_allocator::Result<Allocation> {
+        self.memory_allocator
+            .lock()
+            .expect("Failed to lock memory allocator")
+            .allocate(&desc)
     }
-    pub(crate) fn free_memory(&self, allocation: Allocation) -> gpu_allocator::Result<()> {
-        self.memory_allocator.lock().free(allocation)
+    pub fn free_memory(&self, allocation: Allocation) -> gpu_allocator::Result<()> {
+        self.memory_allocator
+            .lock()
+            .expect("Failed to lock memory allocator")
+            .free(allocation)
+    }
+    pub fn allocator(&self) -> &Arc<std::sync::Mutex<Allocator>> {
+        &self.memory_allocator
     }
 
-    pub(crate) fn graphics_queue(&self) -> vk::Queue {
+    pub fn graphics_queue(&self) -> vk::Queue {
         unsafe { self.raw().get_device_queue(self.unified_queue_ix, 0) }
     }
-    pub(crate) fn present_queue(&self) -> vk::Queue {
+    pub fn present_queue(&self) -> vk::Queue {
         unsafe { self.raw().get_device_queue(self.present_queue_ix, 0) }
     }
     pub(crate) unsafe fn submit_commands_immediate(

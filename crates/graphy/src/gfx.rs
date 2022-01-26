@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::ops::DerefMut;
 use std::sync::Arc;
 
 #[macro_export]
@@ -110,6 +111,8 @@ unsafe extern "system" fn vulkan_debug_callback(
 
 pub struct Gfx {
     device: Arc<crate::Device>,
+    surface: vk::SurfaceKHR,
+    surface_loader: Surface,
     swapchain: Arc<Mutex<Swapchain>>, //
     entry: ash::Entry,                //
 }
@@ -196,12 +199,22 @@ impl Gfx {
         let device =
             crate::Device::create(&entry, instance, &surface, &surface_loader, config.features)?;
 
-        let swapchain = crate::Swapchain::create(&device, window, &surface, surface_loader)?;
+        let window_size = window.inner_size();
+        let swapchain = crate::Swapchain::create(
+            &device,
+            window_size.width,
+            window_size.height,
+            &surface,
+            &surface_loader,
+            None,
+        )?;
         let swapchain = Arc::new(Mutex::new(swapchain));
 
         Ok(Self {
             entry,
             device,
+            surface,
+            surface_loader,
             swapchain,
         })
     }
@@ -209,8 +222,31 @@ impl Gfx {
         //log::debug!("{}", Arc::strong_count(&self.device) + Arc::weak_count(&self.device));
         &self.device
     }
-    pub(crate) fn swapchain(&self) -> &Arc<Mutex<Swapchain>> {
+    pub fn swapchain(&self) -> &Arc<Mutex<Swapchain>> {
         &self.swapchain
+    }
+    pub fn resize(
+        &mut self,
+        new_width: u32,
+        new_height: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        unsafe {
+            self.device.raw().device_wait_idle()?;
+        };
+        let mut swapchain = self.swapchain().lock();
+        let new_swapchain = Swapchain::create(
+            &self.device,
+            new_width,
+            new_height,
+            &self.surface,
+            &self.surface_loader,
+            Some(swapchain.inner),
+        )?;
+        let old_swapchain = std::mem::replace(swapchain.deref_mut(), new_swapchain);
+
+        log::debug!("Resized swapchain width: {new_width} height: {new_height}");
+
+        Ok(())
     }
 }
 impl Drop for Gfx {

@@ -5,7 +5,6 @@ use ash::{
     prelude::VkResult,
     vk::{self, SurfaceFormatKHR},
 };
-use winit::window::Window;
 
 use crate::{
     renderpass::PhysicalRenderpass,
@@ -14,7 +13,7 @@ use crate::{
 
 pub struct Swapchain {
     device: Arc<crate::device::Device>,
-    inner: vk::SwapchainKHR,
+    pub(crate) inner: vk::SwapchainKHR,
     loader: ash::extensions::khr::Swapchain,
     images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
@@ -29,38 +28,35 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn create(
+    pub(crate) fn create(
         device: &Arc<crate::Device>,
-        window: &Window,
+        width: u32,
+        height: u32,
         surface: &vk::SurfaceKHR,
-        surface_loader: Surface,
+        surface_loader: &Surface,
+        old_swapchain: Option<vk::SwapchainKHR>,
     ) -> Result<Swapchain, Box<dyn std::error::Error>> {
         let physical_device = device.physical_device();
 
-        let present_mode = Self::choose_present_mode(&physical_device.swapchain_support_details);
+        let swapchain_support_details =
+            physical_device.get_swapchain_support_details(surface, surface_loader)?;
+        let present_mode = Self::choose_present_mode(&swapchain_support_details);
 
-        let surface_format =
-            Self::choose_swapchain_format(&physical_device.swapchain_support_details)?;
+        let surface_format = Self::choose_swapchain_format(&swapchain_support_details);
 
-        let swap_extent =
-            Self::choose_swap_extent(window, &physical_device.swapchain_support_details);
+        let swap_extent = Self::choose_swap_extent(width, height, &swapchain_support_details);
 
-        let mut image_count = physical_device
-            .swapchain_support_details
-            .capabilities
-            .min_image_count
-            + 1;
+        let mut image_count = swapchain_support_details.capabilities.min_image_count + 1;
 
-        let max_image_count = physical_device
-            .swapchain_support_details
-            .capabilities
-            .max_image_count;
+        let max_image_count = swapchain_support_details.capabilities.max_image_count;
         if max_image_count > 0 && image_count > max_image_count {
             image_count = max_image_count;
         }
 
         let swapchain_loader =
             ash::extensions::khr::Swapchain::new(device.instance(), device.raw());
+
+        let old_swapchain_vk = old_swapchain.unwrap_or(vk::SwapchainKHR::null());
 
         let mut swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
             .surface(*surface)
@@ -71,13 +67,9 @@ impl Swapchain {
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(present_mode)
             .image_extent(swap_extent)
-            .pre_transform(
-                physical_device
-                    .swapchain_support_details
-                    .capabilities
-                    .current_transform,
-            )
-            .clipped(true);
+            .pre_transform(swapchain_support_details.capabilities.current_transform)
+            .clipped(true)
+            .old_swapchain(old_swapchain_vk);
 
         let queue_family_indices = [device.unified_queue_ix, device.present_queue_ix];
 
@@ -113,14 +105,13 @@ impl Swapchain {
 
         let image_views = Self::create_image_views(device, &images, surface_format.format)?;
 
-        let (renderpass, framebuffers) = Self::create_render_pass_and_framebuffer(
+        let renderpass = Self::create_renderpass(
             device,
-            swap_extent.width,
-            swap_extent.height,
-            &image_views,
             surface_format.format,
             &depth_stencil_image,
         )?;
+
+        let framebuffers = Self::create_framebuffers(device, width, height, &image_views, &depth_stencil_image, renderpass.pass)?;
 
         log::debug!("Created swapchain");
 
@@ -138,14 +129,11 @@ impl Swapchain {
             framebuffers,
         })
     }
-    fn create_render_pass_and_framebuffer(
+    fn create_renderpass(
         device: &Arc<crate::Device>,
-        width: u32,
-        height: u32,
-        color_images: &[vk::ImageView],
         color_format: vk::Format,
         depth_stencil_image: &SampledImage,
-    ) -> VkResult<(PhysicalRenderpass, Vec<vk::Framebuffer>)> {
+    ) -> VkResult<PhysicalRenderpass> {
         let create_info = vk::RenderPassCreateInfo::builder();
 
         let attachments = [
@@ -189,20 +177,6 @@ impl Swapchain {
 
         let pass = unsafe { device.raw().create_render_pass(&create_info, None)? };
 
-        let mut framebuffers = Vec::new();
-        for &color_image in color_images {
-            let attachments = [color_image, depth_stencil_image.image_view(1).unwrap()];
-
-            let create_info = vk::FramebufferCreateInfo::builder()
-                .render_pass(pass)
-                .attachments(&attachments)
-                .width(width)
-                .height(height)
-                .layers(1);
-
-            framebuffers.push(unsafe { device.raw().create_framebuffer(&create_info, None)? });
-        }
-
         let clear_values = vec![
             vk::ClearValue {
                 color: vk::ClearColorValue {
@@ -222,7 +196,24 @@ impl Swapchain {
             clear_values,
         };
 
-        Ok((renderpass, framebuffers))
+        Ok(renderpass)
+    }
+    fn create_framebuffers(device: &Arc<crate::Device>, width: u32, height: u32, color_images: &[vk::ImageView], depth_stencil_image: &SampledImage, pass: vk::RenderPass) -> VkResult<Vec<vk::Framebuffer>> {
+        let mut framebuffers = Vec::new();
+        for &color_image in color_images {
+            let attachments = [color_image, depth_stencil_image.image_view(1).unwrap()];
+
+            let create_info = vk::FramebufferCreateInfo::builder()
+                .render_pass(pass)
+                .attachments(&attachments)
+                .width(width)
+                .height(height)
+                .layers(1);
+
+            framebuffers.push(unsafe { device.raw().create_framebuffer(&create_info, None)? });
+        }
+
+        Ok(framebuffers)
     }
     fn choose_present_mode(
         swapchain_support_details: &crate::device::SwapchainSupportDetails,
@@ -230,7 +221,7 @@ impl Swapchain {
         let mailbox_supported = swapchain_support_details
             .present_modes
             .iter()
-            .any(|&mode| mode == vk::PresentModeKHR::FIFO);
+            .any(|&mode| mode == vk::PresentModeKHR::MAILBOX);
 
         if mailbox_supported {
             vk::PresentModeKHR::MAILBOX
@@ -240,7 +231,7 @@ impl Swapchain {
     }
     fn choose_swapchain_format(
         swapchain_support_details: &crate::device::SwapchainSupportDetails,
-    ) -> Result<&SurfaceFormatKHR, String> {
+    ) -> &SurfaceFormatKHR {
         log::debug!("Supported Swapchain formats");
         swapchain_support_details
             .formats
@@ -251,23 +242,23 @@ impl Swapchain {
             .formats
             .iter()
             .find(|format| format.format == vk::Format::B8G8R8A8_UNORM)
-            .ok_or_else(|| "B8G8R8A8_UNORM surface format is not supported by device".into())
+            .expect("B8G8R8A8_UNORM surface format is not supported by device")
     }
     fn choose_swap_extent(
-        window: &Window,
+        width: u32,
+        height: u32,
         swapchain_support_details: &crate::device::SwapchainSupportDetails,
     ) -> vk::Extent2D {
         let capabilities = &swapchain_support_details.capabilities;
         if capabilities.current_extent.width != u32::MAX {
             capabilities.current_extent
         } else {
-            let physical_size = window.inner_size();
             vk::Extent2D::builder()
-                .width(physical_size.width.clamp(
+                .width(width.clamp(
                     capabilities.min_image_extent.width,
                     capabilities.max_image_extent.width,
                 ))
-                .height(physical_size.height.clamp(
+                .height(height.clamp(
                     capabilities.min_image_extent.height,
                     capabilities.max_image_extent.height,
                 ))
@@ -278,7 +269,7 @@ impl Swapchain {
         device: &crate::device::Device,
         images: &[vk::Image],
         format: vk::Format,
-    ) -> Result<Vec<vk::ImageView>, Box<dyn std::error::Error>> {
+    ) -> VkResult<Vec<vk::ImageView>> {
         let mut image_views = Vec::new();
         for image in images {
             let create_info = vk::ImageViewCreateInfo::builder()
@@ -315,8 +306,8 @@ impl Swapchain {
     pub fn color_format(&self) -> vk::Format {
         self.format
     }
-    pub fn depth_format(&self) -> vk::Format {
-        self.depth_image.config().format
+    pub const fn depth_format() -> vk::Format {
+        vk::Format::D24_UNORM_S8_UINT
     }
     pub fn images(&self) -> &[vk::ImageView] {
         &self.image_views
@@ -355,6 +346,9 @@ impl Swapchain {
             self.loader
                 .queue_present(self.device.present_queue(), &present_info)
         }
+    }
+    pub fn resize(&mut self, new_width: u32, new_height: u32) -> VkResult<()> {
+        todo!()
     }
     pub fn width(&self) -> u32 {
         self.width
