@@ -65,6 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         rg::GfxConfig {
             debug: true,
             features: rg::Features::default(),
+            ..Default::default()
         },
     )?;
 

@@ -221,7 +221,7 @@ vec4 fxaa(){
 	// Read the color at the new UV coordinates, and use it.
 	vec3 finalColor = textureLod(color,finalUv, 0.0).rgb;
 
-    return vec4(finalColor,1.0);
+    return vec4(finalColor, 1.0);
 }
 
 void main() {    

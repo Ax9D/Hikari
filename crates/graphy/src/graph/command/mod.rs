@@ -142,7 +142,7 @@ impl DescriptorState {
         });
         if let Some((start, len)) = self.push_constant_update_range {
             //println!("{:?}", &self.push_constant_data[start..len]);
-
+            hikari_dev::profile_scope!("Push Constants");
             unsafe {
                 device.raw().cmd_push_constants(
                     cmd,
@@ -267,6 +267,7 @@ impl<'a> CommandBuffer<'a> {
         RenderpassCommands::new(self, begin_info)
     }
     pub(crate) fn reset(&mut self) -> VkResult<()> {
+        hikari_dev::profile_function!();
         self.saved_state.descriptor_state.reset();
 
         unsafe {

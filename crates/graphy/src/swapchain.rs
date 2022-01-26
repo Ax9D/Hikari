@@ -35,12 +35,13 @@ impl Swapchain {
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
         old_swapchain: Option<vk::SwapchainKHR>,
+        vsync: bool
     ) -> Result<Swapchain, Box<dyn std::error::Error>> {
         let physical_device = device.physical_device();
 
         let swapchain_support_details =
             physical_device.get_swapchain_support_details(surface, surface_loader)?;
-        let present_mode = Self::choose_present_mode(&swapchain_support_details);
+        let present_mode = Self::choose_present_mode(&swapchain_support_details, vsync);
 
         let surface_format = Self::choose_swapchain_format(&swapchain_support_details);
 
@@ -217,16 +218,22 @@ impl Swapchain {
     }
     fn choose_present_mode(
         swapchain_support_details: &crate::device::SwapchainSupportDetails,
+        vsync: bool
     ) -> vk::PresentModeKHR {
         let mailbox_supported = swapchain_support_details
             .present_modes
             .iter()
             .any(|&mode| mode == vk::PresentModeKHR::MAILBOX);
 
-        if mailbox_supported {
-            vk::PresentModeKHR::MAILBOX
-        } else {
-            vk::PresentModeKHR::FIFO
+        if vsync {
+            if mailbox_supported {
+                vk::PresentModeKHR::MAILBOX
+            } else {
+                vk::PresentModeKHR::FIFO
+            }
+        }
+        else {
+            vk::PresentModeKHR::IMMEDIATE
         }
     }
     fn choose_swapchain_format(
@@ -346,9 +353,6 @@ impl Swapchain {
             self.loader
                 .queue_present(self.device.present_queue(), &present_info)
         }
-    }
-    pub fn resize(&mut self, new_width: u32, new_height: u32) -> VkResult<()> {
-        todo!()
     }
     pub fn width(&self) -> u32 {
         self.width

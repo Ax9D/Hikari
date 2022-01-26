@@ -111,6 +111,7 @@ unsafe extern "system" fn vulkan_debug_callback(
 
 pub struct Gfx {
     device: Arc<crate::Device>,
+    vsync: bool,
     surface: vk::SurfaceKHR,
     surface_loader: Surface,
     swapchain: Arc<Mutex<Swapchain>>, //
@@ -207,6 +208,7 @@ impl Gfx {
             &surface,
             &surface_loader,
             None,
+            config.vsync
         )?;
         let swapchain = Arc::new(Mutex::new(swapchain));
 
@@ -216,7 +218,21 @@ impl Gfx {
             surface,
             surface_loader,
             swapchain,
+            vsync: config.vsync
         })
+    }
+    pub fn set_vsync(&mut self, vsync: bool) {
+        if self.vsync != vsync {
+            let (width, height) = {
+                let swapchain = self.swapchain().lock();
+                let width = swapchain.width();
+                let height = swapchain.height(); 
+
+                (width, height)
+            };
+            self.vsync = vsync;
+            self.resize(width, height).unwrap();
+        }
     }
     pub fn device(&self) -> &Arc<crate::Device> {
         //log::debug!("{}", Arc::strong_count(&self.device) + Arc::weak_count(&self.device));
@@ -241,6 +257,7 @@ impl Gfx {
             &self.surface,
             &self.surface_loader,
             Some(swapchain.inner),
+            self.vsync
         )?;
         let old_swapchain = std::mem::replace(swapchain.deref_mut(), new_swapchain);
 
@@ -258,4 +275,5 @@ impl Drop for Gfx {
 pub struct GfxConfig {
     pub debug: bool,
     pub features: crate::Features,
+    pub vsync: bool
 }

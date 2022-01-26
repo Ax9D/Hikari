@@ -432,6 +432,7 @@ impl PipelineState {
         n_color_attachments: usize,
     ) -> vk::Pipeline {
         hikari_dev::profile_function!();
+        let now = std::time::Instant::now();
 
         let pipeline_cache = device.pipeline_cache();
 
@@ -486,9 +487,12 @@ impl PipelineState {
 
         log::debug!("Creating pipeline: {:#?}", self);
         let create_infos = [*create_info];
-        device
+        let pipeline = device
             .raw()
             .create_graphics_pipelines(pipeline_cache, &create_infos, None)
-            .unwrap()[0]
+            .unwrap()[0];
+
+        log::debug!("Pipeline creation took: {:?}", now.elapsed());
+        pipeline
     }
 }

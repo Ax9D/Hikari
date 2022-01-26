@@ -90,6 +90,13 @@ impl Projection {
         }
     }
 }
+
+struct Args<'imgui> {
+    draw_data: &'imgui imgui::DrawData,
+    fxaa: bool,
+    width: u32, 
+    height: u32
+}
 struct Camera {
     transform: Transform,
     near: f32,
@@ -231,7 +238,7 @@ fn load_mesh(
 
 fn pbr_pass(
     device: &Arc<rg::Device>,
-    gb: &mut rg::GraphBuilder<Scene, imgui::DrawData, ()>,
+    gb: &mut rg::GraphBuilder<Scene, Args, ()>,
 ) -> rg::Handle<rg::SampledImage> {
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
@@ -387,6 +394,8 @@ fn pbr_pass(
 
                 cmd.set_uniform_buffer(ubo.get(), 0..1, 0, 0);
 
+                {
+                hikari_dev::profile_scope!("Render scene");
                 for object in &scene.objects {
                     let transform = glam::Mat4::from_scale_rotation_translation(
                         object.transform.scale,
@@ -395,9 +404,11 @@ fn pbr_pass(
                     );
                     let model = &object.model;
                     for mesh in &model.meshes {
+                        {
+                        hikari_dev::profile_scope!("Set vertex and index buffers");
                         cmd.set_vertex_buffer(&mesh.vertices, 0);
                         cmd.set_index_buffer(&mesh.indices);
-
+                        }
                         let material = Material {
                             albedo: mesh.material.albedo_factor,
                             roughness: mesh.material.roughness_factor,
@@ -435,7 +446,7 @@ fn pbr_pass(
                         cmd.draw_indexed(0..mesh.indices.len(), 0, 0..1);
                     }
                 }
-
+                }
                 ubo.next_frame();
             },
         )
@@ -448,7 +459,7 @@ fn pbr_pass(
 fn fxaa_pass(
     device: &Arc<rg::Device>,
     pbr_pass: rg::Handle<rg::SampledImage>,
-    gb: &mut rg::GraphBuilder<Scene, imgui::DrawData, ()>,
+    gb: &mut rg::GraphBuilder<Scene, Args, ()>,
 ) -> rg::Handle<rg::SampledImage> {
     let vertex = r"
     #version 450
@@ -497,8 +508,8 @@ fn fxaa_pass(
     #[repr(C)]
     #[derive(Copy, Clone)]
     struct PushConstants {
-        enabled: i32,
         res: glam::Vec2,
+        enabled: i32,
     }
     let output = gb
         .create_image(
@@ -508,13 +519,13 @@ fn fxaa_pass(
         )
         .expect("Failed to create fxaa output");
     gb.add_renderpass(
-        rg::Renderpass::new("FXAA", rg::ImageSize::default(), move |cmd, _, _, _| {
+        rg::Renderpass::new("FXAA", rg::ImageSize::default(), move |cmd, _, args: &Args, _| {
             cmd.set_shader(&shader);
 
             cmd.push_constants(
                 &PushConstants {
-                    res: glam::vec2(WIDTH as f32, HEIGHT as f32),
-                    enabled: 1,
+                    res: glam::vec2(args.width as f32, args.height as f32),
+                    enabled: args.fxaa as _,
                 },
                 0,
             );
@@ -534,7 +545,7 @@ fn fxaa_pass(
 fn imgui_pass(
     device: &Arc<rg::Device>,
     imgui: &mut rg::imgui_support::Backend,
-    gb: &mut rg::GraphBuilder<Scene, imgui::DrawData, ()>,
+    gb: &mut rg::GraphBuilder<Scene, Args, ()>,
 ) -> rg::Handle<rg::SampledImage> {
     let mut renderer =
         rg::imgui_support::Renderer::new(device, imgui, rg::vk::Format::R8G8B8A8_UNORM, false)
@@ -551,9 +562,9 @@ fn imgui_pass(
         rg::Renderpass::new(
             "ImguiRenderer",
             rg::ImageSize::default(),
-            move |cmd, _: &Scene, draw_data: &imgui::DrawData, _| {
+            move |cmd, _: &Scene, args: &Args, _| {
                 renderer
-                    .render(cmd.raw(), draw_data)
+                    .render(cmd.raw(), args.draw_data)
                     .expect("Failed to render imgui");
             },
         )
@@ -584,15 +595,18 @@ fn transform_controls(ui: &imgui::Ui, transform: &mut Transform) {
     imgui::Drag::new("scale").build_array(ui, &mut scale);
     transform.scale = scale.into();
 }
-fn imgui_update(ui: &imgui::Ui, scene: &mut Scene) {
+fn imgui_update(ui: &imgui::Ui, scene: &mut Scene, vsync: &mut bool, fxaa: &mut bool) {
     //ui.show_demo_window(&mut true);
 
     ui.window("Camera").build(|| {
         transform_controls(ui, &mut scene.camera.transform);
         imgui::Drag::new("near").build(ui, &mut scene.camera.near);
         imgui::Drag::new("far").build(ui, &mut scene.camera.far);
-
+        
         imgui::Drag::new("exposure").build(ui, &mut scene.camera.exposure);
+        
+        ui.checkbox("vsync", vsync);
+        ui.checkbox("fxaa", fxaa);
     });
 
     ui.window("Light").build(|| {
@@ -604,7 +618,7 @@ fn composite_pass(
     device: &Arc<rg::Device>,
     pbr_output: rg::Handle<rg::SampledImage>,
     imgui_output: rg::Handle<rg::SampledImage>,
-    gb: &mut rg::GraphBuilder<Scene, imgui::DrawData, ()>,
+    gb: &mut rg::GraphBuilder<Scene, Args, ()>,
 ) {
     let vertex = r"
     #version 450
@@ -666,7 +680,7 @@ fn composite_pass(
         rg::Renderpass::new(
             "CompositePass",
             rg::ImageSize::default(),
-            move |cmd, _: &Scene, _: &imgui::DrawData, _| {
+            move |cmd, _: &Scene, _: &Args, _| {
                 cmd.set_shader(&shader);
                 // cmd.set_blend_state(rg::BlendState {
                 //     enabled: true,
@@ -721,13 +735,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         }]);
 
+    let mut vsync = true;
     let mut gfx = rg::Gfx::new(
         &window,
         rg::GfxConfig {
             debug: true,
             features: rg::Features::default(),
+            vsync,
+            ..Default::default()
         },
     )?;
+
+
     let device = gfx.device().clone();
     let mut gb = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 
@@ -755,6 +774,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
     let mut dt = 0.0;
+    let mut fxaa = true;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
@@ -765,10 +785,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let now = std::time::Instant::now();
 
                 let draw_data = imgui.new_frame(&window, |ui| {
-                    imgui_update(ui, &mut scene);
+                    imgui_update(ui, &mut scene, &mut vsync, &mut fxaa);
                 });
 
-                graph.execute(&mut gfx, &scene, draw_data, &()).unwrap();
+                // I hate this too, but winit won't allow me to get a non static reference to DrawData
+                // I don't understand what the problem here is
+                let draw_data = unsafe { std::mem::transmute(draw_data) };
+
+                gfx.set_vsync(vsync);
+
+                graph.execute(&mut gfx, &scene, &Args {
+                    draw_data,
+                    fxaa,
+                    width: window.inner_size().width,
+                    height: window.inner_size().height
+                }, &()).unwrap();
+                
                 //scene.objects[0].position.y += 1.0 * dt;
                 dt = now.elapsed().as_secs_f32();
                 hikari_dev::finish_frame!();
