@@ -54,15 +54,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "approx"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f2a05fd1bd10b2527e20a2cd32d8873d115b8b39fe219ee25f42a8aca6ba278"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "arrayvec"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -86,17 +77,6 @@ dependencies = [
  "ash",
  "raw-window-handle",
  "raw-window-metal",
-]
-
-[[package]]
-name = "atty"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
-dependencies = [
- "hermit-abi",
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -185,14 +165,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "cgmath"
-version = "0.18.0"
+name = "chlorine"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a98d30140e3296250832bbaaff83b27dcd6fa3cc70fb6f1f3e5c9c0023b5317"
-dependencies = [
- "approx",
- "num-traits",
-]
+checksum = "75476fe966a8af7c0ceae2a3e514afa87d4451741fcdfab8bfaa07ad301842ec"
 
 [[package]]
 name = "cmake"
@@ -239,17 +215,6 @@ name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
-
-[[package]]
-name = "colored"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4ffc801dacf156c5854b9df4f425a626539c3a6ef7893cc0c5084a23f0b6c59"
-dependencies = [
- "atty",
- "lazy_static",
- "winapi",
-]
 
 [[package]]
 name = "const-cstr"
@@ -538,18 +503,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
-name = "easy-gltf"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7430cd5a62430be6cc0823b1d0ba2bf6cbf2dae38cc7c0cea8f158a67e517e5a"
-dependencies = [
- "base64 0.13.0",
- "cgmath",
- "gltf",
- "image",
-]
-
-[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -657,9 +610,9 @@ dependencies = [
 
 [[package]]
 name = "gpu-allocator"
-version = "0.14.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8108d917958ca536e7bd47ff1a77a9b1721ddaf48a9a47f6b04d10da9431d4e2"
+checksum = "f82bf43581ac956c5f9245baf8e9a10ca25ace4f188e6e453cab354bd1a2a7c5"
 dependencies = [
  "ash",
  "backtrace",
@@ -676,19 +629,19 @@ dependencies = [
  "ash",
  "ash-window",
  "bitflags",
- "bytemuck",
  "const-cstr",
  "crossterm",
  "fxhash",
- "glam",
  "gpu-allocator",
  "hikari-dev",
+ "imgui",
+ "imgui-rs-vulkan-renderer",
+ "imgui-winit-support",
  "log",
  "lru",
  "parking_lot",
  "puffin",
  "shaderc",
- "simple_logger",
  "spirv-reflect",
  "thiserror",
  "vec_map",
@@ -719,7 +672,6 @@ name = "hikari-asset"
 version = "0.1.0"
 dependencies = [
  "base64 0.13.0",
- "easy-gltf",
  "glam",
  "gltf",
  "graphy",
@@ -761,6 +713,52 @@ dependencies = [
  "png",
  "scoped_threadpool",
  "tiff",
+]
+
+[[package]]
+name = "imgui"
+version = "0.8.1-alpha.0"
+source = "git+https://github.com/Ax9D/imgui-docking-rs#e5d2ffa5ad1dbb201526a08af23fdc82085c6f24"
+dependencies = [
+ "bitflags",
+ "cfg-if 1.0.0",
+ "imgui-sys",
+ "mint",
+ "parking_lot",
+]
+
+[[package]]
+name = "imgui-rs-vulkan-renderer"
+version = "1.1.0"
+source = "git+https://github.com/Ax9D/imgui-rs-vulkan-renderer-fork#158e1aa8bb2a2606fda5e1681acacec4ed4ddbc1"
+dependencies = [
+ "ash",
+ "gpu-allocator",
+ "imgui",
+ "log",
+ "thiserror",
+ "ultraviolet",
+]
+
+[[package]]
+name = "imgui-sys"
+version = "0.8.1-alpha.0"
+source = "git+https://github.com/Ax9D/imgui-docking-rs#e5d2ffa5ad1dbb201526a08af23fdc82085c6f24"
+dependencies = [
+ "cc",
+ "cfg-if 1.0.0",
+ "chlorine",
+ "mint",
+ "pkg-config",
+]
+
+[[package]]
+name = "imgui-winit-support"
+version = "0.8.1-alpha.0"
+source = "git+https://github.com/Ax9D/imgui-docking-rs#e5d2ffa5ad1dbb201526a08af23fdc82085c6f24"
+dependencies = [
+ "imgui",
+ "winit",
 ]
 
 [[package]]
@@ -924,6 +922,12 @@ dependencies = [
  "adler",
  "autocfg",
 ]
+
+[[package]]
+name = "mint"
+version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "162e591484b4b8fe9e1ca16ebf07ab584fdc3334508d76a788cd54d89cfc20dc"
 
 [[package]]
 name = "mio"
@@ -1400,6 +1404,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
 
 [[package]]
+name = "safe_arch"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ff3d6d9696af502cc3110dacce942840fb06ff4514cad92236ecc455f2ce05"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1492,19 +1505,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e51e73328dc4ac0c7ccbda3a494dfa03df1de2f46018127f60c693f2648455b0"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "simple_logger"
-version = "1.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45b60258a35dc3cb8a16890b8fd6723349bfa458d7960e25e633f1b1c19d7b5e"
-dependencies = [
- "atty",
- "colored",
- "log",
- "time",
- "winapi",
 ]
 
 [[package]]
@@ -1605,23 +1605,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "time"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41effe7cfa8af36f439fac33861b66b049edc6f9a32331e2312660529c1c24ad"
-dependencies = [
- "itoa",
- "libc",
- "time-macros",
-]
-
-[[package]]
-name = "time-macros"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25eb0ca3468fc0acc11828786797f6ef9aa1555e4a211a60d64cc8e4d1be47d6"
-
-[[package]]
 name = "toml"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1635,6 +1618,15 @@ name = "ttf-parser"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e5d7cd7ab3e47dda6e56542f4bbf3824c15234958c6e1bd6aaa347e93499fdc"
+
+[[package]]
+name = "ultraviolet"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16b9e3507eba17043af05c8a72fce3ec2c24b58945f45732e71dbc6646d904a7"
+dependencies = [
+ "wide",
+]
 
 [[package]]
 name = "unicode-xid"
@@ -1657,6 +1649,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 [[package]]
 name = "vk-sync-fork"
 version = "0.3.0"
+source = "git+https://github.com/expenses/vk-sync-rs?rev=c201a64#c201a64770704a21a7d185b24dbe00b6c50a6e5e"
 dependencies = [
  "ash",
 ]
@@ -1756,6 +1749,16 @@ name = "weezl"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a32b378380f4e9869b22f0b5177c68a5519f03b3454fde0b291455ddbae266c"
+
+[[package]]
+name = "wide"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46bbe7c604a27ca0b05c5503221e76da628225b568e6f1280b42dbad3b72d89b"
+dependencies = [
+ "bytemuck",
+ "safe_arch",
+]
 
 [[package]]
 name = "winapi"

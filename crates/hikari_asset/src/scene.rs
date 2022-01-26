@@ -2,9 +2,9 @@ use std::path::Path;
 
 use crate::{error, mesh::MeshFormat};
 pub struct Scene {
-    pub(crate) textures: Vec<crate::Texture>,
-    pub(crate) materials: Vec<crate::Material>,
-    pub(crate) models: Vec<crate::Model>,
+    pub textures: Vec<crate::Texture>,
+    pub materials: Vec<crate::Material>,
+    pub models: Vec<crate::Model>,
 }
 impl Scene {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, crate::Error> {
@@ -23,14 +23,5 @@ impl Scene {
                 todo!()
             }
         }
-    }
-    pub fn textures(&self) -> std::slice::Iter<'_, crate::Texture> {
-        self.textures.iter()
-    }
-    pub fn materials(&self) -> std::slice::Iter<'_, crate::Material> {
-        self.materials.iter()
-    }
-    pub fn models(&self) -> std::slice::Iter<'_, crate::Model> {
-        self.models.iter()
     }
 }

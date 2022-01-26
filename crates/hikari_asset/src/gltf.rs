@@ -64,11 +64,11 @@ fn parse_texture_data(
             match mime_type {
                 "image/jpeg" => Ok(crate::image::load_from_data(
                     data,
-                    crate::image::ImageFormat::Jpeg,
+                    image::ImageFormat::Jpeg,
                 )?),
                 "image/png" => Ok(crate::image::load_from_data(
                     data,
-                    crate::image::ImageFormat::Png,
+                    image::ImageFormat::Png,
                 )?),
                 _ => Err(crate::error::Error::UnsupportedImageFormat(
                     mime_type.split(r"/").last().unwrap().to_string(),
@@ -99,11 +99,11 @@ fn parse_texture_data(
                 match mime_type {
                     "image/jpeg" => Ok(crate::image::load_from_data(
                         &data,
-                        crate::image::ImageFormat::Jpeg,
+                        image::ImageFormat::Jpeg,
                     )?),
                     "image/png" => Ok(crate::image::load_from_data(
                         &data,
-                        crate::image::ImageFormat::Png,
+                        image::ImageFormat::Png,
                     )?),
                     _ => Err(crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
@@ -120,11 +120,11 @@ fn parse_texture_data(
                 match mime_type {
                     "image/jpeg" => Ok(crate::image::load_from_file_with_format(
                         &path,
-                        crate::image::ImageFormat::Jpeg,
+                        image::ImageFormat::Jpeg,
                     )?),
                     "image/png" => Ok(crate::image::load_from_file_with_format(
                         &path,
-                        crate::image::ImageFormat::Png,
+                        image::ImageFormat::Png,
                     )?),
                     _ => Err(crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
@@ -149,6 +149,14 @@ fn load_texture_data(
 ) -> Result<Texture, Box<dyn std::error::Error>> {
     let (data, width, height) = parse_texture_data(texture, gltf)?;
 
+    let is_albedo = gltf.document().materials().find(|mat| {
+        if let Some(albedo) = mat.pbr_metallic_roughness().base_color_texture() {
+            albedo.texture().index() == texture.index()
+        } else {
+            false
+        }
+    });
+
     let wrap_x = match texture.sampler().wrap_s() {
         gltf::texture::WrappingMode::ClampToEdge => graphy::texture::WrapMode::Clamp,
         gltf::texture::WrappingMode::MirroredRepeat => graphy::texture::WrapMode::Repeat,
@@ -170,11 +178,18 @@ fn load_texture_data(
         .mag_filter()
         .unwrap_or(gltf::texture::MagFilter::Linear);
 
-    let filtering = if mag_filter == gltf::texture::MagFilter::Linear {
-        graphy::texture::FilterMode::Linear
-    } else {
-        graphy::texture::FilterMode::Closest
+    let filtering = match mag_filter {
+        gltf::texture::MagFilter::Nearest => graphy::texture::FilterMode::Closest,
+        gltf::texture::MagFilter::Linear => graphy::texture::FilterMode::Linear,
     };
+
+    let generate_mips = match min_filter {
+        gltf::texture::MinFilter::NearestMipmapNearest |
+        gltf::texture::MinFilter::NearestMipmapLinear |
+        gltf::texture::MinFilter::LinearMipmapNearest |
+        gltf::texture::MinFilter::LinearMipmapLinear => true,
+        _=> false
+    } && is_albedo.is_some();
 
     let name = texture
         .name()
@@ -184,16 +199,8 @@ fn load_texture_data(
     //println!("Loading texture {}", name);
 
     //Albedo textures are treated as SRGB
-    let is_albedo = gltf.document().materials().find(|mat| {
-        if let Some(albedo) = mat.pbr_metallic_roughness().base_color_texture() {
-            albedo.texture().index() == texture.index()
-        } else {
-            false
-        }
-    });
-
     let format = if is_albedo.is_some() {
-        graphy::texture::Format::SRGBA
+        graphy::texture::Format::RGBA8
     } else {
         graphy::texture::Format::RGBA8
     };
@@ -204,6 +211,7 @@ fn load_texture_data(
         height,
         data,
         filtering,
+        generate_mips,
         wrap_x,
         wrap_y,
         format,
