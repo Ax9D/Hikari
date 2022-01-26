@@ -1,4 +1,7 @@
-use std::collections::{hash_map::Values, HashMap};
+use std::{
+    collections::{hash_map::Values, HashMap},
+    sync::Arc,
+};
 
 use crate::texture::SampledImage;
 
@@ -58,13 +61,30 @@ impl GraphResources {
     //     self.storage.get_list().unwrap()
     // }
 
-    pub(crate) fn replace_image(
+    // pub(crate) fn replace_image(
+    //     &mut self,
+    //     handle: &Handle<SampledImage>,
+    //     new_image: SampledImage,
+    // ) -> Option<SampledImage> {
+    //     self.images
+    //     .get_mut(handle)
+    //     .map(|image| std::mem::replace(image, new_image))
+    // }
+    pub fn resize_images(
         &mut self,
-        handle: &Handle<SampledImage>,
-        new_image: SampledImage,
-    ) -> Option<SampledImage> {
-        self.images
-            .get_mut(handle)
-            .map(|image| std::mem::replace(image, new_image))
+        device: &Arc<crate::Device>,
+        new_width: u32,
+        new_height: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        for handle in self.img_handles.values() {
+            let (image, size) = self.images.get_with_metadata_mut(handle).unwrap();
+            let config = image.config().clone();
+            let (new_width, new_height) = size.get_physical_size((new_width, new_height));
+            let new_image = SampledImage::with_dimensions(device, new_width, new_height, config)?;
+
+            let old_image = std::mem::replace(image, new_image);
+        }
+
+        Ok(())
     }
 }

@@ -109,12 +109,12 @@ impl SampledImage {
             .mipmap_mode(vkconfig.mip_filtering)
             .compare_op(vk::CompareOp::NEVER)
             .min_lod(0.0)
-            .max_lod(0.0)
+            .max_lod(0.0) // initial value
             .border_color(vk::BorderColor::INT_OPAQUE_WHITE)
-            .anisotropy_enable(false)
+            .anisotropy_enable(false) // initial value
             .address_mode_u(vkconfig.wrap_x)
             .address_mode_v(vkconfig.wrap_y)
-            .max_anisotropy(1.0);
+            .max_anisotropy(16.0);
 
         if vkconfig.mip_levels > 1 {
             create_info.max_lod = vkconfig.mip_levels as f32;
@@ -283,7 +283,6 @@ impl SampledImage {
         unsafe {
             let slice = staging_buffer.mapped_slice_mut();
 
-            
             slice.copy_from_slice(data);
         }
         unsafe {

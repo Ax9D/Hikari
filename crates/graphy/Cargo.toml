@@ -23,7 +23,7 @@ crossterm = "0.19.0"
 ash = "0.35.0"
 ash-window = "0.9.0"
 winit = {version = "0.25.0", features = ["x11"] }
-gpu-allocator = "0.14.0"
+gpu-allocator = "0.15.0"
 shaderc = "0.7.3"
 spirv-reflect = "0.2.3"
 vk-sync-fork = { git = "https://github.com/expenses/vk-sync-rs", rev = "c201a64"}
@@ -35,11 +35,11 @@ parking_lot = "0.11.1"
 lru = "0.7.0"
 fxhash = {version = "0.2.1"}
 arrayvec = "0.7.1"
-bytemuck = {version = "1.7.2", features = ["derive"]}
 
+imgui = {git = "https://github.com/Ax9D/imgui-docking-rs", features = ["freetype", "docking", "tables-api"], optional = true}
+imgui-rs-vulkan-renderer = { git = "https://github.com/Ax9D/imgui-rs-vulkan-renderer-fork", features = ["gpu-allocator"], optional=true }
+imgui-winit-support = { git = "https://github.com/Ax9D/imgui-docking-rs", optional=true }
 
-imgui-rs-vulkan-renderer = { git = "https://github.com/Ax9D/imgui-rs-vulkan-renderer", optional=true }
-imgui = {git = "https://github.com/Ax9D/imgui-docking-rs", optional = true}
 
 [dev-dependencies]
 simple_logger = "1.16.0"
@@ -57,6 +57,7 @@ debug = true
 
 
 [features]
-imgui-support = ["imgui", "imgui-rs-vulkan-renderer"]
+default = ["imgui-support"]
+imgui-support = ["imgui", "imgui-winit-support", "imgui-rs-vulkan-renderer"]
 profile-tracy = ["hikari-dev/profile-tracy"]
 profile-puffin = ["hikari-dev/profile-puffin"]

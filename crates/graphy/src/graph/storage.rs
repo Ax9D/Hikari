@@ -168,7 +168,10 @@ impl<T: Resource> Storage<T> {
             .map(|(data, metadata)| (data, metadata))
     }
     #[inline]
-    fn get_with_metadata_mut(&mut self, handle: &Handle<T>) -> Option<(&mut T, &mut T::Metadata)> {
+    pub fn get_with_metadata_mut(
+        &mut self,
+        handle: &Handle<T>,
+    ) -> Option<(&mut T, &mut T::Metadata)> {
         self.inner
             .get_mut(handle.id)
             .map(|(data, metadata)| (data, metadata))

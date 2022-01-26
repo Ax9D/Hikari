@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build();
 
     #[repr(C)]
-    #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+    #[derive(Debug, Copy, Clone)]
     struct PushConstants {
         color: [f32; 4],
         position: glam::Vec2,

@@ -119,6 +119,27 @@ impl AllocationData {
 
         Ok(alloc)
     }
+    pub fn resize_framebuffers<S, A, R>(
+        &mut self,
+        device: &Arc<crate::Device>,
+        passes: &[AnyPass<S, A, R>],
+        resources: &GraphResources,
+    ) -> VkResult<()> {
+        self.framebuffers = VecMap::new();
+        self.barriers = VecMap::new();
+
+        for (ix, pass) in passes.iter().enumerate() {
+            if let AnyPass::Render(pass) = pass {
+                if !pass.present_to_swapchain {
+                    //self.create_renderpass(device, pass, ix, resources)?;
+                    self.allocate_framebuffers(device, pass, ix, resources)?;
+                }
+            }
+        }
+        self.create_barriers(device, passes, resources);
+
+        Ok(())
+    }
     fn create_renderpass<S, P, R>(
         &mut self,
         device: &Arc<crate::Device>,
@@ -161,7 +182,7 @@ impl AllocationData {
                             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
                             vk::ClearValue {
                                 color: vk::ClearColorValue {
-                                    float32: [1.0, 0.0, 0.0, 1.0],
+                                    float32: [0.0, 0.0, 0.0, 0.0],
                                 },
                             },
                         )

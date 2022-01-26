@@ -151,7 +151,6 @@ impl<T> Drop for CpuBuffer<T> {
             self.device.raw().destroy_buffer(self.inner, None);
             self.device.free_memory(self.allocation.clone()).unwrap();
         }
-        log::debug!("Dropped CPUBuffer");
     }
 }
 
@@ -273,7 +272,6 @@ impl<T> Drop for GpuBuffer<T> {
             self.device.raw().destroy_buffer(self.inner, None);
             self.device.free_memory(self.allocation.clone()).unwrap();
         }
-        log::debug!("Dropped GPUBuffer");
     }
 }
 
@@ -294,7 +292,7 @@ impl<T: Copy> Buffer for GpuBuffer<T> {
 
 pub struct UniformBuffer<T> {
     inner: [CpuBuffer<T>; 2],
-    frame: usize
+    frame: usize,
 }
 
 impl<T: Copy> UniformBuffer<T> {

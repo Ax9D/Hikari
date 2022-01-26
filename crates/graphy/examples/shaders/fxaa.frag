@@ -1,11 +1,13 @@
 #version 450 core
 
-layout(location = 1) in vec2 tex_coord;
+layout(location = 0) in vec2 tex_coord;
 
 layout(binding = 0) uniform sampler2D  color;
 
-layout(location = 2) uniform uint enabled;
-layout(location = 3) uniform vec2 resolution;
+layout(push_constant) uniform Args {
+	vec2 resolution;
+	int enabled;
+} args;
 
 layout(location = 0) out vec4 outColor;
 
@@ -26,8 +28,8 @@ float rgb2luma(vec3 rgb){
 }
 
 vec4 fxaa(){
-    float screen_width = resolution.x;
-    float screen_height = resolution.y;
+    float screen_width = args.resolution.x;
+    float screen_height = args.resolution.y;
 
     vec2 inverseScreenSize = 1.0/vec2(screen_width,screen_height);
 
@@ -223,7 +225,7 @@ vec4 fxaa(){
 }
 
 void main() {    
-    if(enabled == 1)
+    if(args.enabled == 1)
         outColor = fxaa();
     else   
         outColor = texture(color, tex_coord);

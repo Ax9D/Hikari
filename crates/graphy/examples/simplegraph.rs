@@ -31,7 +31,7 @@ fn triangle_shader(device: &Arc<rg::Device>) -> Arc<rg::Shader> {
     .unwrap()
 }
 fn blue_shader(device: &Arc<rg::Device>) -> Arc<rg::Shader> {
-    let vertex = std::fs::read_to_string("shaders/screenSpaceQuad.vert").unwrap();
+    let vertex = std::fs::read_to_string("examples/shaders/screenSpaceQuad.vert").unwrap();
     let fragment = std::fs::read_to_string("shaders/blue.frag").unwrap();
     rg::ShaderProgramBuilder::vertex_and_fragment(
         "BlueShader",

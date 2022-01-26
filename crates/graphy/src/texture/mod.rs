@@ -113,7 +113,7 @@ impl TextureConfig {
             mip_filtering: self.filtering.into_vk_mip(),
             usage: vk::ImageUsageFlags::SAMPLED,
             image_type: vk::ImageType::TYPE_2D,
-            host_readable: true,
+            host_readable: false,
         }
     }
 }

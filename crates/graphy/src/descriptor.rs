@@ -585,7 +585,9 @@ impl DescriptorSetAllocator {
     }
     fn new_frame(&mut self) {
         let reusable_sets = &mut self.resuable_sets;
-        self.temp_map.new_frame(|set| reusable_sets.push(set));
+        for removed_set in self.temp_map.new_frame() {
+            reusable_sets.push(removed_set);
+        }
     }
 }
 

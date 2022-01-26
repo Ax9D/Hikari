@@ -404,14 +404,22 @@ impl GraphExecutor {
             &signal_semaphores,
             frame_state.current_frame().render_finished_fence,
         )?;
-        let suboptimal = swapchain.present(
+        match swapchain.present(
             image_ix,
             frame_state.current_frame().render_finished_semaphore,
-        )?;
-
-        if suboptimal {
-            log::warn!("Swapchain suboptimal");
-        }
+        ) {
+            Ok(suboptimal) => {
+                if suboptimal {
+                    log::warn!("Swapchain suboptimal");
+                }
+            }
+            Err(err) => match err {
+                vk::Result::ERROR_OUT_OF_DATE_KHR => {
+                    log::warn!("Swapchain out of date");
+                }
+                _ => {}
+            },
+        };
 
         Ok(())
     }

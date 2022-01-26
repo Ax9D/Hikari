@@ -19,8 +19,6 @@ struct DirectionalLight {
     vec3 direction;
 };
 
-
-
 layout(set = 1, binding = 0) uniform sampler2D albedoMap;
 layout(set = 1, binding = 1) uniform sampler2D roughnessMap;
 layout(set = 1, binding = 2) uniform sampler2D metallicMap;
@@ -145,7 +143,7 @@ vec3 calculateNormal() {
 const DirectionalLight dirLight =  {
     10,
     vec3(1.0, 1.0, 1.0),
-    vec3(0.0, -1.0, 0.0)
+    vec3(0.0, -1.0, -1.0)
 };
 void main() {
     Material material = pc.material;
@@ -186,6 +184,6 @@ void main() {
     Lo *= illuminance;
     vec3 ambient = vec3(0.03) * albedoValue;
     vec3 outputColor = ambient + Lo;
-    color = vec4( pow(tonemap(outputColor), vec3(1.0/2.2)) , 1.0);
+    color = vec4( tonemapLulu(outputColor) , 1.0);
     //debugNormal = vec4(normal, 1.0);
 }

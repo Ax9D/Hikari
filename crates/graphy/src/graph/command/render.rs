@@ -45,6 +45,10 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         }
     }
     #[inline]
+    pub fn raw(&self) -> vk::CommandBuffer {
+        self.cmd.raw()
+    }
+    #[inline]
     pub fn set_viewport(&mut self, x: f32, y: f32, width: f32, height: f32) {
         self.cmd.set_viewport(x, y, width, height);
     }

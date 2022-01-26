@@ -15,6 +15,8 @@ use self::pass::AnyPass;
 use self::runtime::GraphExecutor;
 
 pub use command::CommandBuffer;
+pub use command::RenderpassCommands;
+
 pub use resources::*;
 pub use storage::Handle;
 
@@ -225,13 +227,13 @@ impl<S, A, R> Graph<S, A, R> {
         &mut self,
         gfx: &crate::Gfx,
         scene: &S,
-        perframe: &A,
+        args: &A,
         resources: &R,
     ) -> VkResult<()> {
         if self.outputs_swapchain {
             self.executor.execute_and_present(
                 scene,
-                perframe,
+                args,
                 resources,
                 self.size,
                 &mut self.passes,
@@ -242,7 +244,7 @@ impl<S, A, R> Graph<S, A, R> {
         } else {
             self.executor.execute(
                 scene,
-                perframe,
+                args,
                 resources,
                 self.size,
                 &mut self.passes,
@@ -258,11 +260,24 @@ impl<S, A, R> Graph<S, A, R> {
         self.executor.finish()
     }
 
-    pub fn wait_idle(&mut self) -> VkResult<()> {
-        unsafe { self.device.raw().device_wait_idle() }
+    pub fn resize(
+        &mut self,
+        new_width: u32,
+        new_height: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.prepare_exit();
+        self.size = (new_width, new_height);
+        self.resources
+            .resize_images(&self.device, new_width, new_height)?;
+        self.allocation_data
+            .resize_framebuffers(&self.device, &self.passes, &self.resources)?;
+
+        log::debug!("Resized graph width: {new_width} height: {new_height}");
+        Ok(())
     }
+
     ///Should be called after done using the graph just before its dropped to ensure gpu resources can be safely deallocated
     pub fn prepare_exit(&mut self) {
-        self.wait_idle().unwrap();
+        unsafe { self.device.raw().device_wait_idle() }.unwrap();
     }
 }

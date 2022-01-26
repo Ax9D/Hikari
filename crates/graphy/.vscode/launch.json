@@ -45,6 +45,24 @@
             "program": "${workspaceRoot}/target/debug/examples/pbr",
             "args": [],
             "cwd": "${workspaceFolder}"
+        },
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug test",
+            // "cargo": {
+            //     "args": [
+            //         "run",
+            //         "--features",
+            //         "profile-puffin",
+            //         "--example",
+            //         "simplegraph"
+            //     ]
+            // },
+            "program": "${workspaceRoot}/target/debug/deps/graphy-1b31ebe1586f9025",
+            "args": [],
+            "cwd": "${workspaceFolder}"
         }
     ]
 }

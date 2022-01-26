@@ -1,9 +1,8 @@
-use bytemuck::Zeroable;
 use itertools::izip;
 use simple_logger::SimpleLogger;
 use std::sync::Arc;
 use winit::{
-    dpi::LogicalSize,
+    dpi::{LogicalSize, PhysicalSize},
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -11,11 +10,11 @@ use winit::{
 
 use graphy as rg;
 
-const WIDTH: u32 = 1280;
-const HEIGHT: u32 = 720;
+const WIDTH: u32 = 1920;
+const HEIGHT: u32 = 1080;
 
 #[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone)]
 struct Vertex {
     position: [f32; 3],
     normal: [f32; 3],
@@ -44,40 +43,73 @@ struct Mesh {
 struct Model {
     meshes: Vec<Mesh>,
 }
-
-struct GameObject {
-    model: Arc<Model>,
-    position: glam::Vec3,
-    rotation: glam::Quat,
-    scale: glam::Vec3,
+struct Transform {
+    pub position: glam::Vec3,
+    pub rotation: glam::Quat,
+    pub scale: glam::Vec3,
 }
-
-struct Camera {}
-
-impl GameObject {
-    pub fn new(model: &Arc<Model>) -> Self {
+impl Default for Transform {
+    fn default() -> Self {
         Self {
-            model: model.clone(),
-            position: glam::vec3(0.0, 0.0, 0.0),
+            position: glam::Vec3::ZERO,
             rotation: glam::Quat::IDENTITY,
             scale: glam::Vec3::ONE,
         }
     }
 }
+struct GameObject {
+    model: Arc<Model>,
+    transform: Transform,
+}
+
+impl GameObject {
+    pub fn new(model: &Arc<Model>) -> Self {
+        Self {
+            model: model.clone(),
+            transform: Transform::default(),
+        }
+    }
+}
+enum Projection {
+    Perspective(f32),
+    Orthographic,
+}
+
+impl Projection {
+    pub fn get_matrix(&self, near: f32, far: f32, width: u32, height: u32) -> glam::Mat4 {
+        match self {
+            Projection::Perspective(fov) => glam::Mat4::perspective_lh(
+                fov.to_radians(),
+                width as f32 / height as f32,
+                near,
+                far,
+            ),
+            Projection::Orthographic => {
+                todo!()
+            }
+        }
+    }
+}
+struct Camera {
+    transform: Transform,
+    near: f32,
+    far: f32,
+    exposure: f32,
+    projection: Projection,
+}
 struct Scene {
     objects: Vec<GameObject>,
+    camera: Camera,
 }
-fn save_image(path: &str, data: &[u8], width: u32, height: u32) {
-    image::save_buffer(path, data, width, height, image::ColorType::Rgba8).unwrap();
-}
+
 fn load_mesh(
     device: &Arc<rg::Device>,
     path: &str,
 ) -> Result<Vec<Model>, Box<dyn std::error::Error>> {
     let scene = hikari_asset::Scene::load(path)?;
     let mut textures = Vec::new();
-    for texture in scene.textures() {
-        let data = texture.data();
+    for texture in &scene.textures {
+        let data = &texture.data;
 
         // let mut path = String::from("/home/atri/test_img/");
         // path.push_str(texture.name());
@@ -85,56 +117,64 @@ fn load_mesh(
         // save_image(&path, data, texture.width(), texture.height());
 
         let config = rg::TextureConfig {
-            format: texture.format(),
-            filtering: texture.filtering(),
-            wrap_x: texture.wrap_x(),
-            wrap_y: texture.wrap_y(),
-            aniso_level: 9,
-            generate_mips: false,
+            format: texture.format,
+            filtering: rg::FilterMode::Linear,
+            wrap_x: texture.wrap_x,
+            wrap_y: texture.wrap_y,
+            aniso_level: 16,
+            generate_mips: texture.generate_mips,
         };
-        
-        let texture = rg::Texture2D::new(device, data, texture.width(), texture.height(), config)?;
+
+        let texture = rg::Texture2D::new(device, data, texture.width, texture.height, config)?;
 
         textures.push(Arc::new(texture));
     }
 
     let mut materials = Vec::new();
 
-    for material in scene.materials() {
+    for material in &scene.materials {
         let albedo = material
-            .albedo_map()
+            .albedo_map
+            .as_ref()
             .map(|desc| textures[desc.index].clone());
-        let albedo_factor = *material.albedo();
+        let albedo_factor = material.albedo;
 
         let metallic = material
-            .metallic_map()
+            .metallic_map
+            .as_ref()
             .map(|desc| textures[desc.index].clone());
 
-        let metallic_factor = material.metallic();
+        let metallic_factor = material.metallic;
 
         let roughness = material
-            .roughness_map()
+            .roughness_map
+            .as_ref()
             .map(|desc| textures[desc.index].clone());
-        let roughness_factor = material.roughness();
+        let roughness_factor = material.roughness;
 
         let normal = material
-            .normal_map()
+            .normal_map
+            .as_ref()
             .map(|desc| textures[desc.index].clone());
 
         let albedo_set = material
-            .albedo_map()
+            .albedo_map
+            .as_ref()
             .map(|desc| desc.tex_coord_set as i32)
             .unwrap_or(-1);
         let roughness_set = material
-            .roughness_map()
+            .roughness_map
+            .as_ref()
             .map(|desc| desc.tex_coord_set as i32)
             .unwrap_or(-1);
         let metallic_set = material
-            .metallic_map()
+            .metallic_map
+            .as_ref()
             .map(|desc| desc.tex_coord_set as i32)
             .unwrap_or(-1);
         let normal_set = material
-            .normal_map()
+            .normal_map
+            .as_ref()
             .map(|desc| desc.tex_coord_set as i32)
             .unwrap_or(-1);
 
@@ -153,15 +193,15 @@ fn load_mesh(
         }));
     }
     let mut models = Vec::new();
-    for model in scene.models() {
+    for model in &scene.models {
         let mut meshes = Vec::new();
-        for mesh in model.meshes() {
+        for mesh in &model.meshes {
             let mut vertex_data = Vec::new();
             for (&position, &normal, &tc0, &tc1) in izip!(
-                mesh.positions().iter(),
-                mesh.normals().iter(),
-                mesh.texcoord0().iter(),
-                mesh.texcoord1().iter()
+                mesh.positions.iter(),
+                mesh.normals.iter(),
+                mesh.texcoord0.iter(),
+                mesh.texcoord1.iter()
             ) {
                 vertex_data.push(Vertex {
                     position: position.into(),
@@ -174,12 +214,12 @@ fn load_mesh(
             let mut vertices = rg::create_vertex_buffer(device, vertex_data.len())?;
             vertices.upload(&vertex_data, 0)?;
 
-            let mut indices = rg::create_index_buffer(device, mesh.indices().len())?;
-            indices.upload(mesh.indices(), 0)?;
+            let mut indices = rg::create_index_buffer(device, mesh.indices.len())?;
+            indices.upload(&mesh.indices, 0)?;
 
             meshes.push(Mesh {
                 vertices,
-                material: materials[mesh.material().unwrap()].clone(),
+                material: materials[mesh.material.unwrap()].clone(),
                 indices,
             })
         }
@@ -188,16 +228,11 @@ fn load_mesh(
 
     Ok(models)
 }
-fn get_proj_matrix(fov: f32, width: u32, height: u32, z_near: f32, z_far: f32) -> glam::Mat4 {
-    glam::Mat4::perspective_lh(
-        fov.to_radians(),
-        width as f32 / height as f32,
-        z_near,
-        z_far,
-    )
-}
 
-fn pbr_pass(device: &Arc<rg::Device>, gb: &mut rg::GraphBuilder<Scene, (), ()>) {
+fn pbr_pass(
+    device: &Arc<rg::Device>,
+    gb: &mut rg::GraphBuilder<Scene, imgui::DrawData, ()>,
+) -> rg::Handle<rg::SampledImage> {
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     struct Material {
@@ -302,17 +337,41 @@ fn pbr_pass(device: &Arc<rg::Device>, gb: &mut rg::GraphBuilder<Scene, (), ()>) 
         )
         .build();
 
+    let color_output = gb
+        .create_image(
+            "PBRColor",
+            rg::ImageConfig::color2d(),
+            rg::ImageSize::default(),
+        )
+        .expect("Failed to create PBR attachments");
+    let depth_output = gb
+        .create_image(
+            "PBRDepth",
+            rg::ImageConfig::depth_stencil(),
+            rg::ImageSize::default(),
+        )
+        .expect("Failed to create PBR attachments");
     gb.add_renderpass(
         rg::Renderpass::new(
             "PBR",
             rg::ImageSize::default(),
             move |cmd, scene: &Scene, _, _| {
-                let proj = get_proj_matrix(90.0, WIDTH, HEIGHT, 0.1, 100.0);
-                let view_proj = proj * glam::Mat4::from_translation(glam::vec3(0.0, 0.0, -2.0));
+                let proj = scene.camera.projection.get_matrix(
+                    scene.camera.near,
+                    scene.camera.far,
+                    WIDTH,
+                    HEIGHT,
+                );
+                let cam_transform = glam::Mat4::from_rotation_translation(
+                    scene.camera.transform.rotation,
+                    scene.camera.transform.position,
+                );
+                let view_proj = proj * cam_transform.inverse();
+
                 ubo.get_mut().mapped_slice_mut()[0] = UBO {
                     view_proj,
                     camera_position: glam::Vec3A::ZERO,
-                    exposure: 1.0,
+                    exposure: scene.camera.exposure,
                 };
 
                 cmd.set_shader(&shader);
@@ -330,9 +389,9 @@ fn pbr_pass(device: &Arc<rg::Device>, gb: &mut rg::GraphBuilder<Scene, (), ()>) 
 
                 for object in &scene.objects {
                     let transform = glam::Mat4::from_scale_rotation_translation(
-                        object.scale,
-                        object.rotation,
-                        object.position,
+                        object.transform.scale,
+                        object.transform.rotation,
+                        object.transform.position,
                     );
                     let model = &object.model;
                     for mesh in &model.meshes {
@@ -368,10 +427,10 @@ fn pbr_pass(device: &Arc<rg::Device>, gb: &mut rg::GraphBuilder<Scene, (), ()>) 
                         //     metallic.raw().image(),
                         //     normal.raw().image()
                         // );
+                        cmd.set_image(albedo.raw(), 1, 0);
                         cmd.set_image(roughness.raw(), 1, 1);
                         cmd.set_image(metallic.raw(), 1, 2);
                         cmd.set_image(normal.raw(), 1, 3);
-                        cmd.set_image(albedo.raw(), 1, 0);
 
                         cmd.draw_indexed(0..mesh.indices.len(), 0, 0..1);
                     }
@@ -379,6 +438,257 @@ fn pbr_pass(device: &Arc<rg::Device>, gb: &mut rg::GraphBuilder<Scene, (), ()>) 
 
                 ubo.next_frame();
             },
+        )
+        .draw_image(&color_output, rg::AttachmentConfig::color_default(0))
+        .draw_image(&depth_output, rg::AttachmentConfig::depth_only_default()),
+    );
+
+    color_output
+}
+fn fxaa_pass(
+    device: &Arc<rg::Device>,
+    pbr_pass: rg::Handle<rg::SampledImage>,
+    gb: &mut rg::GraphBuilder<Scene, imgui::DrawData, ()>,
+) -> rg::Handle<rg::SampledImage> {
+    let vertex = r"
+    #version 450
+
+    vec2 positions[6] = vec2[](
+        vec2(1, 1),
+        vec2(1, -1),
+        vec2(-1, -1),
+        vec2(1, 1),
+        vec2(-1, -1),
+        vec2(-1, 1)
+    );
+
+    vec2 texCoords[6] = vec2[](
+        vec2(1, 0),
+        vec2(1, 1),
+        vec2(0, 1),
+        vec2(1, 0),
+        vec2(0, 1),
+        vec2(0, 0)
+    );
+
+    layout(location = 0) out vec2 texCoord;
+    void main() {
+        gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+        texCoord = texCoords[gl_VertexIndex];
+    }
+    ";
+
+    let shader = rg::ShaderProgramBuilder::vertex_and_fragment(
+        "FXAA",
+        &rg::ShaderCode {
+            entry_point: "main".into(),
+            data: rg::ShaderData::Glsl(vertex.to_string()),
+        },
+        &rg::ShaderCode {
+            entry_point: "main".into(),
+            data: rg::ShaderData::Glsl(
+                std::fs::read_to_string("examples/shaders/fxaa.frag").unwrap(),
+            ),
+        },
+    )
+    .build(device)
+    .expect("Failed to create shader");
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct PushConstants {
+        enabled: i32,
+        res: glam::Vec2,
+    }
+    let output = gb
+        .create_image(
+            "fxaa_output",
+            rg::ImageConfig::color2d(),
+            rg::ImageSize::default(),
+        )
+        .expect("Failed to create fxaa output");
+    gb.add_renderpass(
+        rg::Renderpass::new("FXAA", rg::ImageSize::default(), move |cmd, _, _, _| {
+            cmd.set_shader(&shader);
+
+            cmd.push_constants(
+                &PushConstants {
+                    res: glam::vec2(WIDTH as f32, HEIGHT as f32),
+                    enabled: 1,
+                },
+                0,
+            );
+
+            cmd.draw(0..6, 0..1);
+        })
+        .draw_image(&output, rg::AttachmentConfig::color_default(0))
+        .sample_image(
+            &pbr_pass,
+            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+            0,
+        ),
+    );
+
+    output
+}
+fn imgui_pass(
+    device: &Arc<rg::Device>,
+    imgui: &mut rg::imgui_support::Backend,
+    gb: &mut rg::GraphBuilder<Scene, imgui::DrawData, ()>,
+) -> rg::Handle<rg::SampledImage> {
+    let mut renderer =
+        rg::imgui_support::Renderer::new(device, imgui, rg::vk::Format::R8G8B8A8_UNORM, false)
+            .expect("Failed to create imgui renderer");
+
+    let imgui_image = gb
+        .create_image(
+            "imgui_output",
+            rg::ImageConfig::color2d(),
+            rg::ImageSize::default(),
+        )
+        .expect("Failed to create imgui image");
+    gb.add_renderpass(
+        rg::Renderpass::new(
+            "ImguiRenderer",
+            rg::ImageSize::default(),
+            move |cmd, _: &Scene, draw_data: &imgui::DrawData, _| {
+                renderer
+                    .render(cmd.raw(), draw_data)
+                    .expect("Failed to render imgui");
+            },
+        )
+        .draw_image(&imgui_image, rg::AttachmentConfig::color_default(0)),
+    );
+
+    imgui_image
+}
+fn transform_controls(ui: &imgui::Ui, transform: &mut Transform) {
+    let mut position: [f32; 3] = transform.position.into();
+    imgui::Drag::new("position").build_array(ui, &mut position);
+    transform.position = position.into();
+
+    let (x, y, z) = transform.rotation.to_euler(glam::EulerRot::XYZ);
+    let mut euler_xyz = [x, y, z].map(|x| x.to_degrees());
+    imgui::Drag::new("rotation")
+        .range(0.0001, 89.999)
+        .build_array(ui, &mut euler_xyz);
+    let quat = glam::Quat::from_euler(
+        glam::EulerRot::XYZ,
+        euler_xyz[0].to_radians(),
+        euler_xyz[1].to_radians(),
+        euler_xyz[2].to_radians(),
+    );
+    transform.rotation = quat;
+
+    let mut scale: [f32; 3] = transform.scale.into();
+    imgui::Drag::new("scale").build_array(ui, &mut scale);
+    transform.scale = scale.into();
+}
+fn imgui_update(ui: &imgui::Ui, scene: &mut Scene) {
+    //ui.show_demo_window(&mut true);
+
+    ui.window("Camera").build(|| {
+        transform_controls(ui, &mut scene.camera.transform);
+        imgui::Drag::new("near").build(ui, &mut scene.camera.near);
+        imgui::Drag::new("far").build(ui, &mut scene.camera.far);
+
+        imgui::Drag::new("exposure").build(ui, &mut scene.camera.exposure);
+    });
+
+    ui.window("Light").build(|| {
+        transform_controls(ui, &mut scene.camera.transform);
+    });
+}
+
+fn composite_pass(
+    device: &Arc<rg::Device>,
+    pbr_output: rg::Handle<rg::SampledImage>,
+    imgui_output: rg::Handle<rg::SampledImage>,
+    gb: &mut rg::GraphBuilder<Scene, imgui::DrawData, ()>,
+) {
+    let vertex = r"
+    #version 450
+
+    vec2 positions[6] = vec2[](
+        vec2(1, 1),
+        vec2(1, -1),
+        vec2(-1, -1),
+        vec2(1, 1),
+        vec2(-1, -1),
+        vec2(-1, 1)
+    );
+
+    vec2 texCoords[6] = vec2[](
+        vec2(1, 0),
+        vec2(1, 1),
+        vec2(0, 1),
+        vec2(1, 0),
+        vec2(0, 1),
+        vec2(0, 0)
+    );
+
+    layout(location = 0) out vec2 texCoord;
+    void main() {
+        gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+        texCoord = texCoords[gl_VertexIndex];
+    }
+    ";
+
+    let fragment = r"
+    #version 450
+    layout(set = 0, binding = 0) uniform sampler2D pbr;
+    layout(set = 0, binding = 1) uniform sampler2D imgui;
+
+    layout(location = 0) in vec2 texCoord;
+    layout(location = 0) out vec4 color;
+    void main() {
+        vec4 pbrColor = texture(pbr, texCoord);
+        vec4 imguiColor = texture(imgui, texCoord);
+        color.rgb = pbrColor.rgb * (1.0 - imguiColor.a) + imguiColor.rgb;
+        color.a = 1.0;
+    }
+    ";
+    let shader = rg::ShaderProgramBuilder::vertex_and_fragment(
+        "CompositeShader",
+        &rg::ShaderCode {
+            entry_point: "main".into(),
+            data: rg::ShaderData::Glsl(vertex.to_string()),
+        },
+        &rg::ShaderCode {
+            entry_point: "main".into(),
+            data: rg::ShaderData::Glsl(fragment.to_string()),
+        },
+    )
+    .build(device)
+    .expect("Failed to create composite shader");
+
+    gb.add_renderpass(
+        rg::Renderpass::new(
+            "CompositePass",
+            rg::ImageSize::default(),
+            move |cmd, _: &Scene, _: &imgui::DrawData, _| {
+                cmd.set_shader(&shader);
+                // cmd.set_blend_state(rg::BlendState {
+                //     enabled: true,
+                //     src_color_blend_factor: rg::BlendFactor::SrcAlpha,
+                //     dst_color_blend_factor: rg::BlendFactor::OneMinusSrcAlpha,
+                //     color_blend_op: rg::BlendOp::Add,
+                //     src_alpha_blend_factor: rg::BlendFactor::One,
+                //     dst_alpha_blend_factor: rg::BlendFactor::Zero,
+                //     alpha_blend_op: rg::BlendOp::Add
+                // });
+                cmd.draw(0..6, 0..1);
+            },
+        )
+        .sample_image(
+            &pbr_output,
+            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+            0,
+        )
+        .sample_image(
+            &imgui_output,
+            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+            1,
         )
         .present(),
     );
@@ -391,9 +701,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
+    let mut window = WindowBuilder::new()
         .with_inner_size(LogicalSize::new(WIDTH, HEIGHT))
         .build(&event_loop)?;
+
+    let imgui = rg::imgui::Context::create();
+    let mut imgui = rg::imgui_support::Backend::new(&mut window, imgui)?;
+    let hidpi_factor = imgui.hidpi_factor();
+    imgui
+        .context()
+        .fonts()
+        .add_font(&[imgui::FontSource::TtfData {
+            data: include_bytes!("fonts/Roboto-Regular.ttf"),
+            size_pixels: (13.0 * hidpi_factor) as f32,
+            config: Some(imgui::FontConfig {
+                rasterizer_multiply: 1.75,
+                glyph_ranges: imgui::FontGlyphRanges::japanese(),
+                ..imgui::FontConfig::default()
+            }),
+        }]);
 
     let mut gfx = rg::Gfx::new(
         &window,
@@ -405,26 +731,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let device = gfx.device().clone();
     let mut gb = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 
-    pbr_pass(&device, &mut gb);
+    let pbr_output = pbr_pass(&device, &mut gb);
+    let fxaa_output = fxaa_pass(&device, pbr_output, &mut gb);
+    let imgui_output = imgui_pass(&device, &mut imgui, &mut gb);
+
+    composite_pass(&device, fxaa_output, imgui_output, &mut gb);
 
     let mut graph = gb.build()?;
 
     let mut sponza = load_mesh(&device, "/home/atri/sponza/sponza.glb")?;
 
-    let scene = Scene {
+    let mut scene = Scene {
         objects: vec![GameObject::new(&Arc::new(
             sponza.pop().expect("No model found"),
         ))],
+
+        camera: Camera {
+            transform: Transform::default(),
+            near: 0.1,
+            far: 100.0,
+            exposure: 1.0,
+            projection: Projection::Perspective(45.0),
+        },
     };
     let mut dt = 0.0;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
+        imgui.handle_event(&window, &event);
         match event {
             Event::RedrawRequested(_) => {
                 hikari_dev::profile_scope!("mainloop");
                 let now = std::time::Instant::now();
-                graph.execute(&mut gfx, &scene, &(), &()).unwrap();
+
+                let draw_data = imgui.new_frame(&window, |ui| {
+                    imgui_update(ui, &mut scene);
+                });
+
+                graph.execute(&mut gfx, &scene, draw_data, &()).unwrap();
                 //scene.objects[0].position.y += 1.0 * dt;
                 dt = now.elapsed().as_secs_f32();
                 hikari_dev::finish_frame!();
@@ -433,12 +777,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 window.request_redraw();
             }
             Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
+                event,
                 window_id: _,
-            } => {
-                println!("Closing");
-                *control_flow = ControlFlow::Exit;
-            }
+            } => match event {
+                WindowEvent::Resized(size) => {
+                    gfx.resize(size.width, size.height)
+                        .expect("Failed to resize graphics context");
+                    graph
+                        .resize(size.width, size.height)
+                        .expect("Failed to resize graph");
+                }
+                WindowEvent::CloseRequested => {
+                    println!("Closing");
+                    *control_flow = ControlFlow::Exit;
+                }
+                _ => {}
+            },
             Event::LoopDestroyed => {
                 graph.prepare_exit();
             }
