@@ -5,21 +5,21 @@ use crate::util::intrusive_linked_list::Node;
 
 use super::intrusive_linked_list::IntrusiveLinkedList;
 
-struct KeyRef<K> {
-    key: *const K,
-}
+// struct KeyRef<K> {
+//     key: *const K,
+// }
 
-impl<K: Hash> Hash for KeyRef<K> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        unsafe { &*self.key }.hash(state);
-    }
-}
-impl<K: PartialEq> PartialEq for KeyRef<K> {
-    fn eq(&self, other: &Self) -> bool {
-        unsafe { *self.key == *other.key }
-    }
-}
-impl<K: Eq> Eq for KeyRef<K> {}
+// impl<K: Hash> Hash for KeyRef<K> {
+//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+//         unsafe { &*self.key }.hash(state);
+//     }
+// }
+// impl<K: PartialEq> PartialEq for KeyRef<K> {
+//     fn eq(&self, other: &Self) -> bool {
+//         unsafe { *self.key == *other.key }
+//     }
+// }
+// impl<K: Eq> Eq for KeyRef<K> {}
 
 struct Entry<K, V> {
     key: K,
@@ -27,13 +27,23 @@ struct Entry<K, V> {
     frame: usize,
 }
 
+impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Entry<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Entry")
+            .field(&self.key)
+            .field(&self.value)
+            .finish()
+    }
+}
+
+type Map<K, V> = HashMap<K, *mut Node<Entry<K, V>>, crate::util::BuildHasher>;
 pub struct TemporaryMap<K, V, const N: usize> {
-    hashmap: HashMap<KeyRef<K>, *mut Node<Entry<K, V>>, crate::util::BuildHasher>,
+    map: Map<K, V>,
     frames: [IntrusiveLinkedList<Entry<K, V>>; N],
     current_frame: usize,
 }
 
-impl<K: Hash + Eq, V, const N: usize> TemporaryMap<K, V, N> {
+impl<K: Hash + Eq + Copy, V, const N: usize> TemporaryMap<K, V, N> {
     pub fn new() -> Self {
         let mut frames = ArrayVec::<IntrusiveLinkedList<Entry<K, V>>, N>::new();
         for _ in 0..N {
@@ -46,7 +56,7 @@ impl<K: Hash + Eq, V, const N: usize> TemporaryMap<K, V, N> {
             .unwrap();
 
         Self {
-            hashmap: HashMap::with_hasher(crate::util::hasher_builder()),
+            map: Map::with_hasher(crate::util::hasher_builder()),
             frames,
             current_frame: 0,
         }
@@ -71,11 +81,11 @@ impl<K: Hash + Eq, V, const N: usize> TemporaryMap<K, V, N> {
         }
     }
     pub fn insert<'a>(&'a mut self, key: K, value: V) -> Option<V> {
+        hikari_dev::profile_function!();
+
         let current_frame = self.current_frame;
 
-        let key_ref = KeyRef { key: &key };
-
-        match self.hashmap.get(&key_ref) {
+        match self.map.get(&key) {
             Some(&node) => {
                 self.touch(node);
 
@@ -95,12 +105,7 @@ impl<K: Hash + Eq, V, const N: usize> TemporaryMap<K, V, N> {
                         frame: current_frame,
                     }));
 
-                self.hashmap.insert(
-                    KeyRef {
-                        key: &unsafe { &mut *new_node }.data_mut().key,
-                    },
-                    new_node,
-                );
+                self.map.insert(key, new_node);
 
                 None
             }
@@ -109,7 +114,7 @@ impl<K: Hash + Eq, V, const N: usize> TemporaryMap<K, V, N> {
     pub fn get<'a>(&'a mut self, key: &K) -> Option<&'a V> {
         hikari_dev::profile_function!();
 
-        match self.hashmap.get(&KeyRef { key }) {
+        match self.map.get(key) {
             Some(&node) => {
                 self.touch(node);
 
@@ -119,7 +124,9 @@ impl<K: Hash + Eq, V, const N: usize> TemporaryMap<K, V, N> {
         }
     }
     pub fn get_mut<'a>(&'a mut self, key: &K) -> Option<&'a mut V> {
-        match self.hashmap.get_mut(&KeyRef { key }) {
+        hikari_dev::profile_function!();
+
+        match self.map.get_mut(key) {
             Some(&mut node) => {
                 self.touch(node);
 
@@ -149,13 +156,88 @@ impl<K: Hash + Eq, V, const N: usize> TemporaryMap<K, V, N> {
     //         },
     //     }
     // }
-    pub fn new_frame(&mut self, mut process_fn: impl FnMut(V)) {
+    pub fn new_frame(&mut self) -> Removed<K, V> {
         self.current_frame = (self.current_frame + 1) % N;
-
-        for entry in self.frames[self.current_frame].drain() {
-            let key_ref = KeyRef { key: &entry.key };
-            self.hashmap.remove(&key_ref);
-            (process_fn)(entry.value);
+        Removed {
+            map: &mut self.map,
+            drain: self.frames[self.current_frame].drain(),
         }
+    }
+}
+use super::intrusive_linked_list::Drain;
+pub struct Removed<'a, K, V> {
+    map: &'a mut Map<K, V>,
+    drain: Drain<'a, Entry<K, V>>,
+}
+impl<'a, K: Hash + Eq, V> Iterator for Removed<'a, K, V> {
+    type Item = V;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.drain.next().map(|entry| {
+            self.map
+                .remove(&entry.key)
+                .expect("Map doesn't contain key");
+            entry.value
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::TemporaryMap;
+
+    macro_rules! set {
+        ( $( $x:expr ),* ) => {  // Match zero or more comma delimited items
+            {
+                let mut temp_set = HashSet::new();  // Create a mutable HashSet
+                $(
+                    temp_set.insert($x); // Insert each item matched into the HashSet
+                )*
+                temp_set // Return the populated HashSet
+            }
+        };
+    }
+
+    #[test]
+    fn frame_update() {
+        let mut map = TemporaryMap::<_, _, 4>::new();
+        map.insert(1, "Foo");
+        map.insert(2, "Bar");
+
+        for _ in 0..120 {
+            map.new_frame();
+        }
+    }
+
+    #[test]
+    fn auto_remove() {
+        let mut map = TemporaryMap::<_, _, 4>::new();
+        map.insert(1, "Foo");
+        map.insert(2, "Bar");
+
+        assert!(map.new_frame().next() == None);
+        assert!(map.new_frame().next() == None);
+        assert!(map.new_frame().next() == None);
+        assert!(map.new_frame().collect::<HashSet<&str>>() == set!["Foo", "Bar"]);
+        assert!(map.new_frame().next() == None);
+    }
+
+    #[test]
+    fn keep() {
+        let values = ["Foo", "Bar", "Lorem", "Ipsum"];
+        let mut map = TemporaryMap::<_, _, 4>::new();
+
+        for (ix, &value) in values.iter().enumerate() {
+            map.insert(ix, value);
+        }
+
+        assert!(map.new_frame().next() == None);
+        map.get(&0);
+        assert!(map.new_frame().next() == None);
+        assert!(map.new_frame().next() == None);
+        assert!(map.new_frame().collect::<HashSet<&str>>() == set!["Bar", "Lorem", "Ipsum"]);
+        assert!(map.new_frame().next() == Some("Foo"));
     }
 }

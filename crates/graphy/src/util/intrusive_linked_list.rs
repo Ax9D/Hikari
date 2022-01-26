@@ -36,6 +36,10 @@ impl<T> IntrusiveLinkedList<T> {
             len: 0,
         }
     }
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.len
+    }
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
@@ -75,7 +79,7 @@ impl<T> IntrusiveLinkedList<T> {
     }
     pub fn remove_node(&mut self, node: *mut Node<T>) -> Box<Node<T>> {
         unsafe {
-            debug_assert!(!node.is_null());
+            assert!(!node.is_null());
 
             if self.first == node {
                 self.first = (*self.first).next;
@@ -101,12 +105,7 @@ impl<T> IntrusiveLinkedList<T> {
         }
     }
     pub fn drain(&mut self) -> Drain<T> {
-        let current = self.first;
-
-        Drain {
-            list: self,
-            current,
-        }
+        Drain { list: self }
     }
 }
 impl<T> Drop for IntrusiveLinkedList<T> {
@@ -115,24 +114,25 @@ impl<T> Drop for IntrusiveLinkedList<T> {
     }
 }
 
+impl<T: std::fmt::Debug> std::fmt::Debug for IntrusiveLinkedList<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
 pub struct Drain<'a, T> {
     list: &'a mut IntrusiveLinkedList<T>,
-    current: *mut Node<T>,
 }
 
 impl<'a, T> Iterator for Drain<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current == std::ptr::null_mut() {
-            None
+        if self.list.len() > 0 {
+            let removed = self.list.remove_node(self.list.first);
+            Some(removed.data)
         } else {
-            unsafe {
-                let data = Box::from_raw(self.current).data;
-                let next = (*self.current).next;
-                self.current = next;
-                Some(data)
-            }
+            None
         }
     }
 }
@@ -146,7 +146,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current == std::ptr::null_mut() {
+        if self.current.is_null() {
             None
         } else {
             unsafe {
@@ -156,5 +156,75 @@ impl<'a, T> Iterator for Iter<'a, T> {
                 Some(data)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{IntrusiveLinkedList, Node};
+
+    #[test]
+    fn append() {
+        let mut list = IntrusiveLinkedList::new();
+        list.append_node(Node::new_boxed(0));
+        assert!(list.len() == 1);
+        list.append_node(Node::new_boxed(1));
+        assert!(list.len() == 2);
+    }
+    #[test]
+    fn prepend() {
+        let mut list = IntrusiveLinkedList::new();
+        list.prepend_node(Node::new_boxed(0));
+        assert!(list.len() == 1);
+        list.prepend_node(Node::new_boxed(1));
+        assert!(list.len() == 2);
+    }
+    #[test]
+    fn remove() {
+        let mut list = IntrusiveLinkedList::new();
+        let zero = list.prepend_node(Node::new_boxed(0));
+        let one = list.prepend_node(Node::new_boxed(1));
+        let two = list.prepend_node(Node::new_boxed(2));
+        assert!(list.len() == 3);
+        list.remove_node(zero);
+        list.remove_node(one);
+        assert!(list.len() == 1);
+        list.remove_node(two);
+        assert!(list.len() == 0);
+
+        let zero = list.prepend_node(Node::new_boxed(0));
+        let one = list.prepend_node(Node::new_boxed(1));
+        let two = list.prepend_node(Node::new_boxed(2));
+
+        assert!(list.len() == 3);
+        list.remove_node(two);
+        list.remove_node(zero);
+        assert!(list.len() == 1);
+        list.remove_node(one);
+        assert!(list.len() == 0);
+
+        let zero = list.prepend_node(Node::new_boxed(0));
+        let one = list.prepend_node(Node::new_boxed(1));
+        let two = list.prepend_node(Node::new_boxed(2));
+
+        assert!(list.len() == 3);
+        list.remove_node(one);
+        list.remove_node(two);
+        assert!(list.len() == 1);
+        list.remove_node(zero);
+        assert!(list.len() == 0);
+    }
+    #[test]
+    fn drain() {
+        let mut list = IntrusiveLinkedList::new();
+        list.append_node(Node::new_boxed(0));
+        list.append_node(Node::new_boxed(1));
+        list.append_node(Node::new_boxed(2));
+        list.append_node(Node::new_boxed(3));
+
+        assert!(list.len() == 4);
+
+        for _ in list.drain() {}
+        assert!(list.len() == 0);
     }
 }
