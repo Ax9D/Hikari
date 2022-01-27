@@ -66,9 +66,23 @@ impl ImageConfig {
             host_readable: false,
         }
     }
-    pub fn depth_stencil() -> Self {
+    pub fn depth_stencil(device: &Arc<crate::Device>) -> Self {
         Self {
-            format: vk::Format::D24_UNORM_S8_UINT,
+            format: device.supported_depth_stencil_format(),
+            filtering: vk::Filter::LINEAR,
+            wrap_x: vk::SamplerAddressMode::REPEAT,
+            wrap_y: vk::SamplerAddressMode::REPEAT,
+            aniso_level: 0,
+            mip_levels: 1,
+            mip_filtering: vk::SamplerMipmapMode::LINEAR,
+            usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            image_type: vk::ImageType::TYPE_2D,
+            host_readable: false,
+        }
+    }
+    pub fn depth_only(device: &Arc<crate::Device>) -> Self {
+        Self {
+            format: device.supported_depth_only_format(),
             filtering: vk::Filter::LINEAR,
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
@@ -82,18 +96,15 @@ impl ImageConfig {
     }
 }
 
-pub(crate) fn usage_to_aspect_flags(usage: vk::ImageUsageFlags) -> vk::ImageAspectFlags {
-    use vk::ImageAspectFlags as af;
-    use vk::ImageUsageFlags as us;
-
-    if usage.contains(us::COLOR_ATTACHMENT) {
-        af::COLOR
-    } else if usage.contains(us::DEPTH_STENCIL_ATTACHMENT) {
-        af::DEPTH | af::STENCIL
-    } else if usage.contains(us::SAMPLED) {
-        af::COLOR
-    } else {
-        panic!("Unsupported usage")
+pub(crate) fn format_to_aspect_flags(format: vk::Format) -> vk::ImageAspectFlags {
+    match format {
+        vk::Format::D16_UNORM | vk::Format::D32_SFLOAT => vk::ImageAspectFlags::DEPTH,
+        vk::Format::D16_UNORM_S8_UINT
+        | vk::Format::D24_UNORM_S8_UINT
+        | vk::Format::D32_SFLOAT_S8_UINT => {
+            vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL
+        }
+        _ => vk::ImageAspectFlags::COLOR,
     }
 }
 
@@ -143,7 +154,7 @@ impl SampledImage {
                 .view_type(vk::ImageViewType::TYPE_2D)
                 .subresource_range(
                     *vk::ImageSubresourceRange::builder()
-                        .aspect_mask(usage_to_aspect_flags(vkconfig.usage))
+                        .aspect_mask(format_to_aspect_flags(vkconfig.format))
                         .base_mip_level(mip_level)
                         .level_count(1)
                         .base_array_layer(0)
@@ -269,7 +280,7 @@ impl SampledImage {
             Self::create_image_with_sampler_and_views(device, width, height, &vkconfig)?;
 
         let subresource_range = *vk::ImageSubresourceRange::builder()
-            .aspect_mask(usage_to_aspect_flags(vkconfig.usage))
+            .aspect_mask(format_to_aspect_flags(vkconfig.format))
             .level_count(1)
             .layer_count(1);
 
@@ -305,7 +316,7 @@ impl SampledImage {
                 let buffer_copy_region = [*vk::BufferImageCopy::builder()
                     .image_subresource(
                         *vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(usage_to_aspect_flags(vkconfig.usage))
+                            .aspect_mask(format_to_aspect_flags(vkconfig.format))
                             .mip_level(0)
                             .base_array_layer(0)
                             .layer_count(1),
@@ -382,7 +393,7 @@ impl SampledImage {
         let levels = config.mip_levels;
 
         let subresource_range = *vk::ImageSubresourceRange::builder()
-            .aspect_mask(usage_to_aspect_flags(config.usage))
+            .aspect_mask(format_to_aspect_flags(config.format))
             .level_count(1)
             .layer_count(1);
 
@@ -418,7 +429,7 @@ impl SampledImage {
                 let image_blit = [*vk::ImageBlit::builder()
                     .src_subresource(
                         *vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(usage_to_aspect_flags(config.usage))
+                            .aspect_mask(format_to_aspect_flags(config.format))
                             .layer_count(1)
                             .mip_level(level - 1)
                             .base_array_layer(0),
@@ -433,7 +444,7 @@ impl SampledImage {
                     ])
                     .dst_subresource(
                         *vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(usage_to_aspect_flags(config.usage))
+                            .aspect_mask(format_to_aspect_flags(config.format))
                             .layer_count(1)
                             .mip_level(level)
                             .base_array_layer(0),
@@ -448,7 +459,7 @@ impl SampledImage {
                     ])];
 
                 let mip_sub_range = *vk::ImageSubresourceRange::builder()
-                    .aspect_mask(usage_to_aspect_flags(config.usage))
+                    .aspect_mask(format_to_aspect_flags(config.format))
                     .base_mip_level(level)
                     .level_count(1)
                     .layer_count(1);
@@ -542,7 +553,7 @@ impl SampledImage {
                         let subresource_range = *vk::ImageSubresourceRange::builder()
                             .layer_count(1)
                             .level_count(mip_level)
-                            .aspect_mask(usage_to_aspect_flags(self.config.usage));
+                            .aspect_mask(format_to_aspect_flags(self.config.format));
 
                         crate::barrier::image_memory_barrier(
                             device,
@@ -564,7 +575,7 @@ impl SampledImage {
                             .image_subresource(
                                 *vk::ImageSubresourceLayers::builder()
                                     .mip_level(0)
-                                    .aspect_mask(usage_to_aspect_flags(self.config.usage))
+                                    .aspect_mask(format_to_aspect_flags(self.config.format))
                                     .base_array_layer(0)
                                     .layer_count(1),
                             )

@@ -187,6 +187,7 @@ impl<'a> CommandBuffer<'a> {
     }
     #[inline]
     pub fn begin(&self) -> VkResult<()> {
+        hikari_dev::profile_function!();
         let begin_info = vk::CommandBufferBeginInfo::builder()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
@@ -260,6 +261,7 @@ impl<'a> CommandBuffer<'a> {
             binding,
         )
     }
+    #[inline]
     pub(crate) fn begin_renderpass<'cmd>(
         &'cmd mut self,
         begin_info: RenderpassBeginInfo<'cmd>,

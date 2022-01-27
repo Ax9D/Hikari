@@ -23,8 +23,10 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         cmd: &'cmd mut CommandBuffer<'graph>,
         begin_info: RenderpassBeginInfo<'cmd>,
     ) -> Self {
+        hikari_dev::profile_function!();
         let device = cmd.device;
         unsafe {
+            hikari_dev::profile_scope!("vkBeginRenderPass");
             debug_assert!(begin_info.renderpass.pass != vk::RenderPass::null());
 
             let begin_info = vk::RenderPassBeginInfo::builder()
@@ -38,10 +40,11 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
                 .cmd_begin_render_pass(cmd.raw(), &begin_info, vk::SubpassContents::INLINE);
         }
 
+        let pipeline_ctx = PipelineContext::default();
         Self {
             cmd,
             renderpass: begin_info.renderpass,
-            pipeline_ctx: PipelineContext::default(),
+            pipeline_ctx,
         }
     }
     #[inline]

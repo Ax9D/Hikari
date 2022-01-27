@@ -147,6 +147,30 @@ impl PhysicalDevice {
             driver_version,
         }
     }
+
+    pub fn get_supported_depth_stencil_format(
+        &self,
+        instance: &ash::Instance,
+        candidates: &[vk::Format],
+        tiling: vk::ImageTiling,
+        features: vk::FormatFeatureFlags,
+    ) -> Option<vk::Format> {
+        for &format in candidates {
+            let properties =
+                unsafe { instance.get_physical_device_format_properties(self.raw, format) };
+            if tiling == vk::ImageTiling::OPTIMAL
+                && properties.optimal_tiling_features.contains(features)
+            {
+                return Some(format);
+            } else if tiling == vk::ImageTiling::LINEAR
+                && properties.linear_tiling_features.contains(features)
+            {
+                return Some(format);
+            }
+        }
+
+        None
+    }
 }
 
 pub(crate) struct SwapchainSupportDetails {
@@ -546,6 +570,49 @@ impl Device {
     }
     pub fn is_feature_supported(&self, feature: Features) -> bool {
         self.physical_device.features.contains(feature)
+    }
+
+    pub fn supported_depth_stencil_format(&self) -> vk::Format {
+        let candidates = [
+            vk::Format::D32_SFLOAT_S8_UINT,
+            vk::Format::D24_UNORM_S8_UINT,
+            vk::Format::D16_UNORM_S8_UINT,
+        ];
+        let optimal_tiling = self.physical_device.get_supported_depth_stencil_format(
+            self.instance(),
+            &candidates,
+            vk::ImageTiling::OPTIMAL,
+            vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        );
+        let linear_tiling = self.physical_device.get_supported_depth_stencil_format(
+            self.instance(),
+            &candidates,
+            vk::ImageTiling::LINEAR,
+            vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        );
+
+        optimal_tiling
+            .or(linear_tiling)
+            .expect("Device doesn't support any depth formats")
+    }
+    pub fn supported_depth_only_format(&self) -> vk::Format {
+        let candidates = [vk::Format::D32_SFLOAT, vk::Format::D16_UNORM];
+        let optimal_tiling = self.physical_device.get_supported_depth_stencil_format(
+            self.instance(),
+            &candidates,
+            vk::ImageTiling::OPTIMAL,
+            vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        );
+        let linear_tiling = self.physical_device.get_supported_depth_stencil_format(
+            self.instance(),
+            &candidates,
+            vk::ImageTiling::LINEAR,
+            vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT,
+        );
+
+        optimal_tiling
+            .or(linear_tiling)
+            .expect("Device doesn't support any depth formats")
     }
 }
 impl Drop for Device {

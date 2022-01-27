@@ -35,7 +35,7 @@ impl Swapchain {
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
         old_swapchain: Option<vk::SwapchainKHR>,
-        vsync: bool
+        vsync: bool,
     ) -> Result<Swapchain, Box<dyn std::error::Error>> {
         let physical_device = device.physical_device();
 
@@ -91,7 +91,7 @@ impl Swapchain {
             swap_extent.width,
             swap_extent.height,
             ImageConfig {
-                format: vk::Format::D24_UNORM_S8_UINT,
+                format: device.supported_depth_stencil_format(),
                 filtering: vk::Filter::LINEAR,
                 wrap_x: vk::SamplerAddressMode::REPEAT,
                 wrap_y: vk::SamplerAddressMode::REPEAT,
@@ -106,13 +106,17 @@ impl Swapchain {
 
         let image_views = Self::create_image_views(device, &images, surface_format.format)?;
 
-        let renderpass = Self::create_renderpass(
-            device,
-            surface_format.format,
-            &depth_stencil_image,
-        )?;
+        let renderpass =
+            Self::create_renderpass(device, surface_format.format, &depth_stencil_image)?;
 
-        let framebuffers = Self::create_framebuffers(device, width, height, &image_views, &depth_stencil_image, renderpass.pass)?;
+        let framebuffers = Self::create_framebuffers(
+            device,
+            width,
+            height,
+            &image_views,
+            &depth_stencil_image,
+            renderpass.pass,
+        )?;
 
         log::debug!("Created swapchain");
 
@@ -199,7 +203,14 @@ impl Swapchain {
 
         Ok(renderpass)
     }
-    fn create_framebuffers(device: &Arc<crate::Device>, width: u32, height: u32, color_images: &[vk::ImageView], depth_stencil_image: &SampledImage, pass: vk::RenderPass) -> VkResult<Vec<vk::Framebuffer>> {
+    fn create_framebuffers(
+        device: &Arc<crate::Device>,
+        width: u32,
+        height: u32,
+        color_images: &[vk::ImageView],
+        depth_stencil_image: &SampledImage,
+        pass: vk::RenderPass,
+    ) -> VkResult<Vec<vk::Framebuffer>> {
         let mut framebuffers = Vec::new();
         for &color_image in color_images {
             let attachments = [color_image, depth_stencil_image.image_view(1).unwrap()];
@@ -218,23 +229,26 @@ impl Swapchain {
     }
     fn choose_present_mode(
         swapchain_support_details: &crate::device::SwapchainSupportDetails,
-        vsync: bool
+        vsync: bool,
     ) -> vk::PresentModeKHR {
         let mailbox_supported = swapchain_support_details
             .present_modes
             .iter()
             .any(|&mode| mode == vk::PresentModeKHR::MAILBOX);
 
-        if vsync {
+        let present_mode = if vsync {
             if mailbox_supported {
                 vk::PresentModeKHR::MAILBOX
             } else {
                 vk::PresentModeKHR::FIFO
             }
-        }
-        else {
+        } else {
             vk::PresentModeKHR::IMMEDIATE
-        }
+        };
+
+        log::debug!("Present mode: {:?}", present_mode);
+
+        present_mode
     }
     fn choose_swapchain_format(
         swapchain_support_details: &crate::device::SwapchainSupportDetails,
@@ -313,8 +327,8 @@ impl Swapchain {
     pub fn color_format(&self) -> vk::Format {
         self.format
     }
-    pub const fn depth_format() -> vk::Format {
-        vk::Format::D24_UNORM_S8_UINT
+    pub fn depth_format(&self) -> vk::Format {
+        self.depth_image.config().format
     }
     pub fn images(&self) -> &[vk::ImageView] {
         &self.image_views
@@ -331,6 +345,7 @@ impl Swapchain {
         signal_semaphore: vk::Semaphore,
         signal_fence: vk::Fence,
     ) -> VkResult<u32> {
+        hikari_dev::profile_function!();
         unsafe {
             let (ix, _) = self.loader.acquire_next_image(
                 self.inner,

@@ -24,7 +24,9 @@ impl BarrierStorage {
         queue_index: u32,
     ) {
         let range = vk::ImageSubresourceRange {
-            aspect_mask: crate::texture::sampled_image::usage_to_aspect_flags(image.config().usage),
+            aspect_mask: crate::texture::sampled_image::format_to_aspect_flags(
+                image.config().format,
+            ),
             base_mip_level: 0,
             level_count: image.config().mip_levels,
             base_array_layer: 0,
@@ -59,8 +61,19 @@ impl BarrierStorage {
             },
         ) = sync::get_image_memory_barrier(&barrier);
 
-        log::info!("src_access_mask {:?}", src_access_mask);
-        log::info!("dst_access_mask {:?}", dst_access_mask);
+        log::info!(
+            "old_layout {:?} src_access_mask {:?}",
+            old_layout,
+            src_access_mask
+        );
+        log::info!(
+            "new_layout {:?} dst_access_mask {:?}",
+            new_layout,
+            dst_access_mask
+        );
+
+        log::info!("\n");
+
         use crate::barrier;
 
         let barrier = *vk::ImageMemoryBarrier2KHR::builder()
@@ -107,6 +120,8 @@ impl AllocationData {
             renderpasses: VecMap::new(),
         };
 
+        alloc.create_barriers(device, passes, resources);
+
         for (ix, pass) in passes.iter().enumerate() {
             if let AnyPass::Render(pass) = pass {
                 if !pass.present_to_swapchain {
@@ -115,7 +130,6 @@ impl AllocationData {
                 }
             }
         }
-        alloc.create_barriers(device, passes, resources);
 
         Ok(alloc)
     }
@@ -128,6 +142,7 @@ impl AllocationData {
         self.framebuffers = VecMap::new();
         self.barriers = VecMap::new();
 
+        self.create_barriers(device, passes, resources);
         for (ix, pass) in passes.iter().enumerate() {
             if let AnyPass::Render(pass) = pass {
                 if !pass.present_to_swapchain {
@@ -136,7 +151,6 @@ impl AllocationData {
                 }
             }
         }
-        self.create_barriers(device, passes, resources);
 
         Ok(())
     }
@@ -195,7 +209,24 @@ impl AllocationData {
                         );
 
                         (
-                            vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                            vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                            vk::ClearValue {
+                                depth_stencil: vk::ClearDepthStencilValue {
+                                    depth: 1.0,
+                                    stencil: 0,
+                                },
+                            },
+                        )
+                    }
+                    AttachmentKind::DepthOnly => {
+                        depth_attachment_ref.replace(
+                            *vk::AttachmentReference::builder()
+                                .attachment(attachments.len() as u32)
+                                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+                        );
+
+                        (
+                            vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                             vk::ClearValue {
                                 depth_stencil: vk::ClearDepthStencilValue {
                                     depth: 1.0,
@@ -206,6 +237,19 @@ impl AllocationData {
                     }
                 };
 
+                let pass_barriers = self.barriers.get(ix).unwrap();
+
+                let initial_layout = pass_barriers
+                    .image_barriers
+                    .iter()
+                    .find_map(|barrier| {
+                        if barrier.image == image.image() {
+                            Some(barrier.new_layout)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(vk::ImageLayout::UNDEFINED);
                 clear_values.push(clear_value);
                 let attachment = *vk::AttachmentDescription::builder()
                     .format(image.config().format)
@@ -214,7 +258,7 @@ impl AllocationData {
                     .stencil_store_op(attachment_config.stencil_store_op)
                     .stencil_load_op(attachment_config.stencil_load_op)
                     .samples(vk::SampleCountFlags::TYPE_1)
-                    .initial_layout(vk::ImageLayout::UNDEFINED)
+                    .initial_layout(initial_layout)
                     .final_layout(final_layout);
 
                 attachments.push(attachment);
@@ -310,12 +354,7 @@ impl AllocationData {
                         (handle.clone(), *access)
                     }
                     crate::graph::pass::Output::DrawImage(handle, config) => {
-                        let access = match config.kind {
-                            AttachmentKind::Color(_) => AccessType::ColorAttachmentWrite,
-                            AttachmentKind::DepthStencil => AccessType::DepthStencilAttachmentWrite,
-                        };
-
-                        (handle.clone(), access)
+                        (handle.clone(), config.access)
                     }
                     crate::graph::pass::Output::StorageBuffer => {
                         continue;

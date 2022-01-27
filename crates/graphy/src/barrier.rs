@@ -34,62 +34,65 @@ pub fn image_memory_barrier(
 }
 
 pub fn to_sync2_access_flags(flags: vk::AccessFlags) -> vk::AccessFlags2KHR {
-    match flags {
-        vk::AccessFlags::INDIRECT_COMMAND_READ => vk::AccessFlags2KHR::INDIRECT_COMMAND_READ,
-        vk::AccessFlags::INDEX_READ => vk::AccessFlags2KHR::INDEX_READ,
-        vk::AccessFlags::VERTEX_ATTRIBUTE_READ => vk::AccessFlags2KHR::VERTEX_ATTRIBUTE_READ,
-        vk::AccessFlags::UNIFORM_READ => vk::AccessFlags2KHR::UNIFORM_READ,
-        vk::AccessFlags::INPUT_ATTACHMENT_READ => vk::AccessFlags2KHR::INPUT_ATTACHMENT_READ,
-        vk::AccessFlags::SHADER_READ => vk::AccessFlags2KHR::SHADER_READ,
-        vk::AccessFlags::SHADER_WRITE => vk::AccessFlags2KHR::SHADER_WRITE,
-        vk::AccessFlags::COLOR_ATTACHMENT_READ => vk::AccessFlags2KHR::COLOR_ATTACHMENT_READ,
-        vk::AccessFlags::COLOR_ATTACHMENT_WRITE => vk::AccessFlags2KHR::COLOR_ATTACHMENT_WRITE,
-        vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ => {
-            vk::AccessFlags2KHR::DEPTH_STENCIL_ATTACHMENT_READ
-        }
-        vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE => {
-            vk::AccessFlags2KHR::DEPTH_STENCIL_ATTACHMENT_WRITE
-        }
-        vk::AccessFlags::TRANSFER_READ => vk::AccessFlags2KHR::TRANSFER_READ,
-        vk::AccessFlags::TRANSFER_WRITE => vk::AccessFlags2KHR::TRANSFER_WRITE,
-        vk::AccessFlags::HOST_READ => vk::AccessFlags2KHR::HOST_READ,
-        vk::AccessFlags::HOST_WRITE => vk::AccessFlags2KHR::HOST_WRITE,
-        vk::AccessFlags::MEMORY_READ => vk::AccessFlags2KHR::MEMORY_READ,
-        vk::AccessFlags::MEMORY_WRITE => vk::AccessFlags2KHR::MEMORY_WRITE,
-        _ => unreachable!(),
-    }
+    vk::AccessFlags2KHR::from_raw(flags.as_raw() as u64)
+    // match flags {
+    //     vk::AccessFlags::INDIRECT_COMMAND_READ => vk::AccessFlags2KHR::INDIRECT_COMMAND_READ,
+    //     vk::AccessFlags::INDEX_READ => vk::AccessFlags2KHR::INDEX_READ,
+    //     vk::AccessFlags::VERTEX_ATTRIBUTE_READ => vk::AccessFlags2KHR::VERTEX_ATTRIBUTE_READ,
+    //     vk::AccessFlags::UNIFORM_READ => vk::AccessFlags2KHR::UNIFORM_READ,
+    //     vk::AccessFlags::INPUT_ATTACHMENT_READ => vk::AccessFlags2KHR::INPUT_ATTACHMENT_READ,
+    //     vk::AccessFlags::SHADER_READ => vk::AccessFlags2KHR::SHADER_READ,
+    //     vk::AccessFlags::SHADER_WRITE => vk::AccessFlags2KHR::SHADER_WRITE,
+    //     vk::AccessFlags::COLOR_ATTACHMENT_READ => vk::AccessFlags2KHR::COLOR_ATTACHMENT_READ,
+    //     vk::AccessFlags::COLOR_ATTACHMENT_WRITE => vk::AccessFlags2KHR::COLOR_ATTACHMENT_WRITE,
+    //     vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ => {
+    //         vk::AccessFlags2KHR::DEPTH_STENCIL_ATTACHMENT_READ
+    //     }
+    //     vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE => {
+    //         vk::AccessFlags2KHR::DEPTH_STENCIL_ATTACHMENT_WRITE
+    //     }
+    //     vk::AccessFlags::TRANSFER_READ => vk::AccessFlags2KHR::TRANSFER_READ,
+    //     vk::AccessFlags::TRANSFER_WRITE => vk::AccessFlags2KHR::TRANSFER_WRITE,
+    //     vk::AccessFlags::HOST_READ => vk::AccessFlags2KHR::HOST_READ,
+    //     vk::AccessFlags::HOST_WRITE => vk::AccessFlags2KHR::HOST_WRITE,
+    //     vk::AccessFlags::MEMORY_READ => vk::AccessFlags2KHR::MEMORY_READ,
+    //     vk::AccessFlags::MEMORY_WRITE => vk::AccessFlags2KHR::MEMORY_WRITE,
+    //     _ => unreachable!(),
+    // }
 }
 pub fn to_sync2_stage_flags(flags: vk::PipelineStageFlags) -> vk::PipelineStageFlags2KHR {
-    match flags {
-        vk::PipelineStageFlags::TOP_OF_PIPE => vk::PipelineStageFlags2KHR::TOP_OF_PIPE,
-        vk::PipelineStageFlags::DRAW_INDIRECT => vk::PipelineStageFlags2KHR::DRAW_INDIRECT,
-        vk::PipelineStageFlags::VERTEX_INPUT => vk::PipelineStageFlags2KHR::VERTEX_INPUT,
-        vk::PipelineStageFlags::VERTEX_SHADER => vk::PipelineStageFlags2KHR::VERTEX_SHADER,
-        vk::PipelineStageFlags::TESSELLATION_CONTROL_SHADER => {
-            vk::PipelineStageFlags2KHR::TESSELLATION_CONTROL_SHADER
-        }
-        vk::PipelineStageFlags::TESSELLATION_EVALUATION_SHADER => {
-            vk::PipelineStageFlags2KHR::TESSELLATION_EVALUATION_SHADER
-        }
-        vk::PipelineStageFlags::GEOMETRY_SHADER => vk::PipelineStageFlags2KHR::GEOMETRY_SHADER,
-        vk::PipelineStageFlags::FRAGMENT_SHADER => vk::PipelineStageFlags2KHR::FRAGMENT_SHADER,
-        vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS => {
-            vk::PipelineStageFlags2KHR::EARLY_FRAGMENT_TESTS
-        }
-        vk::PipelineStageFlags::LATE_FRAGMENT_TESTS => {
-            vk::PipelineStageFlags2KHR::LATE_FRAGMENT_TESTS
-        }
-        vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT => {
-            vk::PipelineStageFlags2KHR::COLOR_ATTACHMENT_OUTPUT
-        }
-        vk::PipelineStageFlags::COMPUTE_SHADER => vk::PipelineStageFlags2KHR::COMPUTE_SHADER,
-        vk::PipelineStageFlags::TRANSFER => vk::PipelineStageFlags2KHR::TRANSFER,
-        vk::PipelineStageFlags::BOTTOM_OF_PIPE => vk::PipelineStageFlags2KHR::BOTTOM_OF_PIPE,
-        vk::PipelineStageFlags::HOST => vk::PipelineStageFlags2KHR::HOST,
-        vk::PipelineStageFlags::ALL_GRAPHICS => vk::PipelineStageFlags2KHR::ALL_GRAPHICS,
-        vk::PipelineStageFlags::ALL_COMMANDS => vk::PipelineStageFlags2KHR::ALL_COMMANDS,
-        _ => unreachable!(),
-    }
+    vk::PipelineStageFlags2KHR::from_raw(flags.as_raw() as u64)
+    // match flags {
+    //     vk::PipelineStageFlags::TOP_OF_PIPE => vk::PipelineStageFlags2KHR::TOP_OF_PIPE,
+    //     vk::PipelineStageFlags::DRAW_INDIRECT => vk::PipelineStageFlags2KHR::DRAW_INDIRECT,
+    //     vk::PipelineStageFlags::VERTEX_INPUT => vk::PipelineStageFlags2KHR::VERTEX_INPUT,
+    //     vk::PipelineStageFlags::VERTEX_SHADER => vk::PipelineStageFlags2KHR::VERTEX_SHADER,
+    //     vk::PipelineStageFlags::TESSELLATION_CONTROL_SHADER => {
+    //         vk::PipelineStageFlags2KHR::TESSELLATION_CONTROL_SHADER
+    //     }
+    //     vk::PipelineStageFlags::TESSELLATION_EVALUATION_SHADER => {
+    //         vk::PipelineStageFlags2KHR::TESSELLATION_EVALUATION_SHADER
+    //     }
+    //     vk::PipelineStageFlags::GEOMETRY_SHADER => vk::PipelineStageFlags2KHR::GEOMETRY_SHADER,
+    //     vk::PipelineStageFlags::FRAGMENT_SHADER => vk::PipelineStageFlags2KHR::FRAGMENT_SHADER,
+    //     vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS => {
+    //         vk::PipelineStageFlags2KHR::EARLY_FRAGMENT_TESTS
+    //     }
+    //     vk::PipelineStageFlags::LATE_FRAGMENT_TESTS => {
+    //         vk::PipelineStageFlags2KHR::LATE_FRAGMENT_TESTS
+    //     }
+    //     vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT => {
+    //         vk::PipelineStageFlags2KHR::COLOR_ATTACHMENT_OUTPUT
+    //     }
+    //     vk::PipelineStageFlags::COMPUTE_SHADER => vk::PipelineStageFlags2KHR::COMPUTE_SHADER,
+    //     vk::PipelineStageFlags::TRANSFER => vk::PipelineStageFlags2KHR::TRANSFER,
+    //     vk::PipelineStageFlags::BOTTOM_OF_PIPE => vk::PipelineStageFlags2KHR::BOTTOM_OF_PIPE,
+    //     vk::PipelineStageFlags::HOST => vk::PipelineStageFlags2KHR::HOST,
+    //     vk::PipelineStageFlags::ALL_GRAPHICS => vk::PipelineStageFlags2KHR::ALL_GRAPHICS,
+    //     vk::PipelineStageFlags::ALL_COMMANDS => vk::PipelineStageFlags2KHR::ALL_COMMANDS,
+
+    //     _ => unreachable!(),
+    // }
 }
 fn is_read(access: &AccessType) -> bool {
     match access {

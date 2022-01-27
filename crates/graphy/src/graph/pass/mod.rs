@@ -50,11 +50,13 @@ impl ImageSize {
 pub enum AttachmentKind {
     Color(u32),
     DepthStencil,
+    DepthOnly,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct AttachmentConfig {
     pub kind: AttachmentKind,
+    pub access: crate::AccessType,
     pub load_op: vk::AttachmentLoadOp,
     pub store_op: vk::AttachmentStoreOp,
     pub stencil_store_op: vk::AttachmentStoreOp,
@@ -64,6 +66,7 @@ impl AttachmentConfig {
     pub const fn color_default(location: u32) -> Self {
         Self {
             kind: AttachmentKind::Color(location),
+            access: crate::AccessType::ColorAttachmentWrite,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::STORE,
 
@@ -73,7 +76,8 @@ impl AttachmentConfig {
     }
     pub const fn depth_only_default() -> Self {
         Self {
-            kind: AttachmentKind::DepthStencil,
+            kind: AttachmentKind::DepthOnly,
+            access: crate::AccessType::DepthStencilAttachmentWrite,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::STORE,
 
@@ -84,6 +88,7 @@ impl AttachmentConfig {
     pub const fn depth_stencil_default() -> Self {
         Self {
             kind: AttachmentKind::DepthStencil,
+            access: crate::AccessType::DepthStencilAttachmentWrite,
             load_op: vk::AttachmentLoadOp::CLEAR,
             store_op: vk::AttachmentStoreOp::STORE,
 

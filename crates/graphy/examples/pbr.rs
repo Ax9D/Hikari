@@ -9,6 +9,7 @@ use winit::{
 };
 
 use graphy as rg;
+mod common;
 
 const WIDTH: u32 = 1920;
 const HEIGHT: u32 = 1080;
@@ -94,8 +95,8 @@ impl Projection {
 struct Args<'imgui> {
     draw_data: &'imgui imgui::DrawData,
     fxaa: bool,
-    width: u32, 
-    height: u32
+    width: u32,
+    height: u32,
 }
 struct Camera {
     transform: Transform,
@@ -235,9 +236,133 @@ fn load_mesh(
 
     Ok(models)
 }
+fn depth_prepass(
+    device: &Arc<rg::Device>,
+    gb: &mut rg::GraphBuilder<Scene, Args, ()>,
+) -> rg::Handle<rg::SampledImage> {
+    let shader = rg::ShaderProgramBuilder::vertex_and_fragment(
+        "DepthPrepass",
+        &rg::ShaderCode {
+            entry_point: "main".into(),
+            data: rg::ShaderData::Glsl(
+                std::fs::read_to_string("examples/shaders/depth_only.vert").unwrap(),
+            ),
+        },
+        &rg::ShaderCode {
+            entry_point: "main".into(),
+            data: rg::ShaderData::Glsl(
+                std::fs::read_to_string("examples/shaders/empty.frag").unwrap(),
+            ),
+        },
+    )
+    .build(device)
+    .expect("Failed to create shader");
 
+    let depth_output = gb
+        .create_image(
+            "PrepassDepth",
+            rg::ImageConfig::depth_only(device),
+            rg::ImageSize::default(),
+        )
+        .expect("Failed to create depth image");
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct UBO {
+        view_proj: glam::Mat4,
+    }
+
+    let mut ubo = rg::PerFrame::new([
+        rg::create_uniform_buffer::<UBO>(device, 1).unwrap(),
+        rg::create_uniform_buffer::<UBO>(device, 1).unwrap(),
+    ]);
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct PushConstants {
+        transform: glam::Mat4,
+    }
+    let layout = rg::VertexInputLayout::new()
+        .buffer(
+            &[
+                rg::ShaderDataType::Vec3f,
+                rg::ShaderDataType::Vec3f,
+                rg::ShaderDataType::Vec2f,
+                rg::ShaderDataType::Vec2f,
+            ],
+            rg::StepMode::Vertex,
+        )
+        .build();
+    gb.add_renderpass(
+        rg::Renderpass::new(
+            "DepthPrepass",
+            rg::ImageSize::default(),
+            move |cmd, scene: &Scene, args: &_, _| {
+                cmd.set_shader(&shader);
+                cmd.set_vertex_input_layout(layout);
+
+                cmd.set_depth_stencil_state(rg::DepthStencilState {
+                    depth_test_enabled: true,
+                    depth_write_enabled: true,
+                    depth_compare_op: rg::CompareOp::Less,
+                    ..Default::default()
+                });
+
+                let proj = scene.camera.projection.get_matrix(
+                    scene.camera.near,
+                    scene.camera.far,
+                    WIDTH,
+                    HEIGHT,
+                );
+                let cam_transform = glam::Mat4::from_rotation_translation(
+                    scene.camera.transform.rotation,
+                    scene.camera.transform.position,
+                );
+                let view_proj = proj * cam_transform.inverse();
+
+                ubo.get_mut().mapped_slice_mut()[0] = UBO { view_proj };
+
+                cmd.set_uniform_buffer(ubo.get(), 0..1, 0, 0);
+
+                for object in &scene.objects {
+                    let transform = glam::Mat4::from_scale_rotation_translation(
+                        object.transform.scale,
+                        object.transform.rotation,
+                        object.transform.position,
+                    );
+                    let model = &object.model;
+                    for mesh in &model.meshes {
+                        {
+                            hikari_dev::profile_scope!("Set vertex and index buffers");
+                            cmd.set_vertex_buffer(&mesh.vertices, 0);
+                            cmd.set_index_buffer(&mesh.indices);
+                        }
+
+                        cmd.push_constants(&PushConstants { transform }, 0);
+
+                        // println!(
+                        //     "{:?} {:?} {:?} {:?}",
+                        //     albedo.raw().image(),
+                        //     roughness.raw().image(),
+                        //     metallic.raw().image(),
+                        //     normal.raw().image()
+                        // );
+
+                        cmd.draw_indexed(0..mesh.indices.len(), 0, 0..1);
+                    }
+                }
+
+                ubo.next_frame();
+            },
+        )
+        .draw_image(&depth_output, rg::AttachmentConfig::depth_only_default()),
+    );
+
+    depth_output
+}
 fn pbr_pass(
     device: &Arc<rg::Device>,
+    depth_prepass: &rg::Handle<rg::SampledImage>,
     gb: &mut rg::GraphBuilder<Scene, Args, ()>,
 ) -> rg::Handle<rg::SampledImage> {
     #[repr(C)]
@@ -351,13 +476,13 @@ fn pbr_pass(
             rg::ImageSize::default(),
         )
         .expect("Failed to create PBR attachments");
-    let depth_output = gb
-        .create_image(
-            "PBRDepth",
-            rg::ImageConfig::depth_stencil(),
-            rg::ImageSize::default(),
-        )
-        .expect("Failed to create PBR attachments");
+    // let depth_output = gb
+    //     .create_image(
+    //         "PBRDepth",
+    //         rg::ImageConfig::depth_stencil(device),
+    //         rg::ImageSize::default(),
+    //     )
+    //     .expect("Failed to create PBR attachments");
     gb.add_renderpass(
         rg::Renderpass::new(
             "PBR",
@@ -387,71 +512,81 @@ fn pbr_pass(
 
                 cmd.set_depth_stencil_state(rg::DepthStencilState {
                     depth_test_enabled: true,
-                    depth_write_enabled: true,
-                    depth_compare_op: rg::CompareOp::LessOrEqual,
+                    depth_write_enabled: false,
+                    depth_compare_op: rg::CompareOp::Equal,
                     ..Default::default()
                 });
 
                 cmd.set_uniform_buffer(ubo.get(), 0..1, 0, 0);
 
                 {
-                hikari_dev::profile_scope!("Render scene");
-                for object in &scene.objects {
-                    let transform = glam::Mat4::from_scale_rotation_translation(
-                        object.transform.scale,
-                        object.transform.rotation,
-                        object.transform.position,
-                    );
-                    let model = &object.model;
-                    for mesh in &model.meshes {
-                        {
-                        hikari_dev::profile_scope!("Set vertex and index buffers");
-                        cmd.set_vertex_buffer(&mesh.vertices, 0);
-                        cmd.set_index_buffer(&mesh.indices);
+                    hikari_dev::profile_scope!("Render scene");
+                    for object in &scene.objects {
+                        let transform = glam::Mat4::from_scale_rotation_translation(
+                            object.transform.scale,
+                            object.transform.rotation,
+                            object.transform.position,
+                        );
+                        let model = &object.model;
+                        for mesh in &model.meshes {
+                            {
+                                hikari_dev::profile_scope!("Set vertex and index buffers");
+                                cmd.set_vertex_buffer(&mesh.vertices, 0);
+                                cmd.set_index_buffer(&mesh.indices);
+                            }
+                            let material = Material {
+                                albedo: mesh.material.albedo_factor,
+                                roughness: mesh.material.roughness_factor,
+                                metallic: mesh.material.metallic_factor,
+                                albedo_uv_set: mesh.material.albedo_set,
+                                roughness_uv_set: mesh.material.roughness_set,
+                                metallic_uv_set: mesh.material.metallic_set,
+                                normal_uv_set: mesh.material.normal_set,
+                            };
+
+                            let pc = PushConstants {
+                                transform,
+                                material,
+                            };
+
+                            cmd.push_constants(&pc, 0);
+
+                            let albedo = mesh.material.albedo.as_ref().unwrap_or(&checkerboard);
+                            let roughness = mesh.material.roughness.as_ref().unwrap_or(&black);
+                            let metallic = mesh.material.metallic.as_ref().unwrap_or(&black);
+                            let normal = mesh.material.normal.as_ref().unwrap_or(&black);
+
+                            // println!(
+                            //     "{:?} {:?} {:?} {:?}",
+                            //     albedo.raw().image(),
+                            //     roughness.raw().image(),
+                            //     metallic.raw().image(),
+                            //     normal.raw().image()
+                            // );
+                            cmd.set_image(albedo.raw(), 1, 0);
+                            cmd.set_image(roughness.raw(), 1, 1);
+                            cmd.set_image(metallic.raw(), 1, 2);
+                            cmd.set_image(normal.raw(), 1, 3);
+
+                            cmd.draw_indexed(0..mesh.indices.len(), 0, 0..1);
                         }
-                        let material = Material {
-                            albedo: mesh.material.albedo_factor,
-                            roughness: mesh.material.roughness_factor,
-                            metallic: mesh.material.metallic_factor,
-                            albedo_uv_set: mesh.material.albedo_set,
-                            roughness_uv_set: mesh.material.roughness_set,
-                            metallic_uv_set: mesh.material.metallic_set,
-                            normal_uv_set: mesh.material.normal_set,
-                        };
-
-                        let pc = PushConstants {
-                            transform,
-                            material,
-                        };
-
-                        cmd.push_constants(&pc, 0);
-
-                        let albedo = mesh.material.albedo.as_ref().unwrap_or(&checkerboard);
-                        let roughness = mesh.material.roughness.as_ref().unwrap_or(&black);
-                        let metallic = mesh.material.metallic.as_ref().unwrap_or(&black);
-                        let normal = mesh.material.normal.as_ref().unwrap_or(&black);
-
-                        // println!(
-                        //     "{:?} {:?} {:?} {:?}",
-                        //     albedo.raw().image(),
-                        //     roughness.raw().image(),
-                        //     metallic.raw().image(),
-                        //     normal.raw().image()
-                        // );
-                        cmd.set_image(albedo.raw(), 1, 0);
-                        cmd.set_image(roughness.raw(), 1, 1);
-                        cmd.set_image(metallic.raw(), 1, 2);
-                        cmd.set_image(normal.raw(), 1, 3);
-
-                        cmd.draw_indexed(0..mesh.indices.len(), 0, 0..1);
                     }
-                }
                 }
                 ubo.next_frame();
             },
         )
         .draw_image(&color_output, rg::AttachmentConfig::color_default(0))
-        .draw_image(&depth_output, rg::AttachmentConfig::depth_only_default()),
+        .draw_image(
+            &depth_prepass,
+            rg::AttachmentConfig {
+                kind: rg::AttachmentKind::DepthOnly,
+                access: rg::AccessType::DepthStencilAttachmentRead,
+                load_op: rg::vk::AttachmentLoadOp::LOAD,
+                store_op: rg::vk::AttachmentStoreOp::STORE,
+                stencil_load_op: rg::vk::AttachmentLoadOp::DONT_CARE,
+                stencil_store_op: rg::vk::AttachmentStoreOp::DONT_CARE,
+            },
+        ),
     );
 
     color_output
@@ -519,19 +654,23 @@ fn fxaa_pass(
         )
         .expect("Failed to create fxaa output");
     gb.add_renderpass(
-        rg::Renderpass::new("FXAA", rg::ImageSize::default(), move |cmd, _, args: &Args, _| {
-            cmd.set_shader(&shader);
+        rg::Renderpass::new(
+            "FXAA",
+            rg::ImageSize::default(),
+            move |cmd, _, args: &Args, _| {
+                cmd.set_shader(&shader);
 
-            cmd.push_constants(
-                &PushConstants {
-                    res: glam::vec2(args.width as f32, args.height as f32),
-                    enabled: args.fxaa as _,
-                },
-                0,
-            );
+                cmd.push_constants(
+                    &PushConstants {
+                        res: glam::vec2(args.width as f32, args.height as f32),
+                        enabled: args.fxaa as _,
+                    },
+                    0,
+                );
 
-            cmd.draw(0..6, 0..1);
-        })
+                cmd.draw(0..6, 0..1);
+            },
+        )
         .draw_image(&output, rg::AttachmentConfig::color_default(0))
         .sample_image(
             &pbr_pass,
@@ -547,9 +686,14 @@ fn imgui_pass(
     imgui: &mut rg::imgui_support::Backend,
     gb: &mut rg::GraphBuilder<Scene, Args, ()>,
 ) -> rg::Handle<rg::SampledImage> {
-    let mut renderer =
-        rg::imgui_support::Renderer::new(device, imgui, rg::vk::Format::R8G8B8A8_UNORM, false)
-            .expect("Failed to create imgui renderer");
+    let mut renderer = rg::imgui_support::Renderer::new(
+        device,
+        imgui,
+        rg::vk::Format::R8G8B8A8_UNORM,
+        device.supported_depth_stencil_format(),
+        false,
+    )
+    .expect("Failed to create imgui renderer");
 
     let imgui_image = gb
         .create_image(
@@ -602,9 +746,16 @@ fn imgui_update(ui: &imgui::Ui, scene: &mut Scene, vsync: &mut bool, fxaa: &mut 
         transform_controls(ui, &mut scene.camera.transform);
         imgui::Drag::new("near").build(ui, &mut scene.camera.near);
         imgui::Drag::new("far").build(ui, &mut scene.camera.far);
-        
+
+        match &mut scene.camera.projection {
+            Projection::Perspective(fov) => {
+                imgui::Drag::new("fov").build(ui, fov);
+            },
+            Projection::Orthographic => todo!(),
+        }
+
         imgui::Drag::new("exposure").build(ui, &mut scene.camera.exposure);
-        
+
         ui.checkbox("vsync", vsync);
         ui.checkbox("fxaa", fxaa);
     });
@@ -728,11 +879,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_font(&[imgui::FontSource::TtfData {
             data: include_bytes!("fonts/Roboto-Regular.ttf"),
             size_pixels: (13.0 * hidpi_factor) as f32,
-            config: Some(imgui::FontConfig {
-                rasterizer_multiply: 1.75,
-                glyph_ranges: imgui::FontGlyphRanges::japanese(),
-                ..imgui::FontConfig::default()
-            }),
+            config: None,
         }]);
 
     let mut vsync = true;
@@ -746,11 +893,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     )?;
 
-
     let device = gfx.device().clone();
     let mut gb = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 
-    let pbr_output = pbr_pass(&device, &mut gb);
+    let depth_prepass_output = depth_prepass(&device, &mut gb);
+    let pbr_output = pbr_pass(&device, &depth_prepass_output, &mut gb);
     let fxaa_output = fxaa_pass(&device, pbr_output, &mut gb);
     let imgui_output = imgui_pass(&device, &mut imgui, &mut gb);
 
@@ -766,9 +913,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))],
 
         camera: Camera {
-            transform: Transform::default(),
+            transform: Transform {
+                position: glam::Vec3::ZERO,
+                rotation: glam::Quat::from_axis_angle(glam::Vec3::Y, std::f32::consts::FRAC_PI_2),
+                scale: glam::Vec3::ONE,
+            },
             near: 0.1,
-            far: 1000.0,
+            far: 10_000.0,
             exposure: 1.0,
             projection: Projection::Perspective(45.0),
         },
@@ -794,13 +945,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 gfx.set_vsync(vsync);
 
-                graph.execute(&mut gfx, &scene, &Args {
-                    draw_data,
-                    fxaa,
-                    width: window.inner_size().width,
-                    height: window.inner_size().height
-                }, &()).unwrap();
-                
+                graph
+                    .execute(
+                        &mut gfx,
+                        &scene,
+                        &Args {
+                            draw_data,
+                            fxaa,
+                            width: window.inner_size().width,
+                            height: window.inner_size().height,
+                        },
+                        &(),
+                    )
+                    .unwrap();
+
                 //scene.objects[0].position.y += 1.0 * dt;
                 dt = now.elapsed().as_secs_f32();
                 hikari_dev::finish_frame!();
@@ -827,6 +985,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
             Event::LoopDestroyed => {
                 graph.prepare_exit();
+                let _ = device.clone(); //winit doesn't drop anything that's not passed to this closure so this is necessary to drop the device
             }
             _ => (),
         }

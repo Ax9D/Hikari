@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
+use graphy as rg;
 use simple_logger::SimpleLogger;
 use winit::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::ControlFlow,
     window::WindowBuilder,
 };
 
-use graphy as rg;
+mod common;
 
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 720;
@@ -55,45 +56,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init()
         .unwrap();
 
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new()
-        .with_inner_size(LogicalSize::new(WIDTH, HEIGHT))
-        .build(&event_loop)?;
+    let window = WindowBuilder::new().with_inner_size(LogicalSize::new(WIDTH, HEIGHT));
 
-    let mut gfx = rg::Gfx::new(
-        &window,
+    let (mut gfx, gameloop) = common::GameLoop::new(
+        window,
         rg::GfxConfig {
             debug: true,
             features: rg::Features::default(),
+            vsync: false,
             ..Default::default()
         },
     )?;
 
     let shader = triangle_shader(gfx.device());
-    let blue = blue_shader(gfx.device());
+    let _blue = blue_shader(gfx.device());
 
     let mut gb: rg::GraphBuilder<(), (), ()> = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 
     let mut frame_count = 0;
-    let mut state = false;
+    let mut last_time = std::time::Instant::now();
+    let mut state = true;
 
-    let blue_target =
+    let _blue_target =
         gb.create_image("blue", rg::ImageConfig::color2d(), rg::ImageSize::default())?;
 
-    gb.add_renderpass(
-        rg::Renderpass::new("Blue", rg::ImageSize::default(), move |cmd, _, _, _| {
-            cmd.set_shader(&blue);
-            cmd.draw(0..6, 0..1);
-        })
-        .draw_image(&blue_target, rg::AttachmentConfig::color_default(1)),
-    );
+    // gb.add_renderpass(
+    //     rg::Renderpass::new("Blue", rg::ImageSize::default(), move |cmd, _, _, _| {
+    //         cmd.set_shader(&blue);
+    //         cmd.draw(0..6, 0..1);
+    //     })
+    //     .draw_image(&blue_target, rg::AttachmentConfig::color_default(1)),
+    // );
 
     gb.add_renderpass(
         rg::Renderpass::new("Triangle", rg::ImageSize::default(), move |cmd, _, _, _| {
             cmd.set_shader(&shader);
 
-            if frame_count % 120 == 0 {
-                state = !state;
+            let now = std::time::Instant::now();
+            if now - last_time > std::time::Duration::from_secs(1) {
+                last_time = now;
+                //state = !state;
             }
 
             if state {
@@ -112,31 +114,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             frame_count += 1;
         })
-        .sample_image(
-            &blue_target,
-            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-            3,
-        )
+        // .sample_image(
+        //     &blue_target,
+        //     rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+        //     3,
+        // )
         .present(),
     );
 
     let mut graph = gb.build()?;
 
-    event_loop.run(move |event, _, control_flow| {
+    gameloop.run(gfx, move |gfx, _window, event, control_flow| {
         hikari_dev::profile_scope!("mainloop");
-
-        *control_flow = ControlFlow::Poll;
 
         match event {
             Event::MainEventsCleared => {
-                graph.execute(&mut gfx, &(), &(), &()).unwrap();
+                graph.execute(gfx, &(), &(), &()).unwrap();
             }
             Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
+                event: WindowEvent::Resized(size),
                 window_id: _,
             } => {
-                println!("Closing");
-                *control_flow = ControlFlow::Exit;
+                graph
+                    .resize(size.width, size.height)
+                    .expect("Failed to resize graph");
             }
             Event::LoopDestroyed => {
                 graph.prepare_exit();

@@ -339,7 +339,6 @@ impl GraphExecutor {
         unsafe {
             barriers.apply(device, cmd.raw());
         }
-
         let mut rcmd = cmd.begin_renderpass(super::command::RenderpassBeginInfo {
             renderpass: vk_pass,
             area,
@@ -392,6 +391,7 @@ impl GraphExecutor {
         swapchain: &mut Swapchain,
         image_ix: u32,
     ) -> VkResult<()> {
+        hikari_dev::profile_function!();
         //Wait till image is available again after previous presentation
         let wait_semaphores = [frame_state.current_frame().image_available_semaphore];
         //Signal end of render so that the swapchain can present

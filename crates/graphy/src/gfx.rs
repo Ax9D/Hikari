@@ -208,7 +208,7 @@ impl Gfx {
             &surface,
             &surface_loader,
             None,
-            config.vsync
+            config.vsync,
         )?;
         let swapchain = Arc::new(Mutex::new(swapchain));
 
@@ -218,7 +218,7 @@ impl Gfx {
             surface,
             surface_loader,
             swapchain,
-            vsync: config.vsync
+            vsync: config.vsync,
         })
     }
     pub fn set_vsync(&mut self, vsync: bool) {
@@ -226,7 +226,7 @@ impl Gfx {
             let (width, height) = {
                 let swapchain = self.swapchain().lock();
                 let width = swapchain.width();
-                let height = swapchain.height(); 
+                let height = swapchain.height();
 
                 (width, height)
             };
@@ -257,7 +257,7 @@ impl Gfx {
             &self.surface,
             &self.surface_loader,
             Some(swapchain.inner),
-            self.vsync
+            self.vsync,
         )?;
         let old_swapchain = std::mem::replace(swapchain.deref_mut(), new_swapchain);
 
@@ -275,5 +275,5 @@ impl Drop for Gfx {
 pub struct GfxConfig {
     pub debug: bool,
     pub features: crate::Features,
-    pub vsync: bool
+    pub vsync: bool,
 }

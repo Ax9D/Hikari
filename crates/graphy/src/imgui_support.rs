@@ -19,7 +19,7 @@ impl Backend {
 
         let hidpi_factor = platform.hidpi_factor();
         imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
-        platform.attach_window(imgui.io_mut(), window, HiDpiMode::Rounded);
+        platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
 
         Ok(Self { imgui, platform })
     }
@@ -64,6 +64,7 @@ impl Renderer {
     pub fn imgui_compatible_renderpass(
         device: &Arc<crate::Device>,
         color_format: vk::Format,
+        depth_format: vk::Format,
         present: bool,
     ) -> VkResult<vk::RenderPass> {
         log::debug!("Creating imgui render pass");
@@ -81,7 +82,7 @@ impl Renderer {
                 })
                 .build(),
             *vk::AttachmentDescription::builder()
-                .format(crate::Swapchain::depth_format())
+                .format(depth_format)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
                 .store_op(vk::AttachmentStoreOp::STORE)
                 .stencil_store_op(vk::AttachmentStoreOp::STORE)
@@ -124,6 +125,7 @@ impl Renderer {
         device: &Arc<crate::Device>,
         backend: &mut Backend,
         color_format: vk::Format,
+        depth_format: vk::Format,
         present: bool,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         // Command pool to create buffers to upload textures
@@ -135,7 +137,7 @@ impl Renderer {
         };
 
         let compatible_renderpass =
-            Self::imgui_compatible_renderpass(device, color_format, present)?;
+            Self::imgui_compatible_renderpass(device, color_format, depth_format, present)?;
         let renderer = imgui_rs_vulkan_renderer::Renderer::with_gpu_allocator(
             device.allocator().clone(),
             device.raw().clone(),

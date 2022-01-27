@@ -673,6 +673,7 @@ dependencies = [
 name = "graphy"
 version = "0.1.0"
 dependencies = [
+ "ahash",
  "arrayvec",
  "ash",
  "ash-window",
