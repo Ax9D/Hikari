@@ -1,5 +1,5 @@
 [package]
-name = "hikari-asset"
+name = "hikari_asset"
 version = "0.1.0"
 authors = ["atri <atrisarkar91@gmail.com>"]
 edition = "2018"
@@ -16,7 +16,7 @@ glam = "0.15.0"
 itertools = "0.10.0"
 parking_lot = "0.11.1"
 
-graphy = {path="../graphy"}
+hikari_3d = {path="../hikari_3d"}
 
 [dev-dependencies]
 rand = "0.8.3"

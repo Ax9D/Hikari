@@ -6,3 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+glam = "0.16.0"
+winit = "0.25"
+
+hikari_systems = {path = "../hikari_systems"}
+hikari_dev = {path = "../hikari_dev"}

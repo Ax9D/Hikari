@@ -2,17 +2,20 @@ pub mod function;
 pub mod global;
 pub mod query;
 pub mod state;
-pub mod task;
+pub mod stage;
 
 pub use global::GlobalState;
-pub use global::GlobalStateBuilder;
+pub use global::StateBuilder;
 pub use state::State;
 
-pub use task::Schedule;
-pub use task::ScheduleBuilder;
-pub use task::Task;
+pub use stage::Schedule;
+pub use stage::ScheduleBuilder;
+pub use stage::Stage;
 
 pub use function::Function;
 pub use function::IntoFunction;
 
 mod borrow;
+
+pub use borrow::Ref;
+pub use borrow::RefMut;

@@ -158,15 +158,15 @@ fn load_texture_data(
     });
 
     let wrap_x = match texture.sampler().wrap_s() {
-        gltf::texture::WrappingMode::ClampToEdge => graphy::texture::WrapMode::Clamp,
-        gltf::texture::WrappingMode::MirroredRepeat => graphy::texture::WrapMode::Repeat,
-        gltf::texture::WrappingMode::Repeat => graphy::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::ClampToEdge => hikari_3d::texture::WrapMode::Clamp,
+        gltf::texture::WrappingMode::MirroredRepeat => hikari_3d::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::Repeat => hikari_3d::texture::WrapMode::Repeat,
     };
 
     let wrap_y = match texture.sampler().wrap_t() {
-        gltf::texture::WrappingMode::ClampToEdge => graphy::texture::WrapMode::Clamp,
-        gltf::texture::WrappingMode::MirroredRepeat => graphy::texture::WrapMode::Repeat,
-        gltf::texture::WrappingMode::Repeat => graphy::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::ClampToEdge => hikari_3d::texture::WrapMode::Clamp,
+        gltf::texture::WrappingMode::MirroredRepeat => hikari_3d::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::Repeat => hikari_3d::texture::WrapMode::Repeat,
     };
 
     let min_filter = texture
@@ -179,8 +179,8 @@ fn load_texture_data(
         .unwrap_or(gltf::texture::MagFilter::Linear);
 
     let filtering = match mag_filter {
-        gltf::texture::MagFilter::Nearest => graphy::texture::FilterMode::Closest,
-        gltf::texture::MagFilter::Linear => graphy::texture::FilterMode::Linear,
+        gltf::texture::MagFilter::Nearest => hikari_3d::texture::FilterMode::Closest,
+        gltf::texture::MagFilter::Linear => hikari_3d::texture::FilterMode::Linear,
     };
 
     let generate_mips = match min_filter {
@@ -200,9 +200,9 @@ fn load_texture_data(
 
     //Albedo textures are treated as SRGB
     let format = if is_albedo.is_some() {
-        graphy::texture::Format::RGBA8
+        hikari_3d::texture::Format::RGBA8
     } else {
-        graphy::texture::Format::RGBA8
+        hikari_3d::texture::Format::RGBA8
     };
 
     Ok(Texture {

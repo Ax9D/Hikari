@@ -7,24 +7,20 @@ use crate::{
     State,
 };
 
-pub use crate::borrow::{Ref, RefMut, StateCell};
+use crate::borrow::{Ref, RefMut, StateCell};
 
-pub struct GlobalStateBuilder {
-    g_state: UnsafeGlobalState,
+pub struct StateBuilder {
+    state_list: FxHashMap<TypeId, StateCell>,
 }
 
-impl GlobalStateBuilder {
+impl StateBuilder {
     pub fn new() -> Self {
         Self {
-            g_state: UnsafeGlobalState {
-                state_list: Default::default(),
-                _marker: PhantomPinned::default(),
-            },
+            state_list: Default::default()
         }
     }
-    pub fn add_state<S: State>(mut self, state: S) -> Self {
+    pub fn add_state<S: State>(&mut self, state: S) -> &mut Self {
         if self
-            .g_state
             .state_list
             .insert(TypeId::of::<S>(), StateCell::new(state))
             .is_some()
@@ -37,9 +33,18 @@ impl GlobalStateBuilder {
 
         self
     }
+    pub fn get<S: State>(&self) -> Ref<S> {
+        self.state_list.get(&TypeId::of::<S>()).map(|cell|cell.borrow_cast::<S>()).unwrap()
+    }
+    pub fn get_mut<S: State>(&self) -> RefMut<S> {
+        self.state_list.get(&TypeId::of::<S>()).map(|cell|cell.borrow_cast_mut::<S>()).unwrap()
+    }
     pub fn build(self) -> GlobalState {
         GlobalState {
-            inner: Box::pin(self.g_state),
+            inner: Box::pin(UnsafeGlobalState {
+                state_list: self.state_list,
+                _marker: PhantomPinned::default()
+            })
         }
     }
 }
@@ -48,15 +53,13 @@ unsafe impl Send for UnsafeGlobalState {}
 unsafe impl Sync for UnsafeGlobalState {}
 
 //Access to Internal state is not guaranteed to be thread safe, because of thread_unsafety feature
+#[derive(Default)]
 pub struct UnsafeGlobalState {
     state_list: FxHashMap<TypeId, StateCell>,
     _marker: PhantomPinned,
 }
 
 impl UnsafeGlobalState {
-    pub fn new() -> GlobalStateBuilder {
-        GlobalStateBuilder::new()
-    }
     pub unsafe fn get<S: State>(self: Pin<&Self>) -> Option<Ref<S>> {
         self.get_ref()
             .state_list
@@ -73,14 +76,13 @@ impl UnsafeGlobalState {
         Q::Fetch::get(self)
     }
 }
-
+pub struct UniqueGlobalState {
+    
+}
 pub struct GlobalState {
     inner: Pin<Box<UnsafeGlobalState>>,
 }
 impl GlobalState {
-    pub fn new() -> GlobalStateBuilder {
-        GlobalStateBuilder::new()
-    }
     #[inline]
     pub fn raw(&self) -> Pin<&UnsafeGlobalState> {
         self.inner.as_ref()
@@ -103,7 +105,7 @@ impl GlobalState {
 mod tests {
     use std::time::Instant;
 
-    use crate::GlobalState;
+    use crate::StateBuilder;
 
     pub struct Renderer {
         x: i32,
@@ -116,10 +118,10 @@ mod tests {
     fn speed() {
         let n = 1_000_000;
 
-        let context = GlobalState::new()
-            .add_state(Renderer { x: 0 })
-            .add_state(Physics { y: false })
-            .build();
+        let mut context = StateBuilder::new();
+        context.add_state(Renderer { x: 0 });
+        context.add_state(Physics { y: false });
+        let context = context.build();
 
         let now = Instant::now();
         //let x = tuple.deref();

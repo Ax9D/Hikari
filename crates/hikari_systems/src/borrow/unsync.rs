@@ -23,6 +23,18 @@ impl<'a, T> Deref for Ref<'a, T> {
         self.data
     }
 }
+impl<T> AsRef<T> for Ref<'_, T> {
+    fn as_ref(&self) -> &T {
+        &*self
+    }
+}
+use std::borrow::Borrow;
+impl<T> Borrow<T> for Ref<'_, T> {
+    fn borrow(&self) -> &T {
+        &*self
+    }
+}
+
 impl<'a, S: fmt::Debug> fmt::Debug for Ref<'a, S> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -59,6 +71,22 @@ impl<T> DerefMut for RefMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.data
+    }
+}
+
+impl<T> AsRef<T> for RefMut<'_, T> {
+    fn as_ref(&self) -> &T {
+        & *self
+    }
+}
+impl<T> AsMut<T> for RefMut<'_, T> {
+    fn as_mut(&mut self) -> &mut T {
+        &mut *self
+    }
+}
+impl<T> Borrow<T> for RefMut<'_, T> {
+    fn borrow(&self) -> &T {
+        & *self
     }
 }
 

@@ -1,0 +1,68 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'graphy'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--",
+                    "--nocapture"
+                ],
+                "filter": {
+                    "name": "graphy",
+                    "kind": "lib"
+                }
+            },
+            //"program": "${workspaceRoot}/target/debug/deps/graphy-9b5fd30a8b1cd12c.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example",
+            // "cargo": {
+            //     "args": [
+            //         "run",
+            //         "--features",
+            //         "profile-puffin",
+            //         "--example",
+            //         "simplegraph"
+            //     ]
+            // },
+            "program": "${workspaceRoot}/target/debug/examples/pbr",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug test",
+            // "cargo": {
+            //     "args": [
+            //         "run",
+            //         "--features",
+            //         "profile-puffin",
+            //         "--example",
+            //         "simplegraph"
+            //     ]
+            // },
+            "program": "${workspaceRoot}/target/debug/deps/graphy-1b31ebe1586f9025",
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

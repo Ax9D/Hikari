@@ -6,35 +6,30 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[profile.release]
-opt-level = 3
-overflow-checks = false
-debug = true
-lto = true
+[workspace]
 
-[profile.dev]
-opt-level = 1
+members = [
+    "crates/hikari_core",
+    "crates/hikari_systems",
+    "crates/hikari_render",
+    "crates/hikari_3d",
+    "crates/hikari_asset",
+    "crates/hikari_input",
+    "crates/hikari_dev",
+
+
+    "hikari_editor"
+]
+
+
+[profile.release]
+debug = true
 
 [dependencies]
-glfw = "0.41.0"
-glam = "0.15.0"
-cupid = "0.6.1"
-rayon = "1.5.0"
-downcast-rs = "1.2.0"
-image = "0.23.12"
-toml = "0.5.8"
-lazy_static = "1.4.0"
-rand = "0.8.4"
-itertools = "0.10.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-log = {version = "0.4.11" }
-crossterm = "0.20.0"
-parking_lot="0.11.2"
-atomic_refcell = "0.1.6"
-hecs = "0.5.1"
-
-once_cell = "1.7.2"
-
-graphy = {path ="crates/graphy" }
-hikari-asset = {path = "crates/hikari_asset"}
+hikari_core = {path = "crates/hikari_core"}
+hikari_systems = {path = "crates/hikari_systems"}
+hikari_render = {path = "crates/hikari_render"}
+hikari_3d = {path = "crates/hikari_3d"}
+hikari_asset = {path = "crates/hikari_asset"}
+hikari_dev = {path = "crates/hikari_dev"}
+hikari_input = {path = "crates/hikari_input"}
