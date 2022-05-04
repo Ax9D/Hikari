@@ -5,8 +5,10 @@ use imgui_rs_vulkan_renderer::Options;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use winit::{event::Event, window::Window};
 
+unsafe impl Send for Backend {}
+unsafe impl Sync for Backend {}
 pub struct Backend {
-    imgui: imgui::Context,
+    pub imgui: imgui::Context,
     platform: WinitPlatform,
 }
 
@@ -17,8 +19,8 @@ impl Backend {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut platform = WinitPlatform::init(&mut imgui);
 
-        let hidpi_factor = platform.hidpi_factor();
-        imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+        let hidpi_factor = window.scale_factor();
+        //imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
 
         Ok(Self { imgui, platform })
@@ -36,11 +38,11 @@ impl Backend {
         self.platform
             .handle_event(self.imgui.io_mut(), window, event);
     }
-    pub fn new_frame(
-        &mut self,
+    pub fn new_frame<'a>(
+        &'a mut self,
         window: &Window,
         mut run_fn: impl FnMut(&imgui::Ui),
-    ) -> &imgui::DrawData {
+    ) -> &'a imgui::DrawData {
         self.platform
             .prepare_frame(self.imgui.io_mut(), window)
             .expect("Failed to prepare window for imgui");
