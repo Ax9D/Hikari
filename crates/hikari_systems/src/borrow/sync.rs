@@ -51,6 +51,19 @@ impl StateCell {
             Err(s) => panic!("{}", s),
         }
     }
+
+    pub unsafe fn borrow_cast_unchecked<S: State>(&self) -> &S {
+        let data_ref = &mut *self.data.get();
+        let typed_ref = data_ref.downcast_ref::<S>().unwrap();
+
+        typed_ref
+    }
+    pub unsafe fn borrow_cast_unchecked_mut<S: State>(&self) -> &mut S {
+        let data_ref = &mut *self.data.get();
+        let typed_ref = data_ref.downcast_mut::<S>().unwrap();
+
+        typed_ref
+    }
 }
 #[derive(Debug)]
 struct BorrowRef<'a> {
@@ -173,7 +186,7 @@ impl<'b> BorrowRefMut<'b> {
     }
 }
 #[allow(dead_code)]
-pub struct Ref<'a, S> {
+pub struct Ref<'a, S: 'a> {
     data: &'a S,
     borrow: BorrowRef<'a>,
 }
@@ -214,7 +227,7 @@ impl<T: fmt::Display> fmt::Display for Ref<'_, T> {
 }
 
 #[allow(dead_code)]
-pub struct RefMut<'a, S> {
+pub struct RefMut<'a, S: 'a> {
     data: &'a mut S,
     borrow: BorrowRefMut<'a>,
 }
@@ -237,7 +250,7 @@ impl<T> DerefMut for RefMut<'_, T> {
 
 impl<T> AsRef<T> for RefMut<'_, T> {
     fn as_ref(&self) -> &T {
-        & *self
+        &*self
     }
 }
 impl<T> AsMut<T> for RefMut<'_, T> {
@@ -247,7 +260,7 @@ impl<T> AsMut<T> for RefMut<'_, T> {
 }
 impl<T> Borrow<T> for RefMut<'_, T> {
     fn borrow(&self) -> &T {
-        & *self
+        &*self
     }
 }
 use std::borrow::BorrowMut;
@@ -256,7 +269,6 @@ impl<T> BorrowMut<T> for RefMut<'_, T> {
         &mut *self
     }
 }
-
 
 impl<'a, S: fmt::Debug> fmt::Debug for RefMut<'a, S> {
     #[inline]

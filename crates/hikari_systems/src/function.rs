@@ -1,11 +1,9 @@
-#[allow(dead_code)]
-pub struct Type {
-    name: &'static str,
-    id: TypeId,
-}
+use crate::query::Borrows;
+use crate::query::Query;
+
 #[allow(dead_code)]
 pub struct Function {
-    param_types: Vec<Type>,
+    borrows: Borrows,
     exec: Box<dyn FnMut(Pin<&UnsafeGlobalState>) + 'static>,
 }
 impl Function {
@@ -14,41 +12,38 @@ impl Function {
         (self.exec)(g_state);
     }
 }
-pub trait IntoFunction<Params>: 'static {
+pub trait IntoFunction<Params> {
     fn into_function(self) -> Function;
 }
 
-use std::any::type_name;
-use std::any::TypeId;
 use std::pin::Pin;
 
 use crate::global::UnsafeGlobalState;
 use crate::query::Fetch;
 
-use crate::query::Query;
-
 macro_rules! impl_into_function {
     ($($name: ident),*) => {
         #[allow(non_snake_case)]
-        impl<'a, Func, Return, $($name: Query + 'static),*> IntoFunction<($($name,)*)> for Func
+        impl<'a, Func, Return, $($name: Query),*> IntoFunction<($($name,)*)> for Func
         where
             Func:
                 FnMut($($name),*) -> Return +
                 FnMut($(<<$name as Query>::Fetch as Fetch>::Item),* ) -> Return +
                 Send + Sync + 'static {
             fn into_function(mut self) -> Function {
+                #[allow(unused_mut)]
+                let mut borrows = Borrows::default();
+                ($(<<$name as Query>::Fetch as Fetch>::borrow_check(&mut borrows),)*);
+
                 Function {
                     exec: Box::new(move |g_state| {
-                        let ($($name,)*) = unsafe { g_state.query::<($($name,)*)>() };
+                        unsafe {
+                            let ($($name,)*) = g_state.query::<($($name,)*)>();
 
-                        self($($name,)*);
-                    }),
-                    param_types: vec![$(
-                        Type {
-                            name: type_name::<$name>(),
-                            id: TypeId::of::<$name>()
+                            self($($name,)*);
                         }
-                        ,)*]
+                    }),
+                    borrows
                 }
             }
         }

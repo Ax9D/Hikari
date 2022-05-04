@@ -1,36 +1,34 @@
-use std::{collections::{HashSet, HashMap}};
+use std::collections::{HashMap, HashSet};
 
-use crate::{function::{Function, IntoFunction}, GlobalState};
-pub struct Stage {
+use crate::{
+    function::{Function, IntoFunction},
+    GlobalState,
+};
+pub struct Task {
     name: String,
-    functions: Vec<Function>,
+    function: Function,
     before: HashSet<String>,
     after: HashSet<String>,
 }
-impl Stage {
-    pub fn new(name: &str) -> Self {
+impl Task {
+    pub fn new<Params>(name: &str, function: impl IntoFunction<Params>) -> Self {
         Self {
-                name: name.to_owned(),
-                functions: Vec::new(),
-                before: HashSet::new(),
-                after: HashSet::new(),
-            }
+            name: name.to_owned(),
+            function: function.into_function(),
+            before: HashSet::new(),
+            after: HashSet::new(),
+        }
     }
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn before(&mut self, task_name: &str) -> &mut Self {
+    pub fn before(mut self, task_name: &str) -> Self {
         self.before.insert(task_name.to_owned());
 
         self
     }
-    pub fn after(&mut self, task_name: &str) -> &mut Self {
+    pub fn after(mut self, task_name: &str) -> Self {
         self.after.insert(task_name.to_owned());
-
-        self
-    }
-    pub fn add_function<Params>(&mut self, function: impl IntoFunction<Params>) -> &mut Self{
-        self.functions.push(function.into_function());
 
         self
     }
@@ -52,9 +50,7 @@ pub struct Schedule {
 
 impl Schedule {
     pub fn new() -> ScheduleBuilder {
-        ScheduleBuilder {
-            stages: Vec::new()
-        }
+        ScheduleBuilder { stages: Vec::new() }
     }
     #[inline]
     pub fn execute(&mut self, state: &mut GlobalState) {
@@ -67,7 +63,20 @@ impl Schedule {
     pub fn execute_parallel(&mut self, _state: &mut GlobalState) {
         todo!()
     }
- 
+}
+
+struct Stage {
+    name: String,
+    tasks: Vec<Task>,
+}
+impl Stage {
+    pub fn validate(&self) -> Result<(), String> {
+        for task in &self.tasks {
+            task.validate()?;
+        }
+
+        Ok(())
+    }
 }
 
 pub struct ScheduleBuilder {
@@ -76,93 +85,100 @@ pub struct ScheduleBuilder {
 
 impl ScheduleBuilder {
     pub fn new() -> Self {
-        Self {
-            stages: Vec::new()
-        }
+        Self { stages: Vec::new() }
     }
-    pub fn add_stage(&mut self, stage: Stage) -> &mut Self {
-        self.stages.push(stage);
+    pub fn create_stage(&mut self, name: &str) -> &mut Self {
+        if self.stages.iter().find(|st| st.name == name).is_none() {
+            self.stages.push(Stage {
+                name: name.to_string(),
+                tasks: Vec::new(),
+            });
+        } else {
+            panic!("Stage with name {} already exists", name);
+        }
 
         self
     }
-    pub fn add_to_stage<Params>(&mut self, task_name: &str, function: impl IntoFunction<Params>) -> &mut Self {
-        let task = self.stages.iter_mut().find(|task| task.name() == task_name).expect("Task not found");
-        task.add_function(function);
+    pub fn add_task(&mut self, stage: &str, task: Task) -> &mut Self {
+        self.stages
+            .iter_mut()
+            .find(|st| st.name == stage)
+            .unwrap_or_else(|| panic!("Stage {:?} not found", stage))
+            .tasks
+            .push(task);
 
         self
     }
     fn validate(&self) -> Result<(), String> {
-        for task in &self.stages {
-            task.validate()?;
+        for stage in &self.stages {
+            stage.validate()?;
         }
 
-        let mut task_names: HashSet<String> = HashSet::new();
-
-        for task in &self.stages {
-            if task_names.contains(&task.name) {
-                return Err(format!(
-                    "Task names must be unique, {:?}, appears more than once",
-                    task.name
-                ));
-            } else {
-                task_names.insert(task.name.clone());
+        for stage in &self.stages {
+            let mut task_names: HashSet<String> = HashSet::new();
+            for task in &stage.tasks {
+                if task_names.contains(&task.name) {
+                    return Err(format!(
+                        "Task names must be unique, {:?}, appears more than once in stage {:?}",
+                        task.name, stage.name
+                    ));
+                } else {
+                    task_names.insert(task.name.clone());
+                }
             }
         }
 
         Ok(())
     }
-    fn build_stage_graph(mut stages: Vec<Stage>) -> TaskGraph {
+    fn build_graph(mut tasks: Vec<Task>) -> TaskGraph {
         let mut edges: HashMap<String, HashSet<String>> = HashMap::new();
 
-        for stage in &stages {
-            for from_node in &stage.after {
-                edges.entry(from_node.clone())
-                .or_default()
-                .insert(stage.name().to_string());
+        for task in &tasks {
+            for from_node in &task.after {
+                edges
+                    .entry(from_node.clone())
+                    .or_default()
+                    .insert(task.name().to_string());
             }
 
-            for to_node in &stage.before {
-                edges.entry(stage.name().to_string())
-                .or_default()
-                .insert(to_node.to_string());
+            for to_node in &task.before {
+                edges
+                    .entry(task.name().to_string())
+                    .or_default()
+                    .insert(to_node.to_string());
             }
         }
 
-        let nodes = stages
-                                        .drain(..)
-                                        .map(|task| (task.name().to_string(), task))
-                                        .collect();
+        let nodes = tasks
+            .drain(..)
+            .map(|task| (task.name().to_string(), task))
+            .collect();
 
-
-        TaskGraph {
-            nodes,
-            edges
-        }
+        TaskGraph { nodes, edges }
     }
     pub fn build(self) -> Result<Schedule, String> {
         self.validate()?;
-        let graph = Self::build_stage_graph(self.stages);
-    
-        let tasks = graph.into_topological_order();
-        
+
         let mut functions = Vec::new();
-
         print!("Exec order: ");
-        for mut task in tasks {
-            print!("{} ", task.name());
-            task.functions.drain(..).for_each(|function| functions.push(function));
-        }
+        for stage in self.stages {
+            let graph = Self::build_graph(stage.tasks);
+            let mut tasks = graph.into_topological_order();
 
+            tasks.drain(..).for_each(|task| {
+                print!("{} ", task.name());
+                functions.push(task.function);
+            });
+        }
         println!();
-        Ok(Schedule {
-            functions
-        })
+
+        Ok(Schedule { functions })
     }
 }
 
 struct TaskGraph {
-    nodes: HashMap<String, Stage>,
-    edges: HashMap<String, HashSet<String>>
+    nodes: HashMap<String, Task>,
+    edges: HashMap<String, HashSet<String>>,
 }
 impl TaskGraph {
     fn topo_sort_(
@@ -174,16 +190,16 @@ impl TaskGraph {
         visited.insert(node_name.to_string());
 
         if let Some(connected_nodes) = adj_list.get(node_name) {
-        for node_name in connected_nodes {
-            if !visited.contains(node_name) {
-                Self::topo_sort_(node_name, visited, adj_list, stack);
+            for node_name in connected_nodes {
+                if !visited.contains(node_name) {
+                    Self::topo_sort_(node_name, visited, adj_list, stack);
+                }
             }
         }
-    }
 
         stack.push(node_name.to_string());
     }
-    fn into_topological_order(mut self) -> Vec<Stage> {
+    fn into_topological_order(mut self) -> Vec<Task> {
         let mut order = Vec::new();
 
         let mut visited = HashSet::new();
@@ -210,19 +226,19 @@ impl TaskGraph {
 
 #[cfg(test)]
 mod tests {
-    use crate::{StateBuilder, Ref, RefMut};
+    use crate::StateBuilder;
 
-    use super::{Stage, Schedule};
+    use super::{Schedule, Task};
 
-    fn update(x: Option<RefMut<f32>>, y: Ref<i32>) {      
+    fn update(x: &f32, y: &i32) {
         println!("{:?} {}", x, y);
     }
-    fn render(y: Ref<i32>, s: Ref<&'static str>, mut r: RefMut<RenderData>) {
+    fn render(y: &i32, s: &mut &'static str, r: &mut RenderData) {
         println!("{} {} {}", y, s, r.state);
         r.state = !r.state;
     }
     struct RenderData {
-        state: bool
+        state: bool,
     }
     #[test]
     fn stage_build() {
@@ -230,23 +246,20 @@ mod tests {
         global.add_state(420);
         global.add_state(69_f32);
         global.add_state("hello there");
-        global.add_state(RenderData{state: false});
+        global.add_state(RenderData { state: false });
         let mut global = global.build();
 
         let mut task_schedule = Schedule::new();
+        task_schedule.create_stage("Update");
 
-        let mut update_stage = Stage::new("Update");
-        update_stage.add_function(&update);
-        
-        task_schedule.add_stage(update_stage);
+        let update_stage = Task::new("Update", &update);
 
-        let mut render_stage = Stage::new("Render");
+        task_schedule.add_task("Update", update_stage);
 
-        render_stage.after("Update");
-        render_stage.add_function(&render);
+        let render_stage = Task::new("Render", &render);
 
-        task_schedule.add_stage(render_stage);
-        
+        task_schedule.add_task("Update", render_stage);
+
         let mut schedule = task_schedule.build().unwrap();
 
         for _ in 0..50 {

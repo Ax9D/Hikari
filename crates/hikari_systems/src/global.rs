@@ -16,7 +16,7 @@ pub struct StateBuilder {
 impl StateBuilder {
     pub fn new() -> Self {
         Self {
-            state_list: Default::default()
+            state_list: Default::default(),
         }
     }
     pub fn add_state<S: State>(&mut self, state: S) -> &mut Self {
@@ -34,17 +34,23 @@ impl StateBuilder {
         self
     }
     pub fn get<S: State>(&self) -> Ref<S> {
-        self.state_list.get(&TypeId::of::<S>()).map(|cell|cell.borrow_cast::<S>()).unwrap()
+        self.state_list
+            .get(&TypeId::of::<S>())
+            .map(|cell| cell.borrow_cast::<S>())
+            .unwrap()
     }
     pub fn get_mut<S: State>(&self) -> RefMut<S> {
-        self.state_list.get(&TypeId::of::<S>()).map(|cell|cell.borrow_cast_mut::<S>()).unwrap()
+        self.state_list
+            .get(&TypeId::of::<S>())
+            .map(|cell| cell.borrow_cast_mut::<S>())
+            .unwrap()
     }
     pub fn build(self) -> GlobalState {
         GlobalState {
             inner: Box::pin(UnsafeGlobalState {
                 state_list: self.state_list,
-                _marker: PhantomPinned::default()
-            })
+                _marker: PhantomPinned::default(),
+            }),
         }
     }
 }
@@ -52,7 +58,6 @@ impl StateBuilder {
 unsafe impl Send for UnsafeGlobalState {}
 unsafe impl Sync for UnsafeGlobalState {}
 
-//Access to Internal state is not guaranteed to be thread safe, because of thread_unsafety feature
 #[derive(Default)]
 pub struct UnsafeGlobalState {
     state_list: FxHashMap<TypeId, StateCell>,
@@ -60,25 +65,35 @@ pub struct UnsafeGlobalState {
 }
 
 impl UnsafeGlobalState {
-    pub unsafe fn get<S: State>(self: Pin<&Self>) -> Option<Ref<S>> {
+    pub fn get<S: State>(self: Pin<&Self>) -> Option<Ref<S>> {
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast())
     }
-    pub unsafe fn get_mut<S: State>(self: Pin<&Self>) -> Option<RefMut<S>> {
+    pub fn get_mut<S: State>(self: Pin<&Self>) -> Option<RefMut<S>> {
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_mut())
     }
+    pub unsafe fn get_unchecked<'a, S: State>(self: Pin<&'a Self>) -> Option<&'a S> {
+        self.get_ref()
+            .state_list
+            .get(&TypeId::of::<S>())
+            .map(|cell| cell.borrow_cast_unchecked())
+    }
+    pub unsafe fn get_unchecked_mut<'a, S: State>(self: Pin<&'a Self>) -> Option<&'a mut S> {
+        self.get_ref()
+            .state_list
+            .get(&TypeId::of::<S>())
+            .map(|cell| cell.borrow_cast_unchecked_mut())
+    }
     pub unsafe fn query<Q: Query>(self: Pin<&Self>) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
         Q::Fetch::get(self)
     }
 }
-pub struct UniqueGlobalState {
-    
-}
+pub struct UniqueGlobalState {}
 pub struct GlobalState {
     inner: Pin<Box<UnsafeGlobalState>>,
 }
@@ -92,12 +107,19 @@ impl GlobalState {
         self.inner.as_mut()
     }
     #[inline]
-    pub unsafe fn get<S: State>(&self) -> Option<Ref<S>> {
+    pub fn get<S: State>(&self) -> Option<Ref<S>> {
         self.raw().get()
     }
     #[inline]
-    pub unsafe fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
+    pub fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
         UnsafeGlobalState::get_mut(self.raw())
+    }
+
+    #[inline]
+    pub fn run(&mut self, function: &mut crate::Function) {
+        unsafe {
+            function.run(self.raw());
+        }
     }
 }
 
@@ -118,10 +140,10 @@ mod tests {
     fn speed() {
         let n = 1_000_000;
 
-        let mut context = StateBuilder::new();
-        context.add_state(Renderer { x: 0 });
-        context.add_state(Physics { y: false });
-        let context = context.build();
+        let mut global = StateBuilder::new();
+        global.add_state(Renderer { x: 0 });
+        global.add_state(Physics { y: false });
+        let global = global.build();
 
         let now = Instant::now();
         //let x = tuple.deref();
@@ -130,8 +152,8 @@ mod tests {
 
         let mut sum: i32 = 0;
         for _ in 0..n {
-            let phys = unsafe { context.get_mut::<Physics>().unwrap() };
-            let mut renderer = unsafe { context.get_mut::<Renderer>().unwrap() };
+            let phys = global.get_mut::<Physics>().unwrap();
+            let mut renderer = global.get_mut::<Renderer>().unwrap();
             renderer.x = rand::random();
 
             sum = sum.wrapping_add(renderer.x + phys.y as i32);

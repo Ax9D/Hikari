@@ -76,7 +76,7 @@ impl<T> DerefMut for RefMut<'_, T> {
 
 impl<T> AsRef<T> for RefMut<'_, T> {
     fn as_ref(&self) -> &T {
-        & *self
+        &*self
     }
 }
 impl<T> AsMut<T> for RefMut<'_, T> {
@@ -86,7 +86,7 @@ impl<T> AsMut<T> for RefMut<'_, T> {
 }
 impl<T> Borrow<T> for RefMut<'_, T> {
     fn borrow(&self) -> &T {
-        & *self
+        &*self
     }
 }
 
