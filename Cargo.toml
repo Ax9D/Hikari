@@ -13,6 +13,8 @@ members = [
     "crates/hikari_systems",
     "crates/hikari_render",
     "crates/hikari_3d",
+    "crates/hikari_pbr",
+    "crates/hikari_py",
     "crates/hikari_asset",
     "crates/hikari_input",
     "crates/hikari_dev",
@@ -33,3 +35,6 @@ hikari_3d = {path = "crates/hikari_3d"}
 hikari_asset = {path = "crates/hikari_asset"}
 hikari_dev = {path = "crates/hikari_dev"}
 hikari_input = {path = "crates/hikari_input"}
+
+[features]
+release_unsafe = ["hikari_systems/thread_unsafety"]
