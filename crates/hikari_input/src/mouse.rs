@@ -1,4 +1,4 @@
-use winit::{dpi::PhysicalPosition, event::{WindowEvent}};
+use winit::{dpi::PhysicalPosition, event::WindowEvent};
 pub type MouseButtonState = winit::event::ElementState;
 pub type MouseButton = winit::event::MouseButton;
 
@@ -35,7 +35,7 @@ impl MouseState {
                 winit::event::MouseScrollDelta::LineDelta(x, y) => {
                     self.scroll_delta.x = *x;
                     self.scroll_delta.y = *y;
-                },
+                }
                 winit::event::MouseScrollDelta::PixelDelta(_) => todo!(),
             },
             _ => {}
@@ -58,14 +58,17 @@ impl MouseState {
         self.scroll_delta
     }
     pub fn get_button_state(&self, button: MouseButton) -> MouseButtonState {
-        *self.buttons.get(&button).unwrap_or(&MouseButtonState::Released)
+        *self
+            .buttons
+            .get(&button)
+            .unwrap_or(&MouseButtonState::Released)
     }
     #[inline]
     pub fn is_pressed(&self, button: MouseButton) -> bool {
         self.get_button_state(button) == MouseButtonState::Pressed
     }
-    #[inline] 
+    #[inline]
     pub fn is_released(&self, button: MouseButton) -> bool {
-        self.get_button_state(button) == MouseButtonState::Released 
+        self.get_button_state(button) == MouseButtonState::Released
     }
 }

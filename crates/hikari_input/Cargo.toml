@@ -11,3 +11,4 @@ glam = "0.16.0"
 fxhash = "0.2.1"
 
 hikari_systems = {path = "../hikari_systems"}
+hikari_core = {path = "../hikari_core"}
