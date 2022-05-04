@@ -4,18 +4,15 @@ use ash::vk;
 use gpu_allocator::{vulkan::Allocation, vulkan::AllocationCreateDesc, AllocationError};
 
 pub mod sampled_image;
-pub mod texture2d;
 
 pub use sampled_image::ImageConfig;
 pub use sampled_image::SampledImage;
-
-
 
 pub fn create_image(
     device: &Arc<crate::Device>,
     create_info: &vk::ImageCreateInfo,
     location: gpu_allocator::MemoryLocation,
-) -> Result<(vk::Image, Allocation), Box<dyn std::error::Error>> {
+) -> Result<(vk::Image, Allocation), anyhow::Error> {
     unsafe {
         let image = device.raw().create_image(create_info, None)?;
         let requirements = device.raw().get_image_memory_requirements(image);

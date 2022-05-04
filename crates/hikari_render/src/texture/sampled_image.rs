@@ -24,6 +24,8 @@ fn format_size(format: vk::Format) -> u32 {
         _ => todo!(),
     }
 }
+/// An Image that can be sampled in shaders
+/// An ImageView is generated for each mip level automatically
 pub struct SampledImage {
     device: Arc<crate::Device>,
     allocation: gpu_allocator::vulkan::Allocation,
@@ -36,14 +38,15 @@ pub struct SampledImage {
 
     download_buffer: Option<crate::buffer::CpuBuffer<u8>>,
 }
-
+/// Specifies what the properties of the Image should be
+/// If `host_readable` is set to true, the contents of the image can be copied back to the host
 #[derive(Copy, Clone, Debug)]
 pub struct ImageConfig {
     pub format: vk::Format,
     pub filtering: vk::Filter,
     pub wrap_x: vk::SamplerAddressMode,
     pub wrap_y: vk::SamplerAddressMode,
-    pub aniso_level: u8,
+    pub aniso_level: f32,
     pub mip_levels: u32,
     pub mip_filtering: vk::SamplerMipmapMode,
     pub usage: vk::ImageUsageFlags,
@@ -52,13 +55,16 @@ pub struct ImageConfig {
 }
 
 impl ImageConfig {
+    /// Creates a config for a 2D color attachment with a single mip level, linear filtering with 
+    /// usage flags `vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED`
+    /// of format `R8G8B8A8_UNORM`
     pub fn color2d() -> Self {
         Self {
             format: vk::Format::R8G8B8A8_UNORM,
             filtering: vk::Filter::LINEAR,
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
-            aniso_level: 0,
+            aniso_level: 0.0,
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::LINEAR,
             usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
@@ -66,13 +72,16 @@ impl ImageConfig {
             host_readable: false,
         }
     }
+    /// Creates a config for a depth stencil attachment, linear filtering with 
+    /// usage flags `vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED`
+    /// A supported depth stencil format is picked automatically 
     pub fn depth_stencil(device: &Arc<crate::Device>) -> Self {
         Self {
             format: device.supported_depth_stencil_format(),
             filtering: vk::Filter::LINEAR,
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
-            aniso_level: 0,
+            aniso_level: 0.0,
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::LINEAR,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
@@ -80,13 +89,16 @@ impl ImageConfig {
             host_readable: false,
         }
     }
+    /// Creates a config for a depth only attachment, linear filtering with 
+    /// usage flags `vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED`
+    /// A supported depth only format is picked automatically 
     pub fn depth_only(device: &Arc<crate::Device>) -> Self {
         Self {
             format: device.supported_depth_only_format(),
             filtering: vk::Filter::LINEAR,
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
-            aniso_level: 0,
+            aniso_level: 0.0,
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::LINEAR,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
@@ -131,10 +143,10 @@ impl SampledImage {
             create_info.max_lod = vkconfig.mip_levels as f32;
         }
 
-        if vkconfig.aniso_level > 0
+        if vkconfig.aniso_level > 0.0
             && device.is_feature_supported(crate::device::Features::SAMPLER_ANISOTROPY)
         {
-            create_info.max_anisotropy = vkconfig.aniso_level as f32;
+            create_info.max_anisotropy = vkconfig.aniso_level;
             create_info.anisotropy_enable = vk::TRUE;
         }
 
@@ -183,12 +195,10 @@ impl SampledImage {
             vk::Sampler,
             Vec<vk::ImageView>,
         ),
-        Box<dyn std::error::Error>,
+        anyhow::Error,
     > {
-        log::info!("format {:?}", vkconfig.usage);
-
         let image_create_info = vk::ImageCreateInfo::builder()
-            .image_type(vk::ImageType::TYPE_2D)
+            .image_type(vkconfig.image_type)
             .format(vkconfig.format)
             .mip_levels(vkconfig.mip_levels)
             .array_layers(1)
@@ -218,6 +228,7 @@ impl SampledImage {
 
         Ok((image, allocation, sampler, image_views))
     }
+    /// Creates an empty image of the specified width and height 
     pub fn with_dimensions(
         device: &Arc<crate::Device>,
         width: u32,
@@ -250,13 +261,15 @@ impl SampledImage {
             download_buffer,
         })
     }
-    pub fn with_data(
+    /// Creates a 4 channel image (1 byte per channel) with the specified pixel data, width and height
+    ///  
+    pub fn with_rgba8(
         device: &Arc<crate::Device>,
         data: &[u8],
         width: u32,
         height: u32,
         mut vkconfig: ImageConfig,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, anyhow::Error> {
         vkconfig.usage |= vk::ImageUsageFlags::TRANSFER_DST;
 
         if vkconfig.host_readable {
@@ -268,13 +281,12 @@ impl SampledImage {
 
         //FIX ME: This is probably wrong?, Dont assume format sizes
         if data.len() != image_buffer_max_size {
-            return Err(format!(
+            return Err(anyhow::anyhow!(
                 "Cannot create gpu image, data size {} bytes doesn't match expected size {} bytes, format is {:?}",
                 data.len(),
                 image_buffer_max_size,
                 vkconfig.format
-            )
-            .into());
+            ));
         }
         let (image, allocation, sampler, image_views) =
             Self::create_image_with_sampler_and_views(device, width, height, &vkconfig)?;
@@ -510,15 +522,13 @@ impl SampledImage {
                 image,
                 subresource_range,
                 vk::AccessFlags::TRANSFER_READ,
-                vk::AccessFlags::SHADER_READ,
+                vk::AccessFlags::MEMORY_READ,
                 vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                 vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
             );
         }
-
-        log::debug!("Generated {} mips", levels);
     }
     pub fn image(&self) -> vk::Image {
         self.image
@@ -540,6 +550,8 @@ impl SampledImage {
     }
 
     /// Copies the image from the GPU to the Host; the read is not synchronized on the GPU, the caller must ensure the image is not being used on the GPU
+    /// Returns a slice to the downloaded data if the image was created with `host_readable` set to `true` in the `ImageConfig`
+    /// Otherwise returns `None`
     pub fn download(&self, mip_level: u32) -> Option<&[u8]> {
         if let Some(ref download_buffer) = self.download_buffer {
             assert!(mip_level > 0);

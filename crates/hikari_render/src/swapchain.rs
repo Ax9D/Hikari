@@ -95,7 +95,7 @@ impl Swapchain {
                 filtering: vk::Filter::LINEAR,
                 wrap_x: vk::SamplerAddressMode::REPEAT,
                 wrap_y: vk::SamplerAddressMode::REPEAT,
-                aniso_level: 0,
+                aniso_level: 0.0,
                 mip_levels: 1,
                 mip_filtering: vk::SamplerMipmapMode::LINEAR,
                 usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
