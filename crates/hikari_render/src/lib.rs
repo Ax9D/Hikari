@@ -44,3 +44,28 @@ pub use ash::vk;
 pub use imgui;
 pub use util::PerFrame;
 pub use vk_sync_fork::AccessType;
+
+pub struct GfxPlugin {
+    pub config: GfxConfig,
+}
+
+impl hikari_core::Plugin for GfxPlugin {
+    fn build(self, game: &mut hikari_core::Game) {
+        let gfx = Gfx::new(game.window(), self.config).expect("Failed to create render context");
+        game.add_state(gfx);
+
+        game.add_platform_event_hook(|state, window, event, _control| match event {
+            winit::event::Event::WindowEvent { window_id, event } => match event {
+                winit::event::WindowEvent::Resized(size) => {
+                    state
+                        .get_mut::<Gfx>()
+                        .unwrap()
+                        .resize(size.width, size.height)
+                        .expect("Failed to resize swapchain");
+                }
+                _ => {}
+            },
+            _ => {}
+        });
+    }
+}
