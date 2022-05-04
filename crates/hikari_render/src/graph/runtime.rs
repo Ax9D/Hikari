@@ -116,6 +116,9 @@ impl FrameState {
     }
 }
 
+pub struct ExecutionContext {
+
+}
 pub struct GraphExecutor {
     device: Arc<crate::Device>,
     descriptor_pool: DescriptorPool,
@@ -151,13 +154,11 @@ impl GraphExecutor {
 
         Ok(())
     }
-    pub fn execute_and_present<S, P, R>(
+    pub fn execute_and_present<T: crate::Args>(
         &mut self,
-        scene: &S,
-        pf: &P,
-        res: &R,
+        args: <T::Ref as crate::ByRef>::Item,
         size: (u32, u32),
-        passes: &mut [AnyPass<S, P, R>],
+        passes: &mut [AnyPass<T>],
         resources: &GraphResources,
         allocation_data: &AllocationData,
         swapchain: &mut Swapchain,
@@ -197,9 +198,7 @@ impl GraphExecutor {
                     Self::execute_renderpass(
                         device,
                         &mut cmd,
-                        scene,
-                        pf,
-                        res,
+                        args,
                         size,
                         ix,
                         pass,
@@ -229,13 +228,11 @@ impl GraphExecutor {
 
         Ok(())
     }
-    pub fn execute<S, A, R>(
+    pub fn execute<T: crate::Args>(
         &mut self,
-        scene: &S,
-        args: &A,
-        res: &R,
+        args: <T::Ref as crate::ByRef>::Item,
         size: (u32, u32),
-        passes: &mut [AnyPass<S, A, R>],
+        passes: &mut [AnyPass<T>],
         resources: &GraphResources,
         allocation_data: &AllocationData,
     ) -> VkResult<()> {
@@ -267,9 +264,7 @@ impl GraphExecutor {
                     Self::execute_renderpass(
                         device,
                         &mut cmd,
-                        scene,
                         args,
-                        res,
                         size,
                         ix,
                         pass,
@@ -300,15 +295,13 @@ impl GraphExecutor {
         Ok(())
     }
 
-    fn execute_renderpass<'cmd, 'graph, S, A, R>(
+    fn execute_renderpass<'cmd, 'graph, T: crate::Args>(
         device: &Arc<crate::Device>,
         cmd: &'cmd mut CommandBuffer<'graph>,
-        scene: &S,
-        args: &A,
-        res: &R,
+        args: <T::Ref as crate::ByRef>::Item,
         size: (u32, u32),
         ix: usize,
-        pass: &mut Renderpass<S, A, R>,
+        pass: &mut Renderpass<T>,
         resources: &GraphResources,
         allocation_data: &AllocationData,
         swapchain_data: Option<(&mut Swapchain, u32)>,
@@ -360,7 +353,7 @@ impl GraphExecutor {
             }
         }
 
-        (pass.draw_fn)(&mut rcmd, scene, args, res);
+        (pass.record_fn)(&mut rcmd, args);
 
         Ok(())
     }
@@ -379,9 +372,7 @@ impl GraphExecutor {
             .command_buffers(&cbs);
 
         unsafe {
-            device
-                .raw()
-                .queue_submit(device.graphics_queue(), &[*submit_info], fence)
+            device.queue_submit(device.graphics_queue(), &[*submit_info], fence)
         }
     }
     fn submit_and_present(
@@ -413,10 +404,12 @@ impl GraphExecutor {
                     log::warn!("Swapchain suboptimal");
                 }
             }
-            Err(err) => if  err == vk::Result::ERROR_OUT_OF_DATE_KHR  {
+            Err(err) => {
+                if err == vk::Result::ERROR_OUT_OF_DATE_KHR {
                     log::warn!("Swapchain out of date");
                 }
-            };
+            }
+        };
 
         Ok(())
     }

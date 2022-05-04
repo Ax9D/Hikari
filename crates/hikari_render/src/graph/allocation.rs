@@ -112,9 +112,9 @@ pub struct AllocationData {
 }
 
 impl AllocationData {
-    pub fn new<S, A, R>(
+    pub fn new<T: crate::Args>(
         device: &Arc<crate::Device>,
-        passes: &[AnyPass<S, A, R>],
+        passes: &[AnyPass<T>],
         resources: &GraphResources,
     ) -> VkResult<Self> {
         let mut alloc = Self {
@@ -137,10 +137,10 @@ impl AllocationData {
 
         Ok(alloc)
     }
-    pub fn resize_framebuffers<S, A, R>(
+    pub fn resize_framebuffers<T: crate::Args>(
         &mut self,
         device: &Arc<crate::Device>,
-        passes: &[AnyPass<S, A, R>],
+        passes: &[AnyPass<T>],
         resources: &GraphResources,
     ) -> VkResult<()> {
         self.framebuffers = VecMap::new();
@@ -158,10 +158,10 @@ impl AllocationData {
 
         Ok(())
     }
-    fn create_renderpass<S, P, R>(
+    fn create_renderpass<T: crate::Args>(
         &mut self,
         device: &Arc<crate::Device>,
-        pass: &Renderpass<S, P, R>,
+        pass: &Renderpass<T>,
         ix: usize,
         graph_resources: &GraphResources,
     ) -> VkResult<()> {
@@ -299,10 +299,10 @@ impl AllocationData {
 
         Ok(())
     }
-    fn allocate_framebuffers<S, A, R>(
+    fn allocate_framebuffers<T: crate::Args>(
         &mut self,
         device: &Arc<crate::Device>,
-        pass: &Renderpass<S, A, R>,
+        pass: &Renderpass<T>,
         ix: usize,
         graph_resources: &GraphResources,
     ) -> VkResult<()> {
@@ -328,10 +328,10 @@ impl AllocationData {
 
         Ok(())
     }
-    fn create_barriers<S, A, R>(
+    fn create_barriers<T: crate::Args>(
         &mut self,
         device: &Arc<crate::Device>,
-        passes: &[AnyPass<S, A, R>],
+        passes: &[AnyPass<T>],
         graph_resources: &GraphResources,
     ) {
         let mut prev_accesses: HashMap<_, Vec<AccessType>> = graph_resources

@@ -1,7 +1,7 @@
 use ash::vk;
 use vk_sync_fork::AccessType;
 
-use crate::texture::SampledImage;
+use crate::{texture::SampledImage};
 
 use self::graphics::Renderpass;
 
@@ -127,12 +127,12 @@ impl Output {
     }
 }
 
-pub enum AnyPass<S, P, R> {
-    Render(Renderpass<S, P, R>),
+pub enum AnyPass<T: crate::Args> {
+    Render(Renderpass<T>),
     Compute(u32),
 }
 
-impl<S, P, R> AnyPass<S, P, R> {
+impl<T: crate::Args> AnyPass<T> {
     pub fn name(&self) -> &str {
         match self {
             AnyPass::Render(pass) => pass.name(),

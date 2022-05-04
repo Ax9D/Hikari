@@ -5,9 +5,11 @@ mod pass;
 mod resources;
 mod runtime;
 mod storage;
+mod args;
 
 use crate::texture::SampledImage;
 use ash::prelude::VkResult;
+use parking_lot::Mutex;
 
 use self::allocation::AllocationData;
 use self::pass::graphics;
@@ -33,6 +35,8 @@ use thiserror::Error;
 
 use crate::{texture::ImageConfig, Gfx};
 
+pub use args::*;
+
 #[derive(Error, Debug)]
 pub enum GraphCreationError {
     #[error("Pass name: {0:?} appears more than once")]
@@ -43,14 +47,14 @@ pub enum GraphCreationError {
     AllocationFailed(String),
 }
 
-pub struct GraphBuilder<'a, S, A, R> {
+pub struct GraphBuilder<'a, T: Args> {
     gfx: &'a mut Gfx,
-    passes: Vec<AnyPass<S, A, R>>,
+    passes: Vec<AnyPass<T>>,
     resources: GraphResources,
     size: (u32, u32),
 }
 
-impl<'a, S, A, R> GraphBuilder<'a, S, A, R> {
+impl<'a, T: Args> GraphBuilder<'a, T> {
     pub fn new(gfx: &'a mut Gfx, width: u32, height: u32) -> Self {
         Self {
             gfx,
@@ -77,7 +81,7 @@ impl<'a, S, A, R> GraphBuilder<'a, S, A, R> {
     pub fn resources(&self) -> &GraphResources {
         &self.resources
     }
-    pub fn add_renderpass(&mut self, pass: Renderpass<S, A, R>) -> &mut Self {
+    pub fn add_renderpass(&mut self, pass: Renderpass<T>) -> &mut Self {
         self.passes.push(AnyPass::Render(pass));
 
         self
@@ -181,7 +185,7 @@ impl<'a, S, A, R> GraphBuilder<'a, S, A, R> {
     //     stack
     // }
     /// Allocates required resources and returns a Graph
-    pub fn build(mut self) -> Result<Graph<S, A, R>, GraphCreationError> {
+    pub fn build(mut self) -> Result<Graph<T>, GraphCreationError> {
         self.validate()?;
 
         let allocation_data = AllocationData::new(self.gfx.device(), &self.passes, &self.resources)
@@ -196,6 +200,7 @@ impl<'a, S, A, R> GraphBuilder<'a, S, A, R> {
 
         Ok(Graph {
             device: self.gfx.device().clone(),
+            swapchain: self.gfx.swapchain().clone(),
             passes: self.passes,
             resources: self.resources,
             allocation_data,
@@ -207,14 +212,11 @@ impl<'a, S, A, R> GraphBuilder<'a, S, A, R> {
 }
 /// A Graph is a collection of passes (Renderpasses + Compute passes), that execute ensuring proper resource synchronization as defined during Graph creation.
 /// A Graph is created using the GraphBuilder, and is immutable, meaning new passes cannot be added after creation.
-/// The generic parameters S, A, and R refer to the data that the Graph is to be provided when executing
-/// S: Scene related data
-/// A: Rendering args
-/// R: Graph external resources, such as textures/models which are needed for rendering
-/// These parameters are provided for ease of use and compliance to the above mentioned schema is not necessary
-pub struct Graph<S, A, R> {
+/// The generic parameter T refer to the data that the Graph is to be provided when executing (usually the game world and render resources)
+pub struct Graph<T: Args> {
     device: Arc<crate::Device>,
-    passes: Vec<AnyPass<S, A, R>>,
+    swapchain: Arc<Mutex<crate::Swapchain>>,
+    passes: Vec<AnyPass<T>>,
     resources: GraphResources,
     allocation_data: AllocationData,
     executor: GraphExecutor,
@@ -222,30 +224,23 @@ pub struct Graph<S, A, R> {
     outputs_swapchain: bool,
 }
 
-impl<S, A, R> Graph<S, A, R> {
+impl<T: Args> Graph<T> {
     pub fn execute(
         &mut self,
-        gfx: &crate::Gfx,
-        scene: &S,
-        args: &A,
-        resources: &R,
+        args: <T::Ref as ByRef>::Item,
     ) -> VkResult<()> {
         if self.outputs_swapchain {
             self.executor.execute_and_present(
-                scene,
                 args,
-                resources,
                 self.size,
                 &mut self.passes,
                 &self.resources,
                 &self.allocation_data,
-                &mut gfx.swapchain().lock(),
+                &mut self.swapchain.lock(),
             )
         } else {
             self.executor.execute(
-                scene,
                 args,
-                resources,
                 self.size,
                 &mut self.passes,
                 &self.resources,
@@ -255,12 +250,9 @@ impl<S, A, R> Graph<S, A, R> {
     }
     pub fn execute_sync(
         &mut self,
-        gfx: &crate::Gfx,
-        scene: &S,
-        args: &A,
-        resources: &R,
+        args: <T::Ref as ByRef>::Item
     ) -> VkResult<()> {
-        self.execute(gfx, scene, args, resources)?;
+        self.execute(args)?;
         self.finish()
     }
     /// Finishes rendering the previous frame

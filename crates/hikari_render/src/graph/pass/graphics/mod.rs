@@ -2,29 +2,33 @@ pub mod pipeline;
 use vk_sync_fork::AccessType;
 
 use crate::{
-    graph::{command::RenderpassCommands, Handle},
-    texture::SampledImage,
+    graph::{Handle},
+    texture::SampledImage, Args, RenderpassCommands, ByRef,
 };
 
 use super::{AttachmentConfig, ImageSize, Input, Output};
 
 pub use pipeline::*;
 
-pub struct Renderpass<Scene, Args, Resources> {
+pub struct Renderpass<T: Args> {
     name: String,
     id: u64,
     pub(crate) render_area: ImageSize,
     inputs: Vec<Input>,
     outputs: Vec<Output>,
     pub(crate) present_to_swapchain: bool,
-    pub(crate) draw_fn: Box<dyn FnMut(&mut RenderpassCommands, &Scene, &Args, &Resources) + Send + Sync>,
+    pub(crate) record_fn:
+        Box<dyn FnMut(&mut RenderpassCommands, <T::Ref as ByRef>::Item) + Send + Sync>,
 }
 
-impl<Scene, Args, Resources> Renderpass<Scene, Args, Resources> {
+impl<T: Args> Renderpass<T> {
+    /// Creates a new Renderpass
+    /// A name should be provided for debug usage
+    /// `record_fn` is a closure which is used to record rendering commands when the renderpass is executed
     pub fn new(
         name: &str,
         area: ImageSize,
-        draw_fn: impl FnMut(&mut RenderpassCommands, &Scene, &Args, &Resources) + Send + Sync + 'static,
+        record_fn: impl FnMut(&mut RenderpassCommands, <T::Ref as ByRef>::Item) + Send + Sync + 'static,
     ) -> Self {
         Self {
             name: name.to_string(),
@@ -33,7 +37,7 @@ impl<Scene, Args, Resources> Renderpass<Scene, Args, Resources> {
             inputs: Vec::new(),
             outputs: Vec::new(),
             present_to_swapchain: false,
-            draw_fn: Box::new(draw_fn),
+            record_fn: Box::new(record_fn),
         }
     }
     pub fn name(&self) -> &str {
@@ -48,6 +52,7 @@ impl<Scene, Args, Resources> Renderpass<Scene, Args, Resources> {
     pub fn outputs(&self) -> &[Output] {
         &self.outputs
     }
+    /// Used to add an "input" image to this pass, which will be automatically bound at the specified binding and be available in shaders for sampling
     pub fn sample_image(
         mut self,
         image: &Handle<SampledImage>,
@@ -166,6 +171,9 @@ impl<Scene, Args, Resources> Renderpass<Scene, Args, Resources> {
         self
     }
 
+    /// Marks that the renderpass will be used for presentation to the swapchain.
+    /// If a Renderpass has been marked for presentation, draws to other images is not permitted, and only the Swapchain's Framebuffer
+    /// consisting of a single Color Attachment(Binding 0) and a Depth Stencil Attachment(Binding 1) will be available
     pub fn present(mut self) -> Self {
         self.present_to_swapchain = true;
 
