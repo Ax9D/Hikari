@@ -262,19 +262,22 @@ pub struct Device {
     device_properties: PhysicalDeviceProperties,
     pub(crate) unified_queue_ix: u32,
     pub(crate) present_queue_ix: u32,
+    pub(crate) queue_submit_mutex: Mutex<()>,
 
     shader_compiler: Mutex<shaderc::Compiler>,
+    
     memory_allocator: Arc<std::sync::Mutex<gpu_allocator::vulkan::Allocator>>, //Using std::sync::Mutex for better compatibility
     descriptor_set_layout_cache: Mutex<DescriptorSetLayoutCache>,
     extensions: VkExtensions,
     pipeline_cache: vk::PipelineCache,
 
     raw_device: RawDevice,
+    entry: ash::Entry
 }
 
 impl Device {
     pub(crate) fn create(
-        entry: &ash::Entry,
+        entry: ash::Entry,
         instance: ash::Instance,
         surface: &vk::SurfaceKHR,
         surface_loader: &Surface,
@@ -283,7 +286,7 @@ impl Device {
         let required_extensions = [Swapchain::name(), vk::KhrSynchronization2Fn::name()];
 
         let physical_device = Self::pick_optimal(
-            entry,
+            &entry,
             &instance,
             surface,
             surface_loader,
@@ -369,12 +372,14 @@ impl Device {
 
         //let device = RawDevice { inner: ash_device.clone() };
         Ok(Arc::new(Self {
+            entry,
             raw_device,
             physical_device,
             device_properties: props,
 
             unified_queue_ix,
             present_queue_ix,
+            queue_submit_mutex: Mutex::new(()),
 
             pipeline_cache,
             memory_allocator,
@@ -513,6 +518,13 @@ impl Device {
     pub fn present_queue(&self) -> vk::Queue {
         unsafe { self.raw().get_device_queue(self.present_queue_ix, 0) }
     }
+    pub(crate) fn queue_submit(&self, queue: vk::Queue, submits: &[vk::SubmitInfo], fence: vk::Fence) -> VkResult<()> {
+        let _guard = self.queue_submit_mutex.lock();
+        //log::debug!("vkQueueSubmit");
+        unsafe {
+            self.raw().queue_submit(self.graphics_queue(), submits, fence)
+        }
+    }
     pub(crate) unsafe fn submit_commands_immediate(
         &self,
         func: impl FnOnce(vk::CommandBuffer) -> VkResult<()>,
@@ -551,7 +563,7 @@ impl Device {
 
         let now = std::time::Instant::now();
 
-        device.queue_submit(self.graphics_queue(), &[*submit_info], fence)?;
+        self.queue_submit(self.graphics_queue(), &[*submit_info], fence)?;
 
         device.wait_for_fences(&[fence], true, 999999999)?;
 

@@ -115,7 +115,6 @@ pub struct Gfx {
     surface: vk::SurfaceKHR,
     surface_loader: Surface,
     swapchain: Arc<Mutex<Swapchain>>, //
-    entry: ash::Entry,                //
 }
 impl Gfx {
     fn get_extensions(window: &Window, debug: bool) -> Vec<*const i8> {
@@ -198,7 +197,7 @@ impl Gfx {
         let surface_loader = Surface::new(&entry, &instance);
 
         let device =
-            crate::Device::create(&entry, instance, &surface, &surface_loader, config.features)?;
+            crate::Device::create(entry, instance, &surface, &surface_loader, config.features)?;
 
         let window_size = window.inner_size();
         let swapchain = crate::Swapchain::create(
@@ -213,7 +212,6 @@ impl Gfx {
         let swapchain = Arc::new(Mutex::new(swapchain));
 
         Ok(Self {
-            entry,
             device,
             surface,
             surface_loader,
