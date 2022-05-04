@@ -32,7 +32,7 @@ impl IndexType for GpuBuffer<u16> {
 pub fn create_uniform_buffer<T: Copy>(
     device: &Arc<crate::Device>,
     len: usize,
-) -> Result<CpuBuffer<T>, Box<dyn std::error::Error>> {
+) -> Result<CpuBuffer<T>, anyhow::Error> {
     CpuBuffer::new(
         device,
         len,
@@ -43,13 +43,13 @@ pub fn create_uniform_buffer<T: Copy>(
 pub fn create_vertex_buffer<T: Copy>(
     device: &Arc<crate::Device>,
     len: usize,
-) -> Result<GpuBuffer<T>, Box<dyn std::error::Error>> {
+) -> Result<GpuBuffer<T>, anyhow::Error> {
     GpuBuffer::new(device, len, vk::BufferUsageFlags::VERTEX_BUFFER)
 }
 pub fn create_index_buffer(
     device: &Arc<crate::Device>,
     len: usize,
-) -> Result<GpuBuffer<u32>, Box<dyn std::error::Error>> {
+) -> Result<GpuBuffer<u32>, anyhow::Error> {
     GpuBuffer::new(device, len, vk::BufferUsageFlags::INDEX_BUFFER)
 }
 
@@ -67,7 +67,7 @@ impl<T: Copy> CpuBuffer<T> {
         len: usize,
         usage: vk::BufferUsageFlags,
         location: gpu_allocator::MemoryLocation,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, anyhow::Error> {
         if location == gpu_allocator::MemoryLocation::GpuOnly
             || location == gpu_allocator::MemoryLocation::Unknown
         {
@@ -181,7 +181,7 @@ impl<T: Copy> GpuBuffer<T> {
         device: &Arc<crate::Device>,
         len: usize,
         usage: vk::BufferUsageFlags,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, anyhow::Error> {
         let upload_buffer = CpuBuffer::<T>::new(
             device,
             len,
