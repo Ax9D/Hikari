@@ -150,6 +150,8 @@ impl DepthStencilState {
             .depth_write_enable(self.depth_write_enabled)
             .depth_compare_op(self.depth_compare_op.into_vk())
             .depth_bounds_test_enable(self.depth_bound_test_enabled)
+            .min_depth_bounds(self.min_depth_bounds)
+            .max_depth_bounds(self.max_depth_bounds)
             .stencil_test_enable(self.stencil_test_enabled)
             .front(stencil_op)
             .back(stencil_op)
