@@ -2,7 +2,7 @@
 name = "hikari"
 version = "0.1.0"
 authors = ["atri <atrisarkar91@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -17,10 +17,10 @@ members = [
     "crates/hikari_py",
     "crates/hikari_asset",
     "crates/hikari_input",
-    "crates/hikari_dev",
+    "crates/hikari_dev", 
 
-
-    "hikari_editor"
+    "hikari_editor",
+    "hikari_cli"
 ]
 
 
