@@ -2,13 +2,15 @@ use std::path::Path;
 
 use image::GenericImageView;
 
-
 pub fn load_from_file_with_format(
     path: &Path,
     format: image::ImageFormat,
 ) -> Result<(Vec<u8>, u32, u32), Box<dyn std::error::Error>> {
     let data = std::fs::read(path)?;
     Ok(load_from_data(&data, format)?)
+}
+pub fn format_from_path(path: &Path) -> Result<image::ImageFormat, image::ImageError>{
+    image::ImageFormat::from_path(path)
 }
 pub fn load_from_data(
     data: &[u8],

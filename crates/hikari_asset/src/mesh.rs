@@ -1,6 +1,6 @@
-use std::{ffi::OsStr};
+use std::ffi::OsStr;
 
-use crate::error;
+use hikari_math::{Vec3, Vec2};
 
 // impl Mesh {
 //     pub fn new() -> Arc<Mesh> {
@@ -20,12 +20,6 @@ impl MeshFormat {
             _ => Err(error::Error::UnsupportedModelFormat(ext.to_owned())),
         }
     }
-}
-#[derive(Debug)]
-pub struct SceneData {
-    positions: Vec<f32>,
-    indices: Vec<u32>,
-    tex_coords: Vec<f32>,
 }
 #[derive(Debug)]
 pub struct MeshData {
@@ -49,10 +43,10 @@ impl MeshData {
     }
 }
 pub struct Mesh {
-    pub positions: Vec<glam::Vec3>,
-    pub normals: Vec<glam::Vec3>,
-    pub texcoord0: Vec<glam::Vec2>,
-    pub texcoord1: Vec<glam::Vec2>,
+    pub positions: Vec<Vec3>,
+    pub normals: Vec<Vec3>,
+    pub texcoord0: Vec<Vec2>,
+    pub texcoord1: Vec<Vec2>,
 
     pub indices: Vec<u32>,
 
@@ -71,9 +65,9 @@ impl Model {
         self.meshes.iter()
     }
 }
-pub fn default_normals(n: usize) -> Vec<glam::Vec3> {
+pub fn default_normals(n: usize) -> Vec<Vec3> {
     //Flat normals
-    vec![glam::Vec3::ZERO; n]
+    vec![Vec3::ZERO; n]
 }
 
 // impl MeshData {

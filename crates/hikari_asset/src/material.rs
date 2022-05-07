@@ -1,3 +1,5 @@
+use hikari_math::Vec4;
+
 // #[derive(Clone)]
 // pub enum MaterialColor {
 //     Constant(glam::Vec4),
@@ -34,7 +36,7 @@ pub struct TextureDesc {
 #[derive(Clone, Debug)]
 pub struct Material {
     pub name: String,
-    pub albedo: glam::Vec4,
+    pub albedo: Vec4,
     pub albedo_map: Option<TextureDesc>,
     pub roughness: f32,
     pub roughness_map: Option<TextureDesc>,

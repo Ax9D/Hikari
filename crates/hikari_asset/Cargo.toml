@@ -7,16 +7,24 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-thiserror = "1.0.24"
-gltf = {version = "0.15.2", features = [ "import" ]}
-base64 = "0.13.0"
-image = {version = "0.23.14", features = ["jpeg", "png", "jpeg_rayon", "hdr"]}
-rayon = "1.5.1"
-glam = "0.15.0"
-itertools = "0.10.0"
-parking_lot = "0.11.1"
+thiserror = "1"
+gltf = {version = "0.15", features = [ "import" ]}
+base64 = "0.13"
+image = {version = "0.23", features = ["jpeg", "png", "jpeg_rayon", "hdr"]}
+rayon = "1.5"
+flume = "0.10"
+itertools = "0.10"
+parking_lot = "0.12"
+anyhow = "1.0"
+uuid = {version = "0.8", features = ["v4", "serde"] }
+log = "0.4"
+serde = "1"
+serde_yaml = "0.8"
+once_cell = "1"
 
-hikari_3d = {path="../hikari_3d"}
+hikari_core = {path = "../hikari_core"}
+hikari_math = {path = "../hikari_math"}
 
 [dev-dependencies]
 rand = "0.8.3"
+simple_logger = "2.0"

@@ -23,7 +23,6 @@ members = [
     "hikari_cli"
 ]
 
-
 [profile.release]
 debug = true
 

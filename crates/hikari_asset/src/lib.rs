@@ -2,17 +2,21 @@
 #![allow(unused_variables)]
 #![allow(unused_unsafe)]
 
-pub mod error;
-pub mod gltf;
-pub mod image;
-pub mod material;
-pub mod mesh;
-pub mod scene;
-pub mod texture;
+//pub mod texture;
+mod asset;
+mod assets;
+mod handle;
+mod manager;
+mod meta;
+mod serde;
 
-pub use error::Error;
-pub use material::Material;
-pub use mesh::Mesh;
-pub use mesh::Model;
-pub use scene::Scene;
-pub use texture::Texture;
+pub use crate::serde::*;
+pub use asset::*;
+pub use assets::*;
+pub use handle::*;
+pub use manager::*;
+pub use meta::*;
+
+pub type Error = anyhow::Error;
+//pub use scene::Scene;
+//pub use texture::Texture;

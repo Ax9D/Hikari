@@ -5,6 +5,7 @@ use std::{
 
 use rayon::iter::*;
 use rayon::*;
+use hikari_math::{Vec2, Vec3, Vec4};
 
 use crate::{
     material::{Material, TextureDesc},
@@ -66,10 +67,7 @@ fn parse_texture_data(
                     data,
                     image::ImageFormat::Jpeg,
                 )?),
-                "image/png" => Ok(crate::image::load_from_data(
-                    data,
-                    image::ImageFormat::Png,
-                )?),
+                "image/png" => Ok(crate::image::load_from_data(data, image::ImageFormat::Png)?),
                 _ => Err(crate::error::Error::UnsupportedImageFormat(
                     mime_type.split(r"/").last().unwrap().to_string(),
                     texture.name().unwrap_or("unknown").to_string(),
@@ -184,11 +182,11 @@ fn load_texture_data(
     };
 
     let generate_mips = match min_filter {
-        gltf::texture::MinFilter::NearestMipmapNearest |
-        gltf::texture::MinFilter::NearestMipmapLinear |
-        gltf::texture::MinFilter::LinearMipmapNearest |
-        gltf::texture::MinFilter::LinearMipmapLinear => true,
-        _=> false
+        gltf::texture::MinFilter::NearestMipmapNearest
+        | gltf::texture::MinFilter::NearestMipmapLinear
+        | gltf::texture::MinFilter::LinearMipmapNearest
+        | gltf::texture::MinFilter::LinearMipmapLinear => true,
+        _ => false,
     } && is_albedo.is_some();
 
     let name = texture
@@ -257,7 +255,7 @@ fn load_materials(textures: &Vec<Texture>, import_data: &ImportData) -> Vec<Mate
         } else {
             None
         };
-        let albedo = glam::Vec4::from(material.pbr_metallic_roughness().base_color_factor());
+        let albedo = Vec4::from(material.pbr_metallic_roughness().base_color_factor());
 
         let roughness_map = if let Some(info) = material
             .pbr_metallic_roughness()
@@ -271,8 +269,6 @@ fn load_materials(textures: &Vec<Texture>, import_data: &ImportData) -> Vec<Mate
             None
         };
         let roughness = material.pbr_metallic_roughness().roughness_factor();
-
-        println!("{}", roughness);
 
         let metallic_map = if let Some(info) = material
             .pbr_metallic_roughness()
@@ -335,7 +331,7 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::me
             let positions = iter.collect::<Vec<_>>();
             positions
                 .iter()
-                .map(|position| glam::Vec3::from(*position))
+                .map(|position| Vec3::from(*position))
                 .collect()
         } else {
             continue;
@@ -345,7 +341,7 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::me
             let normals = iter.collect::<Vec<_>>();
             normals
                 .iter()
-                .map(|normal| glam::Vec3::from(*normal))
+                .map(|normal| Vec3::from(*normal))
                 .collect()
         } else {
             crate::mesh::default_normals(positions.len())
@@ -356,10 +352,10 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::me
             let texcoord0 = iter.collect::<Vec<_>>();
             texcoord0
                 .iter()
-                .map(|texcoord0| glam::Vec2::from(*texcoord0))
+                .map(|texcoord0| Vec2::from(*texcoord0))
                 .collect()
         } else {
-            vec![glam::Vec2::ZERO; positions.len()]
+            vec![Vec2::ZERO; positions.len()]
         };
 
         let texcoord1 = if let Some(iter) = reader.read_tex_coords(0) {
@@ -367,10 +363,10 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::me
             let texcoord1 = iter.collect::<Vec<_>>();
             texcoord1
                 .iter()
-                .map(|texcoord1| glam::Vec2::from(*texcoord1))
+                .map(|texcoord1| Vec2::from(*texcoord1))
                 .collect()
         } else {
-            vec![glam::Vec2::ZERO; positions.len()]
+            vec![Vec2::ZERO; positions.len()]
         };
 
         let indices = if let Some(iter) = reader.read_indices() {
@@ -418,7 +414,7 @@ pub fn load_scene(path: &Path) -> Result<crate::Scene, crate::Error> {
     let textures = load_textures(&import_data)
         .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
 
-    println!("Textures {:?}", now.elapsed());
+    //println!("Textures {:?}", now.elapsed());
     //println!("First import texture {}", importData.document().textures().next().unwrap().index());
     //println!("First texture {}", textures[0].name());
 
@@ -426,10 +422,10 @@ pub fn load_scene(path: &Path) -> Result<crate::Scene, crate::Error> {
     let materials = load_materials(&textures, &import_data);
 
     let now = std::time::Instant::now();
-    println!("Materials {:?}", now.elapsed());
+    //println!("Materials {:?}", now.elapsed());
     let models = load_models(&import_data);
 
-    println!("Models {:?}", now.elapsed());
+    //println!("Models {:?}", now.elapsed());
 
     Ok(crate::Scene {
         textures,
