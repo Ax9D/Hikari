@@ -45,7 +45,7 @@ use std::marker::PhantomData;
 // impl_args!(A, B, C, D, E, F, G);
 // impl_args!(A, B, C, D, E, F, G, H);
 
-pub trait ByRef<'a>{
+pub trait ByRef<'a> {
     type Item: Copy;
 }
 pub trait Args {

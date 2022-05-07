@@ -116,9 +116,7 @@ impl FrameState {
     }
 }
 
-pub struct ExecutionContext {
-
-}
+pub struct ExecutionContext {}
 pub struct GraphExecutor {
     device: Arc<crate::Device>,
     descriptor_pool: DescriptorPool,
@@ -371,9 +369,7 @@ impl GraphExecutor {
             .signal_semaphores(signal_semaphores)
             .command_buffers(&cbs);
 
-        unsafe {
-            device.queue_submit(device.graphics_queue(), &[*submit_info], fence)
-        }
+        unsafe { device.queue_submit(device.graphics_queue(), &[*submit_info], fence) }
     }
     fn submit_and_present(
         device: &Arc<crate::Device>,

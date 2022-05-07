@@ -1,7 +1,7 @@
 use ash::vk;
 use vk_sync_fork::AccessType;
 
-use crate::{texture::SampledImage};
+use crate::texture::SampledImage;
 
 use self::graphics::Renderpass;
 

@@ -1,11 +1,11 @@
 mod allocation;
+mod args;
 mod command;
 mod framebuffer;
 mod pass;
 mod resources;
 mod runtime;
 mod storage;
-mod args;
 
 use crate::texture::SampledImage;
 use ash::prelude::VkResult;
@@ -200,7 +200,7 @@ impl<'a, T: Args> GraphBuilder<'a, T> {
 
         Ok(Graph {
             device: self.gfx.device().clone(),
-            swapchain: self.gfx.swapchain().clone(),
+            swapchain: self.gfx.swapchain().cloned(),
             passes: self.passes,
             resources: self.resources,
             allocation_data,
@@ -215,7 +215,7 @@ impl<'a, T: Args> GraphBuilder<'a, T> {
 /// The generic parameter T refer to the data that the Graph is to be provided when executing (usually the game world and render resources)
 pub struct Graph<T: Args> {
     device: Arc<crate::Device>,
-    swapchain: Arc<Mutex<crate::Swapchain>>,
+    swapchain: Option<Arc<Mutex<crate::Swapchain>>>,
     passes: Vec<AnyPass<T>>,
     resources: GraphResources,
     allocation_data: AllocationData,
@@ -225,10 +225,7 @@ pub struct Graph<T: Args> {
 }
 
 impl<T: Args> Graph<T> {
-    pub fn execute(
-        &mut self,
-        args: <T::Ref as ByRef>::Item,
-    ) -> VkResult<()> {
+    pub fn execute(&mut self, args: <T::Ref as ByRef>::Item) -> VkResult<()> {
         if self.outputs_swapchain {
             self.executor.execute_and_present(
                 args,
@@ -236,7 +233,7 @@ impl<T: Args> Graph<T> {
                 &mut self.passes,
                 &self.resources,
                 &self.allocation_data,
-                &mut self.swapchain.lock(),
+                &mut self.swapchain.as_ref().expect("Cannot present in headless mode").lock(),
             )
         } else {
             self.executor.execute(
@@ -248,10 +245,7 @@ impl<T: Args> Graph<T> {
             )
         }
     }
-    pub fn execute_sync(
-        &mut self,
-        args: <T::Ref as ByRef>::Item
-    ) -> VkResult<()> {
+    pub fn execute_sync(&mut self, args: <T::Ref as ByRef>::Item) -> VkResult<()> {
         self.execute(args)?;
         self.finish()
     }

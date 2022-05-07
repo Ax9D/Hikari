@@ -12,9 +12,10 @@ use ash::{
 use gpu_allocator::vulkan::*;
 use parking_lot::{Mutex, MutexGuard};
 
-use crate::descriptor::DescriptorSetLayoutCache;
+use crate::{descriptor::DescriptorSetLayoutCache, swapchain::SurfaceData};
 
 const VK_PIPELINE_CACHE_FILE: &str = "vk_pipeline_cache";
+
 
 pub struct PhysicalDevice {
     pub raw: vk::PhysicalDevice,
@@ -28,8 +29,6 @@ pub struct PhysicalDevice {
 impl PhysicalDevice {
     pub fn enumerate(
         instance: &ash::Instance,
-        surface: &vk::SurfaceKHR,
-        surface_loader: &Surface,
     ) -> VkResult<Vec<PhysicalDevice>> {
         let raw_devices = unsafe { instance.enumerate_physical_devices() }?;
 
@@ -38,8 +37,6 @@ impl PhysicalDevice {
             devices.push(Self::process_device(
                 device,
                 instance,
-                surface,
-                surface_loader,
             )?)
         }
 
@@ -48,8 +45,6 @@ impl PhysicalDevice {
     fn process_device(
         device: vk::PhysicalDevice,
         instance: &ash::Instance,
-        surface: &vk::SurfaceKHR,
-        surface_loader: &Surface,
     ) -> VkResult<Self> {
         let properties = unsafe { instance.get_physical_device_properties(device) };
         let mem_properties = unsafe { instance.get_physical_device_memory_properties(device) };
@@ -265,22 +260,21 @@ pub struct Device {
     pub(crate) queue_submit_mutex: Mutex<()>,
 
     shader_compiler: Mutex<shaderc::Compiler>,
-    
+
     memory_allocator: Arc<std::sync::Mutex<gpu_allocator::vulkan::Allocator>>, //Using std::sync::Mutex for better compatibility
     descriptor_set_layout_cache: Mutex<DescriptorSetLayoutCache>,
     extensions: VkExtensions,
     pipeline_cache: vk::PipelineCache,
 
     raw_device: RawDevice,
-    entry: ash::Entry
+    entry: ash::Entry,
 }
 
 impl Device {
     pub(crate) fn create(
         entry: ash::Entry,
         instance: ash::Instance,
-        surface: &vk::SurfaceKHR,
-        surface_loader: &Surface,
+        surface_data: Option<&SurfaceData>,
         enable_features: Features,
     ) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
         let required_extensions = [Swapchain::name(), vk::KhrSynchronization2Fn::name()];
@@ -288,8 +282,7 @@ impl Device {
         let physical_device = Self::pick_optimal(
             &entry,
             &instance,
-            surface,
-            surface_loader,
+            surface_data,
             &required_extensions,
             enable_features,
         )
@@ -392,20 +385,27 @@ impl Device {
     fn pick_optimal(
         entry: &ash::Entry,
         instance: &ash::Instance,
-        surface: &vk::SurfaceKHR,
-        surface_loader: &Surface,
+        surface_data: Option<&SurfaceData>,
         required_extensions: &[&'static CStr],
         required_features: Features,
     ) -> Option<PhysicalDevice> {
-        let physical_devices = PhysicalDevice::enumerate(instance, surface, surface_loader).ok()?;
+        let physical_devices = PhysicalDevice::enumerate(instance).ok()?;
         for device in physical_devices {
-            let present_support = device
-                .get_present_queue(instance, surface, surface_loader)
-                .is_some();
 
             let unified_queue = device.get_unified_queue().is_some();
 
-            if present_support && unified_queue && device.features.contains(required_features) {
+            if unified_queue && device.features.contains(required_features) {
+                if let Some(surface_data) = surface_data {
+                    let present_support = device
+                    .get_present_queue(instance, &surface_data.surface, &surface_data.surface_loader)
+                    .is_some();
+
+                    if present_support {
+                        return Some(device);
+                    }
+                    
+                    return None;
+                } 
                 return Some(device);
             }
         }
@@ -518,11 +518,17 @@ impl Device {
     pub fn present_queue(&self) -> vk::Queue {
         unsafe { self.raw().get_device_queue(self.present_queue_ix, 0) }
     }
-    pub(crate) fn queue_submit(&self, queue: vk::Queue, submits: &[vk::SubmitInfo], fence: vk::Fence) -> VkResult<()> {
+    pub(crate) fn queue_submit(
+        &self,
+        queue: vk::Queue,
+        submits: &[vk::SubmitInfo],
+        fence: vk::Fence,
+    ) -> VkResult<()> {
         let _guard = self.queue_submit_mutex.lock();
         //log::debug!("vkQueueSubmit");
         unsafe {
-            self.raw().queue_submit(self.graphics_queue(), submits, fence)
+            self.raw()
+                .queue_submit(self.graphics_queue(), submits, fence)
         }
     }
     pub(crate) unsafe fn submit_commands_immediate(

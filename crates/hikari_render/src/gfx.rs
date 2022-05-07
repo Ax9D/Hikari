@@ -22,6 +22,7 @@ use ash::{vk, Entry};
 use parking_lot::Mutex;
 use winit::window::Window;
 
+use crate::swapchain::SurfaceData;
 use crate::swapchain::Swapchain;
 
 pub struct DebugSettings {
@@ -112,13 +113,17 @@ unsafe extern "system" fn vulkan_debug_callback(
 pub struct Gfx {
     device: Arc<crate::Device>,
     vsync: bool,
-    surface: vk::SurfaceKHR,
-    surface_loader: Surface,
-    swapchain: Arc<Mutex<Swapchain>>, //
+    swapchain: Option<Arc<Mutex<Swapchain>>>, //
 }
 impl Gfx {
-    fn get_extensions(window: &Window, debug: bool) -> Vec<*const i8> {
-        let mut base_extensions = ash_window::enumerate_required_extensions(window).unwrap();
+    fn get_extensions(window: Option<&Window>, debug: bool) -> Vec<*const i8> {
+        //let mut base_extensions = ash_window::enumerate_required_extensions(window).unwrap();
+
+        let mut base_extensions = if let Some(window) = window {
+            ash_window::enumerate_required_extensions(window).unwrap()
+        } else {
+            vec![]
+        };
 
         if debug {
             base_extensions.push(DebugUtils::name());
@@ -128,7 +133,7 @@ impl Gfx {
 
         base_extensions.iter().map(|x| x.as_ptr()).collect()
     }
-    fn create_instance(entry: &Entry, window: &Window, debug: bool) -> VkResult<ash::Instance> {
+    fn create_instance(entry: &Entry, window: Option<&Window>, debug: bool) -> VkResult<ash::Instance> {
         unsafe {
             let app_name = CString::new("Hikari").unwrap();
 
@@ -174,7 +179,7 @@ impl Gfx {
     ) -> Result<vk::SurfaceKHR, ash::vk::Result> {
         unsafe { ash_window::create_surface(entry, instance, window, None) }
     }
-    pub fn new(window: &Window, config: GfxConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new_inner(window: Option<&Window>, config: GfxConfig) -> Result<Self, Box<dyn std::error::Error>> {
         let entry = unsafe { Entry::load() }?;
 
         log::debug!("Available instance extension properties: ");
@@ -193,36 +198,49 @@ impl Gfx {
             Self::create_debug_messenger(&entry, &instance, Some(vulkan_debug_callback))?;
         }
 
-        let surface = Self::create_surface(&entry, &instance, window)?;
-        let surface_loader = Surface::new(&entry, &instance);
+        let (device, swapchain) = if let Some(window) = window {
+            let surface = Self::create_surface(&entry, &instance, window)?;
+            let surface_loader = Surface::new(&entry, &instance);
 
-        let device =
-            crate::Device::create(entry, instance, &surface, &surface_loader, config.features)?;
+            let surface_data = SurfaceData {
+                surface,
+                surface_loader
+            };
+            let device =
+                crate::Device::create(entry, instance, Some(&surface_data), config.features)?;
 
-        let window_size = window.inner_size();
-        let swapchain = crate::Swapchain::create(
-            &device,
-            window_size.width,
-            window_size.height,
-            &surface,
-            &surface_loader,
-            None,
-            config.vsync,
-        )?;
-        let swapchain = Arc::new(Mutex::new(swapchain));
+            let window_size = window.inner_size();
+            let swapchain = crate::Swapchain::create(
+                &device,
+                window_size.width,
+                window_size.height,
+                surface_data,
+                None,
+                config.vsync,
+            )?;
 
+            (device, Some(Arc::new(Mutex::new(swapchain))))
+        } else {
+            let device = crate::Device::create(entry, instance, None, config.features)?;
+            (device, None)
+        };
+        
         Ok(Self {
             device,
-            surface,
-            surface_loader,
             swapchain,
             vsync: config.vsync,
         })
     }
+    pub fn new(window: &Window, config: GfxConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_inner(Some(window), config)
+    }
+    pub fn headless(config: GfxConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::new_inner(None, config)
+    }
     pub fn set_vsync(&mut self, vsync: bool) {
         if self.vsync != vsync {
             let (width, height) = {
-                let swapchain = self.swapchain().lock();
+                let swapchain = self.swapchain().expect("Gfx was initialized in headless mode, Can't set vsync without a swapchain!").lock();
                 let width = swapchain.width();
                 let height = swapchain.height();
 
@@ -236,8 +254,8 @@ impl Gfx {
         //log::debug!("{}", Arc::strong_count(&self.device) + Arc::weak_count(&self.device));
         &self.device
     }
-    pub fn swapchain(&self) -> &Arc<Mutex<Swapchain>> {
-        &self.swapchain
+    pub fn swapchain(&self) -> Option<&Arc<Mutex<Swapchain>>> {
+        self.swapchain.as_ref()
     }
     pub fn resize(
         &mut self,
@@ -247,20 +265,21 @@ impl Gfx {
         unsafe {
             self.device.raw().device_wait_idle()?;
         };
-        let mut swapchain = self.swapchain().lock();
-        let new_swapchain = Swapchain::create(
-            &self.device,
-            new_width,
-            new_height,
-            &self.surface,
-            &self.surface_loader,
-            Some(swapchain.inner),
-            self.vsync,
-        )?;
-        let old_swapchain = std::mem::replace(swapchain.deref_mut(), new_swapchain);
+        if let Some(mut swapchain) = self.swapchain() {
+            let mut swapchain = swapchain.lock();
+            let new_swapchain = Swapchain::create(
+                &self.device,
+                new_width,
+                new_height,
+                swapchain.surface_data.clone(),
+                Some(swapchain.inner),
+                self.vsync
+            )?;
+            let old_swapchain = std::mem::replace(swapchain.deref_mut(), new_swapchain);
 
-        log::debug!("Resized swapchain width: {new_width} height: {new_height}");
 
+            log::debug!("Resized swapchain width: {new_width} height: {new_height}");
+        }
         Ok(())
     }
 }

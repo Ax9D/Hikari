@@ -1,10 +1,7 @@
 pub mod pipeline;
 use vk_sync_fork::AccessType;
 
-use crate::{
-    graph::{Handle},
-    texture::SampledImage, Args, RenderpassCommands, ByRef,
-};
+use crate::{graph::Handle, texture::SampledImage, Args, ByRef, RenderpassCommands};
 
 use super::{AttachmentConfig, ImageSize, Input, Output};
 
