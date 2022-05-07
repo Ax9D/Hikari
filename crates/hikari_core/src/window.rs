@@ -28,8 +28,3 @@
 //         button: MouseButton,
 //     }
 // }
-
-
-pub struct Window {
-    
-}

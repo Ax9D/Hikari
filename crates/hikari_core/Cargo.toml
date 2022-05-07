@@ -6,8 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-glam = "0.16.0"
+glam = "0.20"
 winit = "0.25"
+log = "0.4"
+serde = {version = "1.0", features = ["derive"], optional = true}
+
+hecs = "0.7.5"
 
 hikari_systems = {path = "../hikari_systems"}
 hikari_dev = {path = "../hikari_dev"}
+
+
+[features]
+default = ["serialize"]
+serialize = ["hecs/row-serialize", "serde"]

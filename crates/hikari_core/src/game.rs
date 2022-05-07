@@ -9,20 +9,26 @@ use winit::{
 use crate::Plugin;
 
 pub struct Game {
+    window: Window,
+    event_loop: EventLoop<()>,
     state: StateBuilder,
-    schedule: ScheduleBuilder,
-    event_hooks: Vec<Box<dyn HookFn>>,
+    init_schedule: ScheduleBuilder,
+    run_schedule: ScheduleBuilder,
+    event_hooks:
+        Vec<Box<dyn FnMut(&GlobalState, &mut Window, &Event<()>, &mut ControlFlow) + 'static>>,
 }
-
-pub trait HookFn: FnMut(&GlobalState, &Event<()>, &mut ControlFlow) + 'static {}
-
 impl Game {
-    pub fn with_defaults() -> Self {
-        Self {
+    pub fn new(window_builder: WindowBuilder) -> Result<Self, winit::error::OsError> {
+        let event_loop = EventLoop::new();
+        let window = window_builder.build(&event_loop)?;
+        Ok(Self {
+            window,
+            event_loop,
             state: StateBuilder::new(),
-            schedule: ScheduleBuilder::new(),
+            init_schedule: ScheduleBuilder::new(),
+            run_schedule: ScheduleBuilder::new(),
             event_hooks: Vec::new(),
-        }
+        })
     }
     pub fn add_state(&mut self, state: impl State) -> &mut Self {
         self.state.add_state(state);
@@ -35,67 +41,57 @@ impl Game {
     pub fn get_mut<S: State>(&self) -> RefMut<S> {
         self.state.get_mut()
     }
-    pub fn add_stage(&mut self, stage: Stage) -> &mut Self {
-        self.schedule.add_stage(stage);
+    pub fn create_stage(&mut self, name: &str) -> &mut Self {
+        self.run_schedule.create_stage(name);
 
         self
     }
-    pub fn add_function<Params>(&mut self, function: impl IntoFunction<Params>) -> &mut Self {
-        self.schedule.add_to_stage("Update", function);
-
+    pub fn add_task(&mut self, stage: &str, task: Task) -> &mut Self {
+        self.run_schedule.add_task(stage, task);
         self
     }
-    pub fn add_function_to_stage<Params>(
+    pub fn add_init_task(&mut self, stage: &str, task: Task) -> &mut Self {
+        self.init_schedule.add_task(stage, task);
+        self
+    }
+    pub fn add_platform_event_hook(
         &mut self,
-        stage: &str,
-        function: impl IntoFunction<Params>,
+        hook: impl FnMut(&GlobalState, &mut Window, &Event<()>, &mut ControlFlow) + 'static,
     ) -> &mut Self {
-        self.schedule.add_to_stage(stage, function);
-
-        self
-    }
-    pub fn add_platform_event_hook(&mut self, hook: impl HookFn) -> &mut Self {
         self.event_hooks.push(Box::new(hook));
         self
     }
-    pub fn add_plugin(&mut self, mut plugin: impl Plugin + 'static) -> &mut Self {
+    pub fn add_plugin<P: Plugin>(&mut self, plugin: P) -> &mut Self {
         plugin.build(self);
+        log::debug!("Successfully added plugin: {}", std::any::type_name::<P>());
+
         self
     }
-}
-pub struct GameLoop {
-    window: Window,
-    event_loop: EventLoop<()>,
-}
-
-impl GameLoop {
-    pub fn new(window_builder: WindowBuilder) -> Result<Self, Box<dyn std::error::Error>> {
-        let event_loop = EventLoop::new();
-        let window = window_builder.build(&event_loop)?;
-
-        Ok(Self { window, event_loop })
+    pub fn window(&mut self) -> &mut Window {
+        &mut self.window
     }
-    pub fn run(self, game: Game) -> ! {
-        let mut update = game
-            .schedule
+
+    pub fn run(self) -> ! {
+        let mut init = self
+            .init_schedule
+            .build()
+            .expect("Failed to create init schedule");
+        let mut update = self
+            .run_schedule
             .build()
             .expect("Failed to create update schedule");
-        let mut state = game.state.build();
-        let mut hooks = game.event_hooks;
+        let mut state = self.state.build();
+        let mut hooks = self.event_hooks;
 
-        let window_builder = unsafe {state.get::<WindowBuilder>().unwrap()};
-        let window_builder = window_builder.clone();
-        let event_loop = EventLoop::new();
-        let window = window_builder.build(&event_loop)?;
+        let event_loop = self.event_loop;
+        let mut window = self.window;
 
+        init.execute(&mut state);
         event_loop.run(move |event, _, control_flow| {
             hikari_dev::profile_scope!("Gameloop");
-            *control_flow = ControlFlow::Poll;
 
-            {
-                for hook in &mut hooks {
-                    (hook)(&state, &event, control_flow);
-                }
+            for hook in &mut hooks {
+                (hook)(&state, &mut window, &event, control_flow);
             }
 
             match &event {
@@ -103,7 +99,6 @@ impl GameLoop {
                     update.execute(&mut state);
                 }
                 Event::MainEventsCleared => {
-                    let window = unsafe { state.get_mut::<Window>().unwrap() };
                     window.request_redraw();
                 }
                 Event::LoopDestroyed => {}

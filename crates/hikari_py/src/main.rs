@@ -24,9 +24,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "translate",
     )?;
     let n = 50_000;
-    
+
     let mut objects = Vec::new();
-    
+
     let script_class = script.getattr("Translate")?;
 
     for _ in 0..n {
@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         execute_script(object, python)?;
     }
     let elapsed = now.elapsed();
-    println!("Per call: {:?} Total: {:?}", elapsed/n, elapsed);
+    println!("Per call: {:?} Total: {:?}", elapsed / n, elapsed);
 
     Ok(())
 }

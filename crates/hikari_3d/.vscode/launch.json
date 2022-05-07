@@ -1,0 +1,371 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        
+
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_core'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari_core"
+                ],
+                "filter": {
+                    "name": "hikari_core",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_dev'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari_dev"
+                ],
+                "filter": {
+                    "name": "hikari_dev",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_systems'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari_systems"
+                ],
+                "filter": {
+                    "name": "hikari_systems",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_render'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari_render"
+                ],
+                "filter": {
+                    "name": "hikari_render",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'simplegraph'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=simplegraph",
+                    "--package=hikari_render"
+                ],
+                "filter": {
+                    "name": "simplegraph",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'simplegraph'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=simplegraph",
+                    "--package=hikari_render"
+                ],
+                "filter": {
+                    "name": "simplegraph",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'pbr'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=pbr",
+                    "--package=hikari_render"
+                ],
+                "filter": {
+                    "name": "pbr",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'pbr'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=pbr",
+                    "--package=hikari_render"
+                ],
+                "filter": {
+                    "name": "pbr",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'push_constants'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=push_constants",
+                    "--package=hikari_render"
+                ],
+                "filter": {
+                    "name": "push_constants",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'push_constants'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=push_constants",
+                    "--package=hikari_render"
+                ],
+                "filter": {
+                    "name": "push_constants",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_3d'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--",
+                    "--nocapture",
+                    "--release",
+                    "--package=hikari_3d"
+                ],
+                "filter": {
+                    "name": "hikari_3d",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_asset'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari_asset"
+                ],
+                "filter": {
+                    "name": "hikari_asset",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'bench'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=bench",
+                    "--package=hikari_asset"
+                ],
+                "filter": {
+                    "name": "bench",
+                    "kind": "bench"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_math'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari_math"
+                ],
+                "filter": {
+                    "name": "hikari_math",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_pbr'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari_pbr"
+                ],
+                "filter": {
+                    "name": "hikari_pbr",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari_input'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari_input"
+                ],
+                "filter": {
+                    "name": "hikari_input",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'hikari_editor'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=hikari_editor",
+                    "--package=hikari_editor"
+                ],
+                "filter": {
+                    "name": "hikari_editor",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'hikari_editor'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=hikari_editor",
+                    "--package=hikari_editor"
+                ],
+                "filter": {
+                    "name": "hikari_editor",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'hikari'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=hikari"
+                ],
+                "filter": {
+                    "name": "hikari",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

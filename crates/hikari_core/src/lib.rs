@@ -1,31 +1,23 @@
 mod ecs;
 mod game;
-mod math;
 mod plugin;
 mod window;
 
 pub use ecs::*;
 pub use game::*;
-pub use math::*;
 pub use plugin::*;
 
-pub struct Core;
-use hikari_systems::Stage;
+pub const FIRST: &'static str = "First";
+pub const UPDATE: &'static str = "Update";
+pub const RENDER: &'static str = "Render";
+pub const LAST: &'static str = "Last";
+pub struct CorePlugin;
 
-impl Plugin for Core {
-    fn build(&mut self, game: &mut Game) {
-        let first = Stage::new("First");
-        let mut update = Stage::new("Update");
-        let mut render = Stage::new("Render");
-        let mut last = Stage::new("Last");
-
-        update.after(first.name());
-        render.after(update.name());
-        last.after(render.name());
-
-        game.add_stage(first);
-        game.add_stage(update);
-        game.add_stage(render);
-        game.add_stage(last);
+impl crate::Plugin for CorePlugin {
+    fn build(self, game: &mut Game) {
+        game.create_stage(FIRST);
+        game.create_stage(UPDATE);
+        game.create_stage(RENDER);
+        game.create_stage(LAST);
     }
 }

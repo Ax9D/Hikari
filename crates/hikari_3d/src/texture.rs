@@ -1,4 +1,7 @@
-#[derive(Copy, Clone)]
+use image::EncodableLayout;
+use serde::{Deserialize, Serialize};
+
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum FilterMode {
     Closest,
     Linear,
@@ -10,7 +13,7 @@ impl Default for FilterMode {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum Format {
     RGBA8,
 
@@ -26,7 +29,7 @@ impl Default for Format {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum WrapMode {
     Clamp,
     Repeat,
@@ -38,13 +41,13 @@ impl Default for WrapMode {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Serialize, Deserialize)]
 pub struct TextureConfig {
     pub format: Format,
     pub filtering: FilterMode,
     pub wrap_x: WrapMode,
     pub wrap_y: WrapMode,
-    pub aniso_level: u8,
+    pub aniso_level: f32,
     pub generate_mips: bool,
 }
 impl TextureConfig {
@@ -73,20 +76,21 @@ impl TextureConfig {
 
 use std::sync::Arc;
 
+use hikari_asset::{Asset, Load, LoadContext, MetaData};
 use hikari_render::*;
 
 pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageConfig {
     let format = match config.format {
-                //Format::RGB8 => vk::Format::R8G8B8_SNORM,
-                Format::RGBA8 => vk::Format::R8G8B8A8_UNORM,
-                //Format::SRGB => vk::Format::R8G8B8_SRGB,
-                Format::SRGBA => vk::Format::R8G8B8A8_SRGB,
-                Format::RGBAFloat16 => vk::Format::R16G16B16A16_SFLOAT,
-                Format::RGBAFloat32 => vk::Format::R32G32B32A32_SFLOAT,
+        //Format::RGB8 => vk::Format::R8G8B8_SNORM,
+        Format::RGBA8 => vk::Format::R8G8B8A8_UNORM,
+        //Format::SRGB => vk::Format::R8G8B8_SRGB,
+        Format::SRGBA => vk::Format::R8G8B8A8_SRGB,
+        Format::RGBAFloat16 => vk::Format::R16G16B16A16_SFLOAT,
+        Format::RGBAFloat32 => vk::Format::R32G32B32A32_SFLOAT,
     };
     let filtering = match config.filtering {
-            FilterMode::Closest => vk::Filter::NEAREST,
-            FilterMode::Linear => vk::Filter::LINEAR,
+        FilterMode::Closest => vk::Filter::NEAREST,
+        FilterMode::Linear => vk::Filter::LINEAR,
     };
     let wrap_x = match config.wrap_x {
         WrapMode::Clamp => vk::SamplerAddressMode::CLAMP_TO_EDGE,
@@ -98,7 +102,7 @@ pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageC
     };
     let mip_filtering = match config.filtering {
         FilterMode::Closest => vk::SamplerMipmapMode::NEAREST,
-            FilterMode::Linear => vk::SamplerMipmapMode::LINEAR,
+        FilterMode::Linear => vk::SamplerMipmapMode::LINEAR,
     };
 
     ImageConfig {
@@ -129,9 +133,9 @@ impl Texture2D {
         width: u32,
         height: u32,
         config: TextureConfig,
-    ) -> Result<Texture2D, Box<dyn std::error::Error>> {
+    ) -> Result<Texture2D, anyhow::Error> {
         Ok(Self {
-            image: SampledImage::with_data(
+            image: SampledImage::with_rgba8(
                 device,
                 data,
                 width,
@@ -154,5 +158,33 @@ impl Texture2D {
         &self.config
     }
 }
+pub struct TextureLoader {
+    pub device: Arc<Device>,
+}
 
-pub trait Texture {}
+impl Asset for Texture2D {
+    const NAME: &'static str = "Texture2D";
+
+    fn extensions<'a>() -> &'a [&'static str] {
+        &["png", "jpeg", "jpg"]
+    }
+}
+impl Load for Texture2D {
+    type Loader = TextureLoader;
+    type LoadSettings = TextureConfig;
+
+    fn load(
+        loader: &Self::Loader,
+        bytes: &[u8],
+        meta: &MetaData<Self>,
+        _context: &mut LoadContext,
+    ) -> Result<Self, hikari_asset::Error> {
+        let image = image::load_from_memory(bytes)?;
+        let image = image.to_rgba8();
+        let data = image.as_bytes();
+        let width = image.width();
+        let height = image.height();
+
+        Self::new(&loader.device, data, width, height, meta.settings)
+    }
+}

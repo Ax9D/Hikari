@@ -1,4 +1,3 @@
- 
 pub mod core {
     pub use hikari_core::*;
 }
@@ -17,4 +16,3 @@ pub mod input {
 pub mod dev {
     pub use hikari_dev::*;
 }
-
