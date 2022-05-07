@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .build(gfx.device())?;
 
-    let mut gb: rg::GraphBuilder<f32, (), ()> = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
+    let mut gb: rg::GraphBuilder<(f32, f32)> = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 
     let layout = rg::VertexInputLayout::new()
         .buffer(&[rg::ShaderDataType::Vec2f], rg::StepMode::Vertex) // Binding 0
@@ -72,37 +72,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[derive(Debug, Copy, Clone)]
     struct PushConstants {
         color: [f32; 4],
-        position: glam::Vec2,
+        position: hikari_math::Vec2,
     }
 
     let mut t = 0;
     gb.add_renderpass(
-        rg::Renderpass::new("Push", rg::ImageSize::default(), move |cmd, _, _, _| {
-            cmd.set_shader(&pbr);
-            cmd.set_vertex_input_layout(layout);
-            cmd.set_vertex_buffer(&vertices, 0);
-            cmd.set_index_buffer(&indices);
+        rg::Renderpass::<(f32, f32)>::new(
+            "Push",
+            rg::ImageSize::default(),
+            move |cmd: &mut rg::RenderpassCommands, (_, _)| {
+                cmd.set_shader(&pbr);
+                cmd.set_vertex_input_layout(layout);
+                cmd.set_vertex_buffer(&vertices, 0);
+                cmd.set_index_buffer(&indices);
 
-            cmd.push_constants(
-                &PushConstants {
-                    position: glam::vec2(1.0 * f32::sin(t as f32 * 0.01), 0.0),
-                    color: glam::vec4(1.0, 0.0, 0.0, 1.0).into(),
-                },
-                0,
-            );
-            cmd.draw_indexed(0..QUAD_INDS.len(), 0, 0..1);
+                cmd.push_constants(
+                    &PushConstants {
+                        position: hikari_math::vec2(1.0 * f32::sin(t as f32 * 0.01), 0.0),
+                        color: hikari_math::vec4(1.0, 0.0, 0.0, 1.0).into(),
+                    },
+                    0,
+                );
+                cmd.draw_indexed(0..QUAD_INDS.len(), 0, 0..1);
 
-            cmd.push_constants(
-                &PushConstants {
-                    position: glam::vec2(0.0, 1.0 * f32::sin(t as f32 * 0.01)),
-                    color: glam::vec4(0.0, 0.0, 0.59, 1.0).into(),
-                },
-                0,
-            );
-            cmd.draw_indexed(0..QUAD_INDS.len(), 0, 0..1);
+                cmd.push_constants(
+                    &PushConstants {
+                        position: hikari_math::vec2(0.0, 1.0 * f32::sin(t as f32 * 0.01)),
+                        color: hikari_math::vec4(0.0, 0.0, 0.59, 1.0).into(),
+                    },
+                    0,
+                );
+                cmd.draw_indexed(0..QUAD_INDS.len(), 0, 0..1);
 
-            t += 1;
-        })
+                t += 1;
+            },
+        )
         .present(),
     );
     let mut dt = 0.0;
@@ -117,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 hikari_dev::profile_scope!("mainloop");
                 let now = std::time::Instant::now();
 
-                graph.execute(&mut gfx, &dt, &(), &()).unwrap();
+                graph.execute((&dt, &dt)).unwrap();
 
                 dt = now.elapsed().as_secs_f32();
                 hikari_dev::finish_frame!();

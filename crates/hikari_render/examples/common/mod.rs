@@ -1,4 +1,4 @@
-use hikari_render::{Gfx, Graph, GfxConfig};
+use hikari_render::{Gfx, GfxConfig, Graph};
 use winit::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},

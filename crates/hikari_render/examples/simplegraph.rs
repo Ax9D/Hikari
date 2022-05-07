@@ -71,7 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shader = triangle_shader(gfx.device());
     let _blue = blue_shader(gfx.device());
 
-    let mut gb: rg::GraphBuilder<(), (), ()> = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
+    let mut gb: rg::GraphBuilder<(f32, i32)> = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 
     let mut frame_count = 0;
     let mut last_time = std::time::Instant::now();
@@ -89,31 +89,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // );
 
     gb.add_renderpass(
-        rg::Renderpass::new("Triangle", rg::ImageSize::default(), move |cmd, _, _, _| {
-            cmd.set_shader(&shader);
+        rg::Renderpass::<(f32, i32)>::new(
+            "Triangle",
+            rg::ImageSize::default(),
+            move |cmd, (x, y)| {
+                cmd.set_shader(&shader);
 
-            let now = std::time::Instant::now();
-            if now - last_time > std::time::Duration::from_secs(1) {
-                last_time = now;
-                //state = !state;
-            }
+                let now = std::time::Instant::now();
+                if now - last_time > std::time::Duration::from_secs(1) {
+                    last_time = now;
+                    //state = !state;
+                }
 
-            if state {
-                cmd.set_rasterizer_state(rg::RasterizerState {
-                    polygon_mode: rg::PolygonMode::Fill,
-                    ..Default::default()
-                });
-            } else {
-                cmd.set_rasterizer_state(rg::RasterizerState {
-                    polygon_mode: rg::PolygonMode::Line,
-                    ..Default::default()
-                });
-            }
+                if state {
+                    cmd.set_rasterizer_state(rg::RasterizerState {
+                        polygon_mode: rg::PolygonMode::Fill,
+                        ..Default::default()
+                    });
+                } else {
+                    cmd.set_rasterizer_state(rg::RasterizerState {
+                        polygon_mode: rg::PolygonMode::Line,
+                        ..Default::default()
+                    });
+                }
 
-            cmd.draw(0..3, 0..1);
+                cmd.draw(0..3, 0..1);
 
-            frame_count += 1;
-        })
+                frame_count += 1;
+            },
+        )
         // .sample_image(
         //     &blue_target,
         //     rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
@@ -124,12 +128,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut graph = gb.build()?;
 
-    gameloop.run(gfx, move |gfx, _window, event, control_flow| {
+    gameloop.run(gfx, move |gfx, _window, event, _control_flow| {
         hikari_dev::profile_scope!("mainloop");
 
         match event {
             Event::MainEventsCleared => {
-                graph.execute(gfx, &(), &(), &()).unwrap();
+                graph.execute((&1.0, &2)).unwrap();
             }
             Event::WindowEvent {
                 event: WindowEvent::Resized(size),

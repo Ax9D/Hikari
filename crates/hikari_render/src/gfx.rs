@@ -265,7 +265,7 @@ impl Gfx {
         unsafe {
             self.device.raw().device_wait_idle()?;
         };
-        if let Some(mut swapchain) = self.swapchain() {
+        if let Some(swapchain) = self.swapchain() {
             let mut swapchain = swapchain.lock();
             let new_swapchain = Swapchain::create(
                 &self.device,

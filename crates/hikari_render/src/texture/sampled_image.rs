@@ -55,7 +55,7 @@ pub struct ImageConfig {
 }
 
 impl ImageConfig {
-    /// Creates a config for a 2D color attachment with a single mip level, linear filtering with 
+    /// Creates a config for a 2D color attachment with a single mip level, linear filtering with
     /// usage flags `vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED`
     /// of format `R8G8B8A8_UNORM`
     pub fn color2d() -> Self {
@@ -72,9 +72,9 @@ impl ImageConfig {
             host_readable: false,
         }
     }
-    /// Creates a config for a depth stencil attachment, linear filtering with 
+    /// Creates a config for a depth stencil attachment, linear filtering with
     /// usage flags `vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED`
-    /// A supported depth stencil format is picked automatically 
+    /// A supported depth stencil format is picked automatically
     pub fn depth_stencil(device: &Arc<crate::Device>) -> Self {
         Self {
             format: device.supported_depth_stencil_format(),
@@ -89,9 +89,9 @@ impl ImageConfig {
             host_readable: false,
         }
     }
-    /// Creates a config for a depth only attachment, linear filtering with 
+    /// Creates a config for a depth only attachment, linear filtering with
     /// usage flags `vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED`
-    /// A supported depth only format is picked automatically 
+    /// A supported depth only format is picked automatically
     pub fn depth_only(device: &Arc<crate::Device>) -> Self {
         Self {
             format: device.supported_depth_only_format(),
@@ -228,7 +228,7 @@ impl SampledImage {
 
         Ok((image, allocation, sampler, image_views))
     }
-    /// Creates an empty image of the specified width and height 
+    /// Creates an empty image of the specified width and height
     pub fn with_dimensions(
         device: &Arc<crate::Device>,
         width: u32,
