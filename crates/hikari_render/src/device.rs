@@ -217,7 +217,10 @@ impl PhysicalDeviceProperties {
 }
 impl From<vk::PhysicalDeviceProperties> for PhysicalDeviceProperties {
     fn from(props: vk::PhysicalDeviceProperties) -> Self {
-        let name = String::from_utf8(props.device_name.iter().map(|&x| x as u8).collect()).unwrap();
+        let len = props.device_name.iter().position(|&ch| ch == 0).unwrap();
+        let device_name = &props.device_name[0..len];
+        
+        let name = String::from_utf8(device_name.iter().map(|&x| x as u8).collect()).unwrap();
         let vendor_id = props.vendor_id;
         let driver_version = props.driver_version;
 
@@ -288,7 +291,7 @@ impl Device {
         )
         .ok_or("Failed to find suitable physical device")?;
 
-        let props = physical_device.get_properties();
+        let props = PhysicalDeviceProperties::from(physical_device.properties);
         log::debug!("Picked physical device");
         log::info!("{}", props.name());
 
