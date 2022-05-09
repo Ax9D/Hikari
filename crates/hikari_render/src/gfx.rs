@@ -53,46 +53,38 @@ unsafe extern "system" fn vulkan_debug_callback(
     match message_severity {
         vk::DebugUtilsMessageSeverityFlagsEXT::INFO => {
             log::info!(
-                "{bold}[Vulkan]{reset} {:?}\n [{}({})]:{}{reset}",
+                "[Vulkan] {:?}\n [{}({})]:{}",
                 message_type,
                 message_id_name,
                 &message_id_number.to_string(),
                 message,
-                bold = crossterm::style::Attribute::Bold,
-                reset = crossterm::style::Attribute::Reset,
             );
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
             log::debug!(
-                "{bold}[Vulkan]{reset} {:?}\n [{}({})]:{}{reset}",
+                "[Vulkan] {:?}\n [{}({})]:{}",
                 message_type,
                 message_id_name,
                 &message_id_number.to_string(),
                 message,
-                bold = crossterm::style::Attribute::Bold,
-                reset = crossterm::style::Attribute::Reset,
             );
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
             log::warn!(
-                "{bold}[Vulkan]{reset} {:?}\n [{}({})]:{}{reset}",
+                "[Vulkan] {:?}\n [{}({})]:{}",
                 message_type,
                 message_id_name,
                 &message_id_number.to_string(),
                 message,
-                bold = crossterm::style::Attribute::Bold,
-                reset = crossterm::style::Attribute::Reset,
             );
         }
         vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
             log::error!(
-                "{bold}[Vulkan]{reset} {:?}\n [{}({})]:{}{reset}",
+                "[Vulkan] {:?}\n [{}({})]:{}",
                 message_type,
                 message_id_name,
                 &message_id_number.to_string(),
                 message,
-                bold = crossterm::style::Attribute::Bold,
-                reset = crossterm::style::Attribute::Reset,
             );
         }
         _ => {
