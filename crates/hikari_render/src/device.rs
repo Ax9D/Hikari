@@ -16,7 +16,6 @@ use crate::{descriptor::DescriptorSetLayoutCache, swapchain::SurfaceData};
 
 const VK_PIPELINE_CACHE_FILE: &str = "vk_pipeline_cache";
 
-
 pub struct PhysicalDevice {
     pub raw: vk::PhysicalDevice,
     pub queue_families: Vec<QueueFamilyProperties>,
@@ -27,25 +26,17 @@ pub struct PhysicalDevice {
     pub features: Features,
 }
 impl PhysicalDevice {
-    pub fn enumerate(
-        instance: &ash::Instance,
-    ) -> VkResult<Vec<PhysicalDevice>> {
+    pub fn enumerate(instance: &ash::Instance) -> VkResult<Vec<PhysicalDevice>> {
         let raw_devices = unsafe { instance.enumerate_physical_devices() }?;
 
         let mut devices = Vec::new();
         for device in raw_devices {
-            devices.push(Self::process_device(
-                device,
-                instance,
-            )?)
+            devices.push(Self::process_device(device, instance)?)
         }
 
         Ok(devices)
     }
-    fn process_device(
-        device: vk::PhysicalDevice,
-        instance: &ash::Instance,
-    ) -> VkResult<Self> {
+    fn process_device(device: vk::PhysicalDevice, instance: &ash::Instance) -> VkResult<Self> {
         let properties = unsafe { instance.get_physical_device_properties(device) };
         let mem_properties = unsafe { instance.get_physical_device_memory_properties(device) };
 
@@ -219,7 +210,7 @@ impl From<vk::PhysicalDeviceProperties> for PhysicalDeviceProperties {
     fn from(props: vk::PhysicalDeviceProperties) -> Self {
         let len = props.device_name.iter().position(|&ch| ch == 0).unwrap();
         let device_name = &props.device_name[0..len];
-        
+
         let name = String::from_utf8(device_name.iter().map(|&x| x as u8).collect()).unwrap();
         let vendor_id = props.vendor_id;
         let driver_version = props.driver_version;
@@ -394,21 +385,24 @@ impl Device {
     ) -> Option<PhysicalDevice> {
         let physical_devices = PhysicalDevice::enumerate(instance).ok()?;
         for device in physical_devices {
-
             let unified_queue = device.get_unified_queue().is_some();
 
             if unified_queue && device.features.contains(required_features) {
                 if let Some(surface_data) = surface_data {
                     let present_support = device
-                    .get_present_queue(instance, &surface_data.surface, &surface_data.surface_loader)
-                    .is_some();
+                        .get_present_queue(
+                            instance,
+                            &surface_data.surface,
+                            &surface_data.surface_loader,
+                        )
+                        .is_some();
 
                     if present_support {
                         return Some(device);
                     }
-                    
+
                     return None;
-                } 
+                }
                 return Some(device);
             }
         }

@@ -125,7 +125,11 @@ impl Gfx {
 
         base_extensions.iter().map(|x| x.as_ptr()).collect()
     }
-    fn create_instance(entry: &Entry, window: Option<&Window>, debug: bool) -> VkResult<ash::Instance> {
+    fn create_instance(
+        entry: &Entry,
+        window: Option<&Window>,
+        debug: bool,
+    ) -> VkResult<ash::Instance> {
         unsafe {
             let app_name = CString::new("Hikari").unwrap();
 
@@ -171,7 +175,10 @@ impl Gfx {
     ) -> Result<vk::SurfaceKHR, ash::vk::Result> {
         unsafe { ash_window::create_surface(entry, instance, window, None) }
     }
-    fn new_inner(window: Option<&Window>, config: GfxConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new_inner(
+        window: Option<&Window>,
+        config: GfxConfig,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let entry = unsafe { Entry::load() }?;
 
         log::debug!("Available instance extension properties: ");
@@ -196,7 +203,7 @@ impl Gfx {
 
             let surface_data = SurfaceData {
                 surface,
-                surface_loader
+                surface_loader,
             };
             let device =
                 crate::Device::create(entry, instance, Some(&surface_data), config.features)?;
@@ -216,7 +223,7 @@ impl Gfx {
             let device = crate::Device::create(entry, instance, None, config.features)?;
             (device, None)
         };
-        
+
         Ok(Self {
             device,
             swapchain,
@@ -265,10 +272,9 @@ impl Gfx {
                 new_height,
                 swapchain.surface_data.clone(),
                 Some(swapchain.inner),
-                self.vsync
+                self.vsync,
             )?;
             let old_swapchain = std::mem::replace(swapchain.deref_mut(), new_swapchain);
-
 
             log::debug!("Resized swapchain width: {new_width} height: {new_height}");
         }

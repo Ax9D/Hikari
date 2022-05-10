@@ -13,7 +13,7 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct SurfaceData {
     pub surface: vk::SurfaceKHR,
-    pub surface_loader: ash::extensions::khr::Surface
+    pub surface_loader: ash::extensions::khr::Surface,
 }
 pub struct Swapchain {
     device: Arc<crate::device::Device>,
@@ -44,8 +44,8 @@ impl Swapchain {
     ) -> Result<Swapchain, Box<dyn std::error::Error>> {
         let physical_device = device.physical_device();
 
-        let swapchain_support_details =
-            physical_device.get_swapchain_support_details(&surface_data.surface, &surface_data.surface_loader)?;
+        let swapchain_support_details = physical_device
+            .get_swapchain_support_details(&surface_data.surface, &surface_data.surface_loader)?;
         let present_mode = Self::choose_present_mode(&swapchain_support_details, vsync);
 
         let surface_format = Self::choose_swapchain_format(&swapchain_support_details);
@@ -138,7 +138,7 @@ impl Swapchain {
             renderpass,
             framebuffers,
 
-            surface_data
+            surface_data,
         })
     }
     fn create_renderpass(

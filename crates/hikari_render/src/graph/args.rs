@@ -51,10 +51,15 @@ pub trait ByRef<'a> {
 pub trait Args {
     type Ref: for<'a> ByRef<'a>;
 }
-
 pub struct RefImpl<T>(PhantomData<T>);
 impl<'a, T: 'a> ByRef<'a> for RefImpl<T> {
     type Item = &'a T;
+}
+impl Args for () {
+    type Ref = ();
+}
+impl<'a> ByRef<'a> for () {
+    type Item = ();
 }
 
 macro_rules! tuple_impls {
