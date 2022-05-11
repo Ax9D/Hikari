@@ -139,7 +139,11 @@ impl Gfx {
                 .engine_name(&app_name)
                 .engine_version(vk::make_api_version(0, 69, 420, 0));
 
-            let layer_names = [CString::new("VK_LAYER_KHRONOS_validation").unwrap()];
+            let layer_names = if debug {
+                vec![CString::new("VK_LAYER_KHRONOS_validation").unwrap()]
+            } else {
+                vec![]
+            };
             let layer_names: Vec<_> = layer_names.iter().map(|s| s.as_ptr()).collect();
 
             let extension_names = Self::get_extensions(window, debug);
@@ -261,6 +265,8 @@ impl Gfx {
         new_width: u32,
         new_height: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        assert!(!(new_width == 0 || new_height == 0));
+
         unsafe {
             self.device.raw().device_wait_idle()?;
         };

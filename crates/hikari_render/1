@@ -1,0 +1,659 @@
+diff --git a/.gitignore b/.gitignore
+index 2c13cb2..fb4fbed 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -3,6 +3,7 @@ profile.json
+ output.log
+ dist
+ vk_pipeline_cache
++hikari.log
+ 
+ *.hmeta
+ *.hmat
+diff --git a/Cargo.lock b/Cargo.lock
+index b65f280..035124a 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -217,6 +217,19 @@ version = "1.0.10"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "75476fe966a8af7c0ceae2a3e514afa87d4451741fcdfab8bfaa07ad301842ec"
+ 
++[[package]]
++name = "chrono"
++version = "0.4.19"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
++dependencies = [
++ "libc",
++ "num-integer",
++ "num-traits",
++ "time 0.1.43",
++ "winapi",
++]
++
+ [[package]]
+ name = "clap"
+ version = "3.1.17"
+@@ -256,6 +269,28 @@ dependencies = [
+  "os_str_bytes",
+ ]
+ 
++[[package]]
++name = "clipboard"
++version = "0.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "25a904646c0340239dcf7c51677b33928bf24fdf424b79a57909c0109075b2e7"
++dependencies = [
++ "clipboard-win",
++ "objc",
++ "objc-foundation",
++ "objc_id",
++ "x11-clipboard",
++]
++
++[[package]]
++name = "clipboard-win"
++version = "2.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e3a093d6fed558e5fe24c3dfc85a68bb68f1c824f440d3ba5aca189e2998786b"
++dependencies = [
++ "winapi",
++]
++
+ [[package]]
+ name = "cmake"
+ version = "0.1.48"
+@@ -647,6 +682,16 @@ dependencies = [
+  "threadpool",
+ ]
+ 
++[[package]]
++name = "fern"
++version = "0.6.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3bdd7b0849075e79ee9a1836df22c717d1eba30451796fdc631b04565dd11e2a"
++dependencies = [
++ "colored 1.9.3",
++ "log",
++]
++
+ [[package]]
+ name = "fixedbitset"
+ version = "0.2.0"
+@@ -1001,9 +1046,12 @@ dependencies = [
+ name = "hikari_editor"
+ version = "0.1.0"
+ dependencies = [
++ "chrono",
++ "clipboard",
++ "fern",
++ "flume",
+  "hikari",
+  "log",
+- "simple_logger 2.1.0",
+  "winit",
+ ]
+ 
+@@ -1165,7 +1213,6 @@ dependencies = [
+  "cfg-if 1.0.0",
+  "chlorine",
+  "mint",
+- "pkg-config",
+ ]
+ 
+ [[package]]
+@@ -1667,6 +1714,26 @@ dependencies = [
+  "malloc_buf",
+ ]
+ 
++[[package]]
++name = "objc-foundation"
++version = "0.1.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1add1b659e36c9607c7aab864a76c7a4c2760cd0cd2e120f3fb8b952c7e22bf9"
++dependencies = [
++ "block",
++ "objc",
++ "objc_id",
++]
++
++[[package]]
++name = "objc_id"
++version = "0.1.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c92d4ddb4bd7b50d730c215ff871754d0da6b2178849f8a2a2ab69712d0c073b"
++dependencies = [
++ "objc",
++]
++
+ [[package]]
+ name = "object"
+ version = "0.27.1"
+@@ -2255,7 +2322,7 @@ dependencies = [
+  "atty",
+  "colored 1.9.3",
+  "log",
+- "time",
++ "time 0.3.7",
+  "winapi",
+ ]
+ 
+@@ -2268,7 +2335,7 @@ dependencies = [
+  "atty",
+  "colored 2.0.0",
+  "log",
+- "time",
++ "time 0.3.7",
+  "winapi",
+ ]
+ 
+@@ -2430,6 +2497,16 @@ dependencies = [
+  "weezl",
+ ]
+ 
++[[package]]
++name = "time"
++version = "0.1.43"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
++dependencies = [
++ "libc",
++ "winapi",
++]
++
+ [[package]]
+ name = "time"
+ version = "0.3.7"
+@@ -2498,9 +2575,9 @@ checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
+ 
+ [[package]]
+ name = "unindent"
+-version = "0.1.8"
++version = "0.1.9"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "514672a55d7380da379785a4d70ca8386c8883ff7eaae877be4d2081cebe73d8"
++checksum = "52fee519a3e570f7df377a06a1a7775cdbfb7aa460be7e08de2b1f0e69973a44"
+ 
+ [[package]]
+ name = "uuid"
+@@ -2809,6 +2886,15 @@ dependencies = [
+  "x11-dl",
+ ]
+ 
++[[package]]
++name = "x11-clipboard"
++version = "0.3.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "89bd49c06c9eb5d98e6ba6536cf64ac9f7ee3a009b2f53996d405b3944f6bcea"
++dependencies = [
++ "xcb",
++]
++
+ [[package]]
+ name = "x11-dl"
+ version = "2.19.1"
+@@ -2820,6 +2906,16 @@ dependencies = [
+  "pkg-config",
+ ]
+ 
++[[package]]
++name = "xcb"
++version = "0.8.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "5e917a3f24142e9ff8be2414e36c649d47d6cc2ba81f16201cdef96e533e02de"
++dependencies = [
++ "libc",
++ "log",
++]
++
+ [[package]]
+ name = "xcursor"
+ version = "0.3.4"
+diff --git a/README.md b/README.md
+index e34bcfb..2e7cf9a 100644
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,4 @@
+-# Sakura
++# Hikari
++
++A cross platform, efficient, and modular game engine with a focus on simplicity and ease of use.
+ 
+diff --git a/crates/hikari_dev/src/lib.rs b/crates/hikari_dev/src/lib.rs
+index 6d47f59..d353c71 100644
+--- a/crates/hikari_dev/src/lib.rs
++++ b/crates/hikari_dev/src/lib.rs
+@@ -1,4 +1,5 @@
+ mod profile;
++
+ pub use profile::*;
+ 
+ pub use profiling;
+diff --git a/crates/hikari_render/examples/pbr.rs b/crates/hikari_render/examples/pbr.rs
+index b3b2cc0..46d879f 100644
+--- a/crates/hikari_render/examples/pbr.rs
++++ b/crates/hikari_render/examples/pbr.rs
+@@ -863,14 +863,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+             ..Default::default()
+         },
+     )?;
+-    let mut gfx = rg::Gfx::headless(
+-        rg::GfxConfig {
+-            debug: true,
+-            features: rg::Features::default(),
+-            vsync,
+-            ..Default::default()
+-        },
+-    )?;
++    let mut gfx = rg::Gfx::headless(rg::GfxConfig {
++        debug: true,
++        features: rg::Features::default(),
++        vsync,
++        ..Default::default()
++    })?;
+ 
+     let device = gfx.device().clone();
+ 
+diff --git a/crates/hikari_render/imgui.ini b/crates/hikari_render/imgui.ini
+index 105d121..8e7c4b4 100644
+--- a/crates/hikari_render/imgui.ini
++++ b/crates/hikari_render/imgui.ini
+@@ -1,44 +1,43 @@
+-[Window][Debug##Default]
+-Pos=-11,15
+-Size=400,400
++[Window][Main]
++Pos=0,0
++Size=1920,1006
+ Collapsed=0
+ 
+-[Window][Dear ImGui Demo]
+-Pos=95,41
+-Size=1152,648
++[Window][Debug##Default]
++Pos=60,60
++Size=400,400
+ Collapsed=0
+ 
+-[Window][Dear ImGui Style Editor]
+-Pos=417,14
+-Size=353,714
++[Window][Outliner]
++Pos=60,60
++Size=300,400
+ Collapsed=0
+ 
+-[Window][Dear ImGui Metrics/Debugger]
++[Window][Properties]
+ Pos=60,60
+-Size=339,307
++Size=300,400
+ Collapsed=0
+ 
+-[Window][About Dear ImGui]
++[Window][Content Browser]
+ Pos=60,60
+-Size=424,109
++Size=950,200
+ Collapsed=0
+ 
+-[Window][Example: Log]
++[Window][Viewport]
+ Pos=60,60
+-Size=500,400
++Size=950,200
+ Collapsed=0
+ 
+-[Window][DockSpace Demo]
+-Size=1280,720
++[Window][Engine Log]
++Pos=60,60
++Size=950,200
+ Collapsed=0
+ 
+-[Window][Camera]
+-Pos=615,352
+-Size=324,304
++[Window][Dear ImGui Demo]
++Pos=650,20
++Size=550,680
+ Collapsed=0
+ 
+-[Window][Light]
+-Pos=-11,243
+-Size=225,208
+-Collapsed=1
++[Docking][Data]
++DockSpace ID=0x1F1D7494 Window=0x1F1A625A Pos=8,33 Size=1904,964 CentralNode=1
+ 
+diff --git a/crates/hikari_render/src/gfx.rs b/crates/hikari_render/src/gfx.rs
+index b82eee0..756f274 100644
+--- a/crates/hikari_render/src/gfx.rs
++++ b/crates/hikari_render/src/gfx.rs
+@@ -139,7 +139,11 @@ impl Gfx {
+                 .engine_name(&app_name)
+                 .engine_version(vk::make_api_version(0, 69, 420, 0));
+ 
+-            let layer_names = [CString::new("VK_LAYER_KHRONOS_validation").unwrap()];
++            let layer_names = if debug {
++                vec![CString::new("VK_LAYER_KHRONOS_validation").unwrap()]
++            } else {
++                vec![]
++            };
+             let layer_names: Vec<_> = layer_names.iter().map(|s| s.as_ptr()).collect();
+ 
+             let extension_names = Self::get_extensions(window, debug);
+@@ -261,6 +265,8 @@ impl Gfx {
+         new_width: u32,
+         new_height: u32,
+     ) -> Result<(), Box<dyn std::error::Error>> {
++        assert!(!(new_width == 0 || new_height == 0));
++
+         unsafe {
+             self.device.raw().device_wait_idle()?;
+         };
+diff --git a/crates/hikari_render/src/graph/mod.rs b/crates/hikari_render/src/graph/mod.rs
+index 6db7024..287453d 100644
+--- a/crates/hikari_render/src/graph/mod.rs
++++ b/crates/hikari_render/src/graph/mod.rs
+@@ -233,7 +233,11 @@ impl<T: Args> Graph<T> {
+                 &mut self.passes,
+                 &self.resources,
+                 &self.allocation_data,
+-                &mut self.swapchain.as_ref().expect("Cannot present in headless mode").lock(),
++                &mut self
++                    .swapchain
++                    .as_ref()
++                    .expect("Cannot present in headless mode")
++                    .lock(),
+             )
+         } else {
+             self.executor.execute(
+@@ -261,6 +265,8 @@ impl<T: Args> Graph<T> {
+         new_width: u32,
+         new_height: u32,
+     ) -> Result<(), Box<dyn std::error::Error>> {
++        assert!(!(new_width == 0 || new_height == 0));
++
+         self.prepare_exit();
+         self.size = (new_width, new_height);
+         self.resources
+diff --git a/crates/hikari_render/src/imgui_support.rs b/crates/hikari_render/src/imgui_support.rs
+index 23f3286..8b69dbf 100644
+--- a/crates/hikari_render/src/imgui_support.rs
++++ b/crates/hikari_render/src/imgui_support.rs
+@@ -1,15 +1,50 @@
+-use std::sync::Arc;
++use std::{ptr::NonNull, sync::Arc};
+ 
+ use ash::{prelude::VkResult, vk};
+ use imgui_rs_vulkan_renderer::Options;
+ use imgui_winit_support::{HiDpiMode, WinitPlatform};
++use parking_lot::Mutex;
+ use winit::{event::Event, window::Window};
+ 
++unsafe impl Send for SharedDrawData {}
++unsafe impl Sync for SharedDrawData {}
++/// Provides shared access to imgui::DrawData
++/// Useful when update and rendering need to be performed separately
++/// Clone SharedDrawData from the Backend
++/// Call `new_frame_shared(...)` on the backend to update the draw data
++/// Pass your SharedDrawData to the renderer using `render_from_shared(...)`
++pub struct SharedDrawData {
++    inner: Arc<Mutex<Option<NonNull<imgui::DrawData>>>>,
++}
++impl SharedDrawData {
++    pub(crate) fn new() -> Self {
++        Self {
++            inner: Arc::new(Mutex::new(None)),
++        }
++    }
++    pub(crate) fn set(&self, raw_draw_data: *mut imgui::DrawData) {
++        let non_null = NonNull::new(raw_draw_data).expect("imgui::DrawData is null");
++        self.inner.lock().replace(non_null);
++    }
++    pub(crate) fn get(&self) -> Option<&imgui::DrawData> {
++        unsafe { self.inner.lock().map(|raw| raw.as_ref()) }
++    }
++}
++
++impl Clone for SharedDrawData {
++    fn clone(&self) -> Self {
++        Self {
++            inner: self.inner.clone(),
++        }
++    }
++}
++
+ unsafe impl Send for Backend {}
+ unsafe impl Sync for Backend {}
+ pub struct Backend {
+-    pub imgui: imgui::Context,
++    imgui: imgui::Context,
+     platform: WinitPlatform,
++    draw_data: SharedDrawData,
+ }
+ 
+ impl Backend {
+@@ -23,12 +58,19 @@ impl Backend {
+         //imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
+         platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
+ 
+-        Ok(Self { imgui, platform })
++        Ok(Self {
++            imgui,
++            platform,
++            draw_data: SharedDrawData::new(),
++        })
+     }
+     #[inline]
+     pub fn hidpi_factor(&self) -> f64 {
+         self.platform.hidpi_factor()
+     }
++    pub fn shared_draw_data(&self) -> &SharedDrawData {
++        &self.draw_data
++    }
+     #[inline]
+     pub fn context(&mut self) -> &mut imgui::Context {
+         &mut self.imgui
+@@ -55,6 +97,23 @@ impl Backend {
+ 
+         self.imgui.render()
+     }
++    pub fn new_frame_shared<'a>(&'a mut self, window: &Window, mut run_fn: impl FnMut(&imgui::Ui)) {
++        self.platform
++            .prepare_frame(self.imgui.io_mut(), window)
++            .expect("Failed to prepare window for imgui");
++
++        let ui = self.imgui.new_frame();
++
++        (run_fn)(ui);
++
++        self.platform.prepare_render(ui, window);
++
++        unsafe {
++            imgui::sys::igRender();
++            self.draw_data
++                .set(imgui::sys::igGetDrawData() as *mut imgui::DrawData);
++        }
++    }
+ }
+ pub struct Renderer {
+     device: Arc<crate::Device>,
+@@ -175,6 +234,18 @@ impl Renderer {
+         self.renderer.cmd_draw(cmd, draw_data)?;
+         Ok(())
+     }
++    /// Same as render but takes SharedDrawData
++    pub fn render_from_shared(
++        &mut self,
++        cmd: vk::CommandBuffer,
++        draw_data: &SharedDrawData,
++    ) -> Result<(), Box<dyn std::error::Error>> {
++        let draw_data = draw_data
++            .get()
++            .expect("Draw Data not provided. Was a new_frame_shared called?");
++        self.renderer.cmd_draw(cmd, draw_data)?;
++        Ok(())
++    }
+ }
+ 
+ impl Drop for Renderer {
+diff --git a/crates/hikari_render/src/lib.rs b/crates/hikari_render/src/lib.rs
+index 5c7fb8c..6b84f8b 100644
+--- a/crates/hikari_render/src/lib.rs
++++ b/crates/hikari_render/src/lib.rs
+@@ -57,11 +57,13 @@ impl hikari_core::Plugin for GfxPlugin {
+         game.add_platform_event_hook(|state, window, event, _control| match event {
+             winit::event::Event::WindowEvent { window_id, event } => match event {
+                 winit::event::WindowEvent::Resized(size) => {
+-                    state
+-                        .get_mut::<Gfx>()
+-                        .unwrap()
+-                        .resize(size.width, size.height)
+-                        .expect("Failed to resize swapchain");
++                    if !(size.width == 0 || size.height == 0) {
++                        state
++                            .get_mut::<Gfx>()
++                            .unwrap()
++                            .resize(size.width, size.height)
++                            .expect("Failed to resize swapchain");
++                    }
+                 }
+                 _ => {}
+             },
+diff --git a/crates/hikari_render/src/swapchain.rs b/crates/hikari_render/src/swapchain.rs
+index 405cf3a..7f91a9d 100644
+--- a/crates/hikari_render/src/swapchain.rs
++++ b/crates/hikari_render/src/swapchain.rs
+@@ -245,7 +245,7 @@ impl Swapchain {
+ 
+         let present_mode = if vsync {
+             if mailbox_supported {
+-                vk::PresentModeKHR::MAILBOX
++                vk::PresentModeKHR::FIFO
+             } else {
+                 vk::PresentModeKHR::FIFO
+             }
+diff --git a/hikari_editor/Cargo.toml b/hikari_editor/Cargo.toml
+index 7747a09..c51e75b 100644
+--- a/hikari_editor/Cargo.toml
++++ b/hikari_editor/Cargo.toml
+@@ -8,8 +8,11 @@ edition = "2021"
+ [dependencies]
+ hikari = {path = "../"}
+ winit = "0.25.0"
+-simple_logger = "2.1.0"
+ log = "^0.4"
++fern = {version = "0.6", features = ["colored"] }
++flume = "0.10"
++chrono = "0.4"
++clipboard = "0.5.0"
+ 
+ [features]
+-release_unsafe = ["hikari/release_unsafe"]
+\ No newline at end of file
++release_unsafe = ["hikari/release_unsafe"]
+diff --git a/hikari_editor/imgui.ini b/hikari_editor/imgui.ini
+deleted file mode 100644
+index c0968d6..0000000
+--- a/hikari_editor/imgui.ini
++++ /dev/null
+@@ -1,56 +0,0 @@
+-[Window][Debug##Default]
+-Pos=60,60
+-Size=400,400
+-Collapsed=0
+-
+-[Window][Dear ImGui Demo]
+-Pos=264,94
+-Size=625,395
+-Collapsed=0
+-
+-[Window][Main]
+-Pos=0,0
+-Size=1272,656
+-Collapsed=0
+-
+-[Window][Outliner]
+-Pos=996,27
+-Size=268,230
+-Collapsed=0
+-DockId=0x00000005,0
+-
+-[Window][Context Browser]
+-Pos=8,770
+-Size=1904,228
+-Collapsed=0
+-DockId=0x00000004,0
+-
+-[Window][Viewport]
+-Pos=8,27
+-Size=986,450
+-Collapsed=0
+-DockId=0x00000001,0
+-
+-[Window][Properties]
+-Pos=996,259
+-Size=268,218
+-Collapsed=0
+-DockId=0x00000006,0
+-
+-[Window][Content Browser]
+-Pos=8,479
+-Size=1256,169
+-Collapsed=0
+-DockId=0x00000008,0
+-
+-[Docking][Data]
+-DockSpace         ID=0x1F1D7494 Window=0x1F1A625A Pos=8,27 Size=1256,621 Split=Y
+-  DockNode        ID=0x00000007 Parent=0x1F1D7494 SizeRef=784,705 Split=Y
+-    DockNode      ID=0x00000003 Parent=0x00000007 SizeRef=1904,741 Split=X
+-      DockNode    ID=0x00000001 Parent=0x00000003 SizeRef=986,971 CentralNode=1 Selected=0x995B0CF8
+-      DockNode    ID=0x00000002 Parent=0x00000003 SizeRef=268,971 Split=Y Selected=0xC89E3217
+-        DockNode  ID=0x00000005 Parent=0x00000002 SizeRef=282,230 Selected=0x4558F46E
+-        DockNode  ID=0x00000006 Parent=0x00000002 SizeRef=282,218 Selected=0xC89E3217
+-    DockNode      ID=0x00000004 Parent=0x00000007 SizeRef=1904,228 Selected=0x1DA3A318
+-  DockNode        ID=0x00000008 Parent=0x1F1D7494 SizeRef=784,264 Selected=0x371352B7
+-
+diff --git a/hikari_editor/src/main.rs b/hikari_editor/src/main.rs
+index ab11e38..254eeaf 100644
+--- a/hikari_editor/src/main.rs
++++ b/hikari_editor/src/main.rs
+@@ -105,7 +105,11 @@ impl Plugin for EditorPlugin {
+         );
+         game.add_task(
+             core::RENDER,
+-            Task::new("EditorRender", |graph: &mut EditorGraph| {
++            Task::new("EditorRender", |graph: &mut EditorGraph, window: &&'static winit::window::Window| {
++                let window_size = window.inner_size();
++                if window_size.width == 0 || window_size.height == 0 {
++                    return;
++                }
+                 graph.execute(()).expect("Failed to render imgui");
+             }),
+         );
+@@ -119,11 +123,13 @@ impl Plugin for EditorPlugin {
+             match event {
+                 Event::WindowEvent { event, .. } => match event {
+                     WindowEvent::Resized(size) => {
+-                        state
++                        if !(size.width == 0 || size.height == 0) {
++                            state
+                             .get_mut::<EditorGraph>()
+                             .unwrap()
+                             .resize(size.width, size.height)
+                             .expect("Failed to resize graph");
++                        }
+                     }
+                     WindowEvent::CloseRequested => {
+                         state.get_mut::<Editor>().unwrap().handle_exit();
+@@ -154,7 +160,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+ 
+     game.add_plugin(GfxPlugin {
+         config: GfxConfig {
+-            debug: true,
++            debug: false,
+             features: Features::default(),
+             vsync: true,
+         },

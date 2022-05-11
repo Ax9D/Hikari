@@ -57,11 +57,13 @@ impl hikari_core::Plugin for GfxPlugin {
         game.add_platform_event_hook(|state, window, event, _control| match event {
             winit::event::Event::WindowEvent { window_id, event } => match event {
                 winit::event::WindowEvent::Resized(size) => {
-                    state
-                        .get_mut::<Gfx>()
-                        .unwrap()
-                        .resize(size.width, size.height)
-                        .expect("Failed to resize swapchain");
+                    if !(size.width == 0 || size.height == 0) {
+                        state
+                            .get_mut::<Gfx>()
+                            .unwrap()
+                            .resize(size.width, size.height)
+                            .expect("Failed to resize swapchain");
+                    }
                 }
                 _ => {}
             },

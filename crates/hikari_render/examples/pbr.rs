@@ -863,14 +863,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ..Default::default()
         },
     )?;
-    let mut gfx = rg::Gfx::headless(
-        rg::GfxConfig {
-            debug: true,
-            features: rg::Features::default(),
-            vsync,
-            ..Default::default()
-        },
-    )?;
+    let mut gfx = rg::Gfx::headless(rg::GfxConfig {
+        debug: true,
+        features: rg::Features::default(),
+        vsync,
+        ..Default::default()
+    })?;
 
     let device = gfx.device().clone();
 

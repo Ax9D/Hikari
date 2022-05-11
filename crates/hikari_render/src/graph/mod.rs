@@ -233,7 +233,11 @@ impl<T: Args> Graph<T> {
                 &mut self.passes,
                 &self.resources,
                 &self.allocation_data,
-                &mut self.swapchain.as_ref().expect("Cannot present in headless mode").lock(),
+                &mut self
+                    .swapchain
+                    .as_ref()
+                    .expect("Cannot present in headless mode")
+                    .lock(),
             )
         } else {
             self.executor.execute(
@@ -261,6 +265,8 @@ impl<T: Args> Graph<T> {
         new_width: u32,
         new_height: u32,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        assert!(!(new_width == 0 || new_height == 0));
+
         self.prepare_exit();
         self.size = (new_width, new_height);
         self.resources

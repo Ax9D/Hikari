@@ -245,7 +245,7 @@ impl Swapchain {
 
         let present_mode = if vsync {
             if mailbox_supported {
-                vk::PresentModeKHR::MAILBOX
+                vk::PresentModeKHR::FIFO
             } else {
                 vk::PresentModeKHR::FIFO
             }

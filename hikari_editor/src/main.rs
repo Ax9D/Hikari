@@ -105,7 +105,11 @@ impl Plugin for EditorPlugin {
         );
         game.add_task(
             core::RENDER,
-            Task::new("EditorRender", |graph: &mut EditorGraph| {
+            Task::new("EditorRender", |graph: &mut EditorGraph, window: &&'static winit::window::Window| {
+                let window_size = window.inner_size();
+                if window_size.width == 0 || window_size.height == 0 {
+                    return;
+                }
                 graph.execute(()).expect("Failed to render imgui");
             }),
         );
@@ -119,11 +123,13 @@ impl Plugin for EditorPlugin {
             match event {
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::Resized(size) => {
-                        state
+                        if !(size.width == 0 || size.height == 0) {
+                            state
                             .get_mut::<EditorGraph>()
                             .unwrap()
                             .resize(size.width, size.height)
                             .expect("Failed to resize graph");
+                        }
                     }
                     WindowEvent::CloseRequested => {
                         state.get_mut::<Editor>().unwrap().handle_exit();
@@ -154,7 +160,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     game.add_plugin(GfxPlugin {
         config: GfxConfig {
-            debug: true,
+            debug: false,
             features: Features::default(),
             vsync: true,
         },
