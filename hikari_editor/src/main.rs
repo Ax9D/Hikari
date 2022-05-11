@@ -9,17 +9,27 @@ use hikari::render::*;
 use hikari::systems::*;
 use winit::event_loop::ControlFlow;
 
+use crate::editor::EditorConfig;
+
 mod editor;
 
-struct EditorPlugin;
+struct EditorPlugin {
+    log_listener: editor::logging::LogListener,
+}
 
-pub type EditorGraph = render::Graph<(imgui::DrawData,)>;
-fn prepare_graph(gfx: &mut Gfx, mut renderer: imgui_support::Renderer) -> EditorGraph {
-    let pass = Renderpass::<(imgui::DrawData,)>::new(
+pub type EditorGraph = render::Graph<()>;
+fn prepare_graph(
+    gfx: &mut Gfx,
+    backend: &imgui_support::Backend,
+    mut renderer: imgui_support::Renderer,
+) -> EditorGraph {
+    let draw_data = backend.shared_draw_data().clone();
+
+    let pass = Renderpass::<()>::new(
         "Imgui",
         ImageSize::default(),
-        move |cmd: &mut RenderpassCommands, (draw_data,)| {
-            renderer.render(cmd.raw(), draw_data).unwrap();
+        move |cmd: &mut RenderpassCommands, ()| {
+            renderer.render_from_shared(cmd.raw(), &draw_data).unwrap();
         },
     )
     .present();
@@ -39,7 +49,14 @@ impl Plugin for EditorPlugin {
         let imgui = imgui::Context::create();
         let mut backend = imgui_support::Backend::new(game.window(), imgui)
             .expect("Failed to create imgui context");
-        let editor = Editor::new(backend.context());
+        let hidpi_factor = backend.hidpi_factor() as f32;
+        let editor = Editor::new(
+            backend.context(),
+            EditorConfig {
+                log_listener: self.log_listener,
+                hidpi_factor,
+            },
+        );
 
         let mut gfx = game.get_mut::<Gfx>();
         let swapchain = gfx.swapchain().unwrap().lock();
@@ -56,39 +73,41 @@ impl Plugin for EditorPlugin {
         )
         .expect("Failed to create imgui renderer");
 
-        let graph = prepare_graph(gfx.as_mut(), renderer);
+        let graph = prepare_graph(gfx.as_mut(), &backend, renderer);
         drop(gfx);
 
         let static_window: &'static winit::window::Window =
             unsafe { std::mem::transmute(game.window()) };
 
-        fn imgui_render<'a>(
+        fn imgui_update<'a>(
             imgui: &'a mut imgui_support::Backend,
-            graph: &'a mut EditorGraph,
             window: &winit::window::Window,
             editor: &mut Editor,
         ) {
-            let draw_data = imgui.new_frame(window, |ui| {
+            imgui.new_frame_shared(window, |ui| {
                 editor.run(ui);
             });
-
-            graph.execute((draw_data,)).expect("Failed to render imgui");
         }
         game.add_state(backend);
         game.add_state(graph);
         game.add_state(static_window);
         game.add_state(editor);
         game.add_task(
-            core::LAST,
+            core::UPDATE,
             Task::new(
                 "EditorUpdate",
-                |graph: &mut EditorGraph,
-                 editor: &mut Editor,
+                |editor: &mut Editor,
                  imgui: &mut imgui_support::Backend,
                  window: &&'static winit::window::Window| {
-                    imgui_render(imgui, graph, *window, editor);
+                    imgui_update(imgui, *window, editor);
                 },
             ),
+        );
+        game.add_task(
+            core::RENDER,
+            Task::new("EditorRender", |graph: &mut EditorGraph| {
+                graph.execute(()).expect("Failed to render imgui");
+            }),
         );
 
         game.add_platform_event_hook(|state, window, event, control| {
@@ -122,9 +141,7 @@ impl Plugin for EditorPlugin {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if simple_logger::SimpleLogger::new().init().is_err() {
-        println!("Failed to init logger");
-    }
+    let log_listener = editor::logging::init()?;
 
     let window = winit::window::WindowBuilder::new()
         .with_title("Hikari Editor")
@@ -142,7 +159,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             vsync: true,
         },
     });
-    game.add_plugin(EditorPlugin);
+    game.add_plugin(EditorPlugin { log_listener });
 
     game.run();
 }

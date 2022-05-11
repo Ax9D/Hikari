@@ -8,8 +8,11 @@ edition = "2021"
 [dependencies]
 hikari = {path = "../"}
 winit = "0.25.0"
-simple_logger = "2.1.0"
 log = "^0.4"
+fern = {version = "0.6", features = ["colored"] }
+flume = "0.10"
+chrono = "0.4"
+clipboard = "0.5.0"
 
 [features]
 release_unsafe = ["hikari/release_unsafe"]

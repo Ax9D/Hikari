@@ -1,15 +1,50 @@
-use std::sync::Arc;
+use std::{ptr::NonNull, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
 use imgui_rs_vulkan_renderer::Options;
 use imgui_winit_support::{HiDpiMode, WinitPlatform};
+use parking_lot::Mutex;
 use winit::{event::Event, window::Window};
+
+unsafe impl Send for SharedDrawData {}
+unsafe impl Sync for SharedDrawData {}
+/// Provides shared access to imgui::DrawData
+/// Useful when update and rendering need to be performed separately
+/// Clone SharedDrawData from the Backend
+/// Call `new_frame_shared(...)` on the backend to update the draw data
+/// Pass your SharedDrawData to the renderer using `render_from_shared(...)`
+pub struct SharedDrawData {
+    inner: Arc<Mutex<Option<NonNull<imgui::DrawData>>>>,
+}
+impl SharedDrawData {
+    pub(crate) fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(None)),
+        }
+    }
+    pub(crate) fn set(&self, raw_draw_data: *mut imgui::DrawData) {
+        let non_null = NonNull::new(raw_draw_data).expect("imgui::DrawData is null");
+        self.inner.lock().replace(non_null);
+    }
+    pub(crate) fn get(&self) -> Option<&imgui::DrawData> {
+        unsafe { self.inner.lock().map(|raw| raw.as_ref()) }
+    }
+}
+
+impl Clone for SharedDrawData {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
 
 unsafe impl Send for Backend {}
 unsafe impl Sync for Backend {}
 pub struct Backend {
-    pub imgui: imgui::Context,
+    imgui: imgui::Context,
     platform: WinitPlatform,
+    draw_data: SharedDrawData,
 }
 
 impl Backend {
@@ -23,11 +58,18 @@ impl Backend {
         //imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
         platform.attach_window(imgui.io_mut(), window, HiDpiMode::Default);
 
-        Ok(Self { imgui, platform })
+        Ok(Self {
+            imgui,
+            platform,
+            draw_data: SharedDrawData::new(),
+        })
     }
     #[inline]
     pub fn hidpi_factor(&self) -> f64 {
         self.platform.hidpi_factor()
+    }
+    pub fn shared_draw_data(&self) -> &SharedDrawData {
+        &self.draw_data
     }
     #[inline]
     pub fn context(&mut self) -> &mut imgui::Context {
@@ -54,6 +96,23 @@ impl Backend {
         self.platform.prepare_render(ui, window);
 
         self.imgui.render()
+    }
+    pub fn new_frame_shared<'a>(&'a mut self, window: &Window, mut run_fn: impl FnMut(&imgui::Ui)) {
+        self.platform
+            .prepare_frame(self.imgui.io_mut(), window)
+            .expect("Failed to prepare window for imgui");
+
+        let ui = self.imgui.new_frame();
+
+        (run_fn)(ui);
+
+        self.platform.prepare_render(ui, window);
+
+        unsafe {
+            imgui::sys::igRender();
+            self.draw_data
+                .set(imgui::sys::igGetDrawData() as *mut imgui::DrawData);
+        }
     }
 }
 pub struct Renderer {
@@ -172,6 +231,18 @@ impl Renderer {
         cmd: vk::CommandBuffer,
         draw_data: &imgui::DrawData,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        self.renderer.cmd_draw(cmd, draw_data)?;
+        Ok(())
+    }
+    /// Same as render but takes SharedDrawData
+    pub fn render_from_shared(
+        &mut self,
+        cmd: vk::CommandBuffer,
+        draw_data: &SharedDrawData,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let draw_data = draw_data
+            .get()
+            .expect("Draw Data not provided. Was a new_frame_shared called?");
         self.renderer.cmd_draw(cmd, draw_data)?;
         Ok(())
     }
