@@ -206,7 +206,7 @@ impl Logging {
 }
 
 pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
-    log::debug!("Ayy Lmao");
+    //log::debug!("Ayy Lmao");
     ui.window("Engine Log")
         .size([950.0, 200.0], imgui::Condition::Once)
         .flags(imgui::WindowFlags::HORIZONTAL_SCROLLBAR)
@@ -259,7 +259,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
                     ui.text_wrapped(&line.message);
                 }
             }
-            println!("{} {}", ui.scroll_y(), ui.scroll_max_y());
+            //println!("{} {}", ui.scroll_y(), ui.scroll_max_y());
 
             if f32::abs(ui.scroll_y() - ui.scroll_max_y()) <= 10.0 {
                 ui.set_scroll_here_y_with_ratio(1.0);

@@ -51,4 +51,4 @@ rayon = "1"
 
 [features]
 default = ["imgui-support"]
-imgui-support = ["imgui", "imgui-winit-support", "imgui-rs-vulkan-renderer"]
+imgui-support = []#["imgui", "imgui-winit-support", "imgui-rs-vulkan-renderer"]
