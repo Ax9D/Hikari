@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 winit = "0.25.0"
-glam = "0.16.0"
 fxhash = "0.2.1"
 
 hikari_systems = {path = "../hikari_systems"}
 hikari_core = {path = "../hikari_core"}
+hikari_math = {path = "../hikari_math"}
