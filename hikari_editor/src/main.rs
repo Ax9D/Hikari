@@ -79,15 +79,6 @@ impl Plugin for EditorPlugin {
         let static_window: &'static winit::window::Window =
             unsafe { std::mem::transmute(game.window()) };
 
-        fn imgui_update<'a>(
-            imgui: &'a mut imgui_support::Backend,
-            window: &winit::window::Window,
-            editor: &mut Editor,
-        ) {
-            imgui.new_frame_shared(window, |ui| {
-                editor.run(ui);
-            });
-        }
         game.add_state(backend);
         game.add_state(graph);
         game.add_state(static_window);
@@ -99,19 +90,24 @@ impl Plugin for EditorPlugin {
                 |editor: &mut Editor,
                  imgui: &mut imgui_support::Backend,
                  window: &&'static winit::window::Window| {
-                    imgui_update(imgui, *window, editor);
+                    imgui.new_frame_shared(window, |ui| {
+                        editor.run(ui);
+                    });
                 },
             ),
         );
         game.add_task(
             core::RENDER,
-            Task::new("EditorRender", |graph: &mut EditorGraph, window: &&'static winit::window::Window| {
-                let window_size = window.inner_size();
-                if window_size.width == 0 || window_size.height == 0 {
-                    return;
-                }
-                graph.execute(()).expect("Failed to render imgui");
-            }),
+            Task::new(
+                "EditorRender",
+                |graph: &mut EditorGraph, window: &&'static winit::window::Window| {
+                    let window_size = window.inner_size();
+                    if window_size.width == 0 || window_size.height == 0 {
+                        return;
+                    }
+                    graph.execute(()).expect("Failed to render imgui");
+                },
+            ),
         );
 
         game.add_platform_event_hook(|state, window, event, control| {
@@ -125,10 +121,10 @@ impl Plugin for EditorPlugin {
                     WindowEvent::Resized(size) => {
                         if !(size.width == 0 || size.height == 0) {
                             state
-                            .get_mut::<EditorGraph>()
-                            .unwrap()
-                            .resize(size.width, size.height)
-                            .expect("Failed to resize graph");
+                                .get_mut::<EditorGraph>()
+                                .unwrap()
+                                .resize(size.width, size.height)
+                                .expect("Failed to resize graph");
                         }
                     }
                     WindowEvent::CloseRequested => {

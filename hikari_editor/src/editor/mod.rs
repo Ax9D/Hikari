@@ -3,11 +3,13 @@ use hikari::render::*;
 
 use self::{
     content_browser::ContentBrowser,
-    logging::{LogListener, Logging},
+    logging::{LogListener, Logging}, tools::Tools,
 };
-mod content_browser;
 pub mod logging;
+
+mod content_browser;
 mod utils;
+mod tools;
 
 struct Clipboard(clipboard::ClipboardContext);
 impl Clipboard {
@@ -33,6 +35,7 @@ pub struct EditorConfig {
 pub struct Editor {
     content_browser: ContentBrowser,
     logging: Logging,
+    tools: Tools,
     show_demo: bool,
 }
 
@@ -114,6 +117,7 @@ impl Editor {
         Self::set_dark_theme(ctx);
         Self {
             logging: Logging::new(config.log_listener),
+            tools: Tools::new(),
             show_demo: false,
             content_browser: ContentBrowser::new(),
         }
@@ -149,7 +153,22 @@ impl Editor {
                     ui.menu("Edit", || {
                         ui.menu_item_config("Preferences").enabled(false).build();
                     });
+                    ui.menu("Tools", || {
+                        if ui.menu_item("Start Tracy") {
+                            let path = std::path::Path::new("./tools/");
+                            #[cfg(target_os = "windows")]
+                            let tracy_exe = "Tracy.exe";
+                            #[cfg(target_os = "linux")]
+                            let tracy_exe = "tracy";
 
+                            let result = std::process::Command::new(path.join(tracy_exe))
+                            .spawn();
+
+                            if let Err(err) = result {
+                                log::error!("Failed to spawn tracy: {}", err);
+                            }
+                        }
+                    });
                     ui.menu("Help", || {
                         self.show_demo = ui.menu_item_config("Demo Window").build();
                     });
