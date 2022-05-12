@@ -41,6 +41,7 @@ mod util;
 use renderpass::PhysicalRenderpass;
 
 pub use ash::vk;
+#[cfg(feature = "imgui-support")]
 pub use imgui;
 pub use util::PerFrame;
 pub use vk_sync_fork::AccessType;

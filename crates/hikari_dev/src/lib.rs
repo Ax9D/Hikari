@@ -1,4 +1,4 @@
 mod profile;
 pub use profile::*;
 
-pub use profiling;
+pub use tracy_client;

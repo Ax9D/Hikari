@@ -881,7 +881,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fxaa_output = fxaa_pass(&device, pbr_output, &mut gb);
     let imgui_output = imgui_pass(&device, &mut imgui, &mut gb);
 
-    //composite_pass(&device, fxaa_output, imgui_output, &mut gb);
+    composite_pass(&device, fxaa_output, imgui_output, &mut gb);
 
     let mut graph = gb.build()?;
 

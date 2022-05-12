@@ -58,5 +58,3 @@ rayon = "1"
 [features]
 default = ["imgui-support"]
 imgui-support = ["imgui", "imgui-winit-support", "imgui-rs-vulkan-renderer"]
-profile-tracy = ["hikari_dev/profile-tracy"]
-profile-puffin = ["hikari_dev/profile-puffin"]
