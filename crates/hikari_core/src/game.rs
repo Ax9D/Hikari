@@ -19,6 +19,7 @@ pub struct Game {
 }
 impl Game {
     pub fn new(window_builder: WindowBuilder) -> Result<Self, winit::error::OsError> {
+        hikari_dev::profiling_init();
         let event_loop = EventLoop::new();
         let window = window_builder.build(&event_loop)?;
         Ok(Self {
