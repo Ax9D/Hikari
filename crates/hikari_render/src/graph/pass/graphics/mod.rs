@@ -49,16 +49,11 @@ impl<T: Args> Renderpass<T> {
     pub fn outputs(&self) -> &[Output] {
         &self.outputs
     }
-    /// Used to add an "input" image to this pass, which will be automatically bound at the specified binding and be available in shaders for sampling
-    pub fn sample_image(
-        mut self,
-        image: &Handle<SampledImage>,
-        access_type: AccessType,
-        binding: u32,
-    ) -> Self {
+    fn read_image_check(&mut self, image: &Handle<SampledImage>, access_type: AccessType) {
         if self.inputs.iter().any(|input| match input {
-            Input::SampleImage(existing_image, _, binding) => existing_image == image,
-            _ => false,
+            Input::SampleImage(existing_image, _, _) | Input::ReadImage(existing_image, _) => {
+                existing_image == image
+            }
         }) {
             panic!("Image handle {:?} already registered for read", image);
         }
@@ -77,6 +72,22 @@ impl<T: Args> Renderpass<T> {
                 access_type
             ),
         }
+    }
+    pub fn read_image(mut self, image: &Handle<SampledImage>, access_type: AccessType) -> Self {
+        self.read_image_check(image, access_type);
+
+        self.inputs
+            .push(Input::ReadImage(image.clone(), access_type));
+        self
+    }
+    /// Used to add an "input" image to this pass, which will be automatically bound at the specified binding and be available in shaders for sampling
+    pub fn sample_image(
+        mut self,
+        image: &Handle<SampledImage>,
+        access_type: AccessType,
+        binding: u32,
+    ) -> Self {
+        self.read_image_check(image, access_type);
 
         self.inputs
             .push(Input::SampleImage(image.clone(), access_type, binding));
