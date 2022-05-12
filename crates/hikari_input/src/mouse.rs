@@ -1,11 +1,12 @@
+use hikari_math::{Vec2, vec2};
 use winit::{dpi::PhysicalPosition, event::WindowEvent};
 pub type MouseButtonState = winit::event::ElementState;
 pub type MouseButton = winit::event::MouseButton;
 
 pub struct MouseState {
     position: PhysicalPosition<f64>,
-    cur_delta: glam::Vec2,
-    scroll_delta: glam::Vec2,
+    cur_delta: Vec2,
+    scroll_delta: Vec2,
 
     buttons: fxhash::FxHashMap<MouseButton, MouseButtonState>,
 }
@@ -14,8 +15,8 @@ impl MouseState {
     pub fn new() -> Self {
         Self {
             position: PhysicalPosition { x: 0.0, y: 0.0 },
-            cur_delta: glam::Vec2::ZERO,
-            scroll_delta: glam::Vec2::ZERO,
+            cur_delta: Vec2::ZERO,
+            scroll_delta: Vec2::ZERO,
             buttons: Default::default(),
         }
     }
@@ -46,15 +47,15 @@ impl MouseState {
     }
 
     #[inline]
-    pub fn get_position(&self) -> glam::Vec2 {
-        glam::vec2(self.position.x as f32, self.position.y as f32)
+    pub fn get_position(&self) -> Vec2 {
+        vec2(self.position.x as f32, self.position.y as f32)
     }
     #[inline]
-    pub fn get_cursor_delta(&self) -> glam::Vec2 {
+    pub fn get_cursor_delta(&self) -> Vec2 {
         self.cur_delta
     }
     #[inline]
-    pub fn get_scroll_delta(&self) -> glam::Vec2 {
+    pub fn get_scroll_delta(&self) -> Vec2 {
         self.scroll_delta
     }
     pub fn get_button_state(&self, button: MouseButton) -> MouseButtonState {
