@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::collections::VecDeque;
+use std::{collections::{VecDeque}, ops::Index};
 
 use chrono::Utc;
 use fern::colors::{Color, ColoredLevelConfig};
@@ -8,7 +8,7 @@ use hikari::render::imgui::{self, ImColor32};
 
 use super::Editor;
 
-struct RollingBuffer<T> {
+pub struct RollingBuffer<T> {
     buffer: VecDeque<T>,
     capacity: usize,
 }
@@ -57,6 +57,14 @@ impl<T> RollingBuffer<T> {
         }
     }
 }
+impl<T> Index<usize> for RollingBuffer<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.buffer.index(index)
+    }
+}
+
 #[derive(Debug)]
 pub struct Line {
     pub message: String,
@@ -82,12 +90,21 @@ impl LogListener {
     pub fn sender(&self) -> &Sender<Line> {
         &self.sender
     }
-    pub fn lines(&mut self) -> Lines {
+    fn listen(&mut self) {
+        hikari::dev::profile_function!();
         for line in self.recv.try_iter() {
             self.buffer.push(line);
         }
+    }
+    pub fn lines(&mut self) -> Lines {
+        self.listen();
 
         self.buffer.iter()
+    }
+    pub fn buffer(&mut self) -> &RollingBuffer<Line> {
+        self.listen();
+        
+        &self.buffer
     }
     pub fn len(&self) -> usize {
         self.buffer.len()
@@ -189,12 +206,14 @@ impl Logging {
 }
 
 pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
-    let logging = &mut editor.logging;
+    log::debug!("Ayy Lmao");
     ui.window("Engine Log")
         .size([950.0, 200.0], imgui::Condition::Once)
         .flags(imgui::WindowFlags::HORIZONTAL_SCROLLBAR)
         .resizable(true)
         .build(|| {
+            let logging = &mut editor.logging;
+            hikari::dev::profile_scope!("Engine Log");
             let mut nlines = logging.log_listener.capacity() as i32;
             {
                 let _width = ui.push_item_width(300.0);
@@ -210,32 +229,39 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
                 logging.log_listener.clear();
             }
             ui.same_line();
-            let lines = logging.log_listener.lines();
             if ui.button("Copy to Clipboard") {
+                let lines = logging.log_listener.lines();
                 ui.set_clipboard_text(lines.to_string());
             }
+            let lines = logging.log_listener.buffer();
+            let clipper = imgui::ListClipper::new(lines.len() as i32);
+            let mut clipper = clipper.begin(ui);
+            while clipper.step() {
 
-            for line in lines {
-                let color = match line.log_level {
-                    log::Level::Error => ImColor32::from_rgb(255, 10, 0),
-                    log::Level::Warn => ImColor32::from_rgb(212, 103, 8),
-                    log::Level::Info => ImColor32::from_rgb(61, 174, 233),
-                    log::Level::Debug => ImColor32::from_rgb(142, 68, 173),
-                    log::Level::Trace => ImColor32::from_rgb(29, 208, 147),
-                };
-
-                ui.text(line.timestamp.to_string());
-                ui.same_line();
-                ui.text_colored(
-                    color.to_rgba_f32s(),
-                    format!("{}", line.log_level.to_string()),
-                );
-                ui.same_line();
-                ui.text_wrapped(&line.message);
+                for line_ix in clipper.display_start()..clipper.display_end() {
+                    hikari::dev::profile_scope!("Draw Lines");
+                    let line = &lines[line_ix as usize];
+                    let color = match line.log_level {
+                        log::Level::Error => ImColor32::from_rgb(255, 10, 0),
+                        log::Level::Warn => ImColor32::from_rgb(212, 103, 8),
+                        log::Level::Info => ImColor32::from_rgb(61, 174, 233),
+                        log::Level::Debug => ImColor32::from_rgb(142, 68, 173),
+                        log::Level::Trace => ImColor32::from_rgb(29, 208, 147),
+                    };
+    
+                    ui.text(line.timestamp.to_string());
+                    ui.same_line();
+                    ui.text_colored(
+                        color.to_rgba_f32s(),
+                        line.log_level.to_string(),
+                    );
+                    ui.same_line();
+                    ui.text_wrapped(&line.message);
+                }
             }
-            //println!("{} {}", ui.scroll_y(), ui.scroll_max_y());
+            println!("{} {}", ui.scroll_y(), ui.scroll_max_y());
 
-            if ui.scroll_y() >= ui.scroll_max_y() - 0.5 {
+            if f32::abs(ui.scroll_y() - ui.scroll_max_y()) <= 10.0 {
                 ui.set_scroll_here_y_with_ratio(1.0);
             }
         });
