@@ -89,15 +89,15 @@ impl Game {
 
         init.execute(&mut state);
         event_loop.run(move |event, _, control_flow| {
-            hikari_dev::profile_scope!("Gameloop");
-
             for hook in &mut hooks {
                 (hook)(&state, &mut window, &event, control_flow);
             }
 
             match &event {
                 Event::RedrawRequested(_) => {
+                    hikari_dev::profile_scope!("Gameloop");
                     update.execute(&mut state);
+                    hikari_dev::finish_frame!();
                 }
                 Event::MainEventsCleared => {
                     window.request_redraw();
@@ -105,7 +105,6 @@ impl Game {
                 Event::LoopDestroyed => {}
                 _ => {}
             }
-            hikari_dev::finish_frame!();
         })
     }
 }

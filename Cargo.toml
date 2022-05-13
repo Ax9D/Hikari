@@ -40,4 +40,10 @@ hikari_dev = {path = "crates/hikari_dev"}
 hikari_input = {path = "crates/hikari_input"}
 
 [features]
+default = []
 release_unsafe = ["hikari_systems/thread_unsafety"]
+profiling_disabled = ["hikari_dev/profiling_disabled"]
+
+[profile.dist]
+inherits = "release"
+strip = true
