@@ -3,7 +3,7 @@ name: Test and Build
 on: 
   push:
     branches:
-      - hikari
+      - main
 
 jobs:
   build_linux:
