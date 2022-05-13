@@ -1,0 +1,91 @@
+name: Test and Build
+
+on: 
+  push:
+    branches:
+      - hikari
+
+jobs:
+  build_linux:
+    name: Build on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone our repo
+        uses: actions/checkout@v3
+        with: 
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.3.204.0
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - name: Install XCB Stuff
+        run: sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev
+      
+      - name: Build everything
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --all
+
+  build_windows:
+    name: Build on Windows
+    runs-on: windows-latest
+    steps:
+      - name: Clone our repo
+        uses: actions/checkout@v3
+        with: 
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.3.204.0
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - name: Install ninja-build tool
+        uses: seanmiddleditch/gha-setup-ninja@v3
+
+      - name: Build everything
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --all
