@@ -12,7 +12,6 @@ members = [
     "crates/hikari_core",
     "crates/hikari_systems",
     "crates/hikari_render",
-    "crates/hikari_imgui",
     "crates/hikari_3d",
     "crates/hikari_pbr",
     "crates/hikari_py",
@@ -26,9 +25,6 @@ members = [
 
 [profile.release]
 debug = true
-
-[patch.crates-io]
-imgui = {git = "https://github.com/imgui-rs/imgui-rs"}
 
 [dependencies]
 hikari_core = {path = "crates/hikari_core"}
