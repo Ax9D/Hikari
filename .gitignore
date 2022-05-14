@@ -2,6 +2,7 @@ target
 profile.json
 output.log
 dist
+.dist
 vk_pipeline_cache
 hikari.log
 
