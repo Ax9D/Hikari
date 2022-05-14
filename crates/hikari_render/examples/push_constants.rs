@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut gb: rg::GraphBuilder<(f32, f32)> = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 
-    let layout = rg::VertexInputLayout::new()
+    let layout = rg::VertexInputLayout::builder()
         .buffer(&[rg::ShaderDataType::Vec2f], rg::StepMode::Vertex) // Binding 0
         //.buffer(...)                                                    // Binding 1
         //...

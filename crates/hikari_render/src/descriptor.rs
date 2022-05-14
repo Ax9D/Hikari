@@ -36,7 +36,7 @@ impl PartialEq for DescriptorSetLayout {
 impl Eq for DescriptorSetLayout {}
 
 impl DescriptorSetLayout {
-    pub fn new() -> DescriptorSetLayoutBuilder {
+    pub fn builder() -> DescriptorSetLayoutBuilder {
         DescriptorSetLayoutBuilder::default()
     }
     pub fn raw(&self) -> vk::DescriptorSetLayout {

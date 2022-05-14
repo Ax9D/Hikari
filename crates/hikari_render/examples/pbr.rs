@@ -195,7 +195,7 @@ fn depth_prepass(
     struct PushConstants {
         transform: Mat4,
     }
-    let layout = rg::VertexInputLayout::new()
+    let layout = rg::VertexInputLayout::builder()
         .buffer(
             &[
                 rg::ShaderDataType::Vec3f,
@@ -251,7 +251,7 @@ fn depth_prepass(
                         //     normal.raw().image()
                         // );
 
-                        cmd.draw_indexed(0..sub_mesh.indices.len(), 0, 0..1);
+                        cmd.draw_indexed(0..sub_mesh.indices.capacity(), 0, 0..1);
                     }
                 }
 
@@ -373,7 +373,7 @@ fn pbr_pass(
         rg::create_uniform_buffer::<UBO>(device, 1).unwrap(),
     ]);
 
-    let layout = rg::VertexInputLayout::new()
+    let layout = rg::VertexInputLayout::builder()
         .buffer(
             &[
                 rg::ShaderDataType::Vec3f,
@@ -500,7 +500,7 @@ fn pbr_pass(
                             cmd.set_image(metallic.raw(), 1, 2);
                             cmd.set_image(normal.raw(), 1, 3);
 
-                            cmd.draw_indexed(0..sub_mesh.indices.len(), 0, 0..1);
+                            cmd.draw_indexed(0..sub_mesh.indices.capacity(), 0, 0..1);
                         }
                     }
                 }

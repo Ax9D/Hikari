@@ -335,7 +335,7 @@ impl VertexInputLayout {
 }
 
 impl VertexInputLayout {
-    pub fn new() -> VertexInputLayoutBuilder {
+    pub fn builder() -> VertexInputLayoutBuilder {
         VertexInputLayoutBuilder {
             layouts: Vec::new(),
         }

@@ -224,7 +224,7 @@ impl PipelineLayout {
         stages: &[&CompiledShaderModule],
     ) -> Result<[DescriptorSetLayout; MAX_DESCRIPTOR_SETS], Box<dyn std::error::Error>> {
         let mut layout_builders: [DescriptorSetLayoutBuilder; MAX_DESCRIPTOR_SETS] =
-            [DescriptorSetLayout::new(); MAX_DESCRIPTOR_SETS];
+            [DescriptorSetLayout::builder(); MAX_DESCRIPTOR_SETS];
         for &stage in stages {
             for set in &stage
                 .reflection_data
@@ -266,7 +266,7 @@ impl PipelineLayout {
         //     println!();
         // }
 
-        let mut layouts = [DescriptorSetLayout::new().build(device)?; MAX_DESCRIPTOR_SETS];
+        let mut layouts = [DescriptorSetLayout::builder().build(device)?; MAX_DESCRIPTOR_SETS];
 
         layout_builders
             .iter()

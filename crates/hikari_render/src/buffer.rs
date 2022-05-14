@@ -112,23 +112,18 @@ impl<T: Copy> CpuBuffer<T> {
         })
     }
     #[inline]
-    pub fn len(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.len
     }
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn mapped_slice<'a>(&'a self) -> &'a [T] {
+    pub fn mapped_slice(&self) -> &[T] {
         let ptr = self.allocation.mapped_ptr().unwrap().as_ptr(); //Host coherent so no invalidate
 
-        unsafe { std::slice::from_raw_parts(ptr as *const T, self.len()) }
+        unsafe { std::slice::from_raw_parts(ptr as *const T, self.capacity()) }
     }
-    pub fn mapped_slice_mut<'a>(&'a mut self) -> &'a mut [T] {
+    pub fn mapped_slice_mut(&mut self) -> &mut [T] {
         let ptr = self.allocation.mapped_ptr().unwrap().as_ptr(); //Host coherent so no invalidate
 
-        unsafe { std::slice::from_raw_parts_mut(ptr as *mut T, self.len()) }
+        unsafe { std::slice::from_raw_parts_mut(ptr as *mut T, self.capacity()) }
     }
 
     // TODO: Check Alignment
@@ -165,7 +160,7 @@ impl<T: Copy> Buffer for CpuBuffer<T> {
     }
     #[inline]
     fn size(&self) -> vk::DeviceSize {
-        self.offset(self.len())
+        self.offset(self.capacity())
     }
 }
 
@@ -224,8 +219,8 @@ impl<T: Copy> GpuBuffer<T> {
     }
 
     #[inline]
-    pub fn len(&self) -> usize {
-        self.upload_buffer.len()
+    pub fn capacity(&self) -> usize {
+        self.upload_buffer.capacity()
     }
 
     ///Copies the data from the Host to the GPU, no synchronization is performed on the GPU side, the caller must ensure the buffer is not being used on the GPU
@@ -286,7 +281,7 @@ impl<T: Copy> Buffer for GpuBuffer<T> {
     }
     #[inline]
     fn size(&self) -> vk::DeviceSize {
-        self.offset(self.len())
+        self.offset(self.capacity())
     }
 }
 
