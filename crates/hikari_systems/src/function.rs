@@ -8,7 +8,7 @@ pub struct Function {
 }
 impl Function {
     #[inline]
-    pub unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) {
+    pub(crate) unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) {
         (self.exec)(g_state);
     }
 }

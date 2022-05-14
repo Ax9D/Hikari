@@ -52,13 +52,14 @@ impl StateCell {
         }
     }
 
-    pub unsafe fn borrow_cast_unchecked<S: State>(&self) -> &S {
-        let data_ref = &mut *self.data.get();
+    pub(crate) unsafe fn borrow_cast_unchecked<S: State>(&self) -> &S {
+        let data_ref = &*self.data.get();
         let typed_ref = data_ref.downcast_ref::<S>().unwrap();
 
         typed_ref
     }
-    pub unsafe fn borrow_cast_unchecked_mut<S: State>(&self) -> &mut S {
+    #[allow(clippy::mut_from_ref)]
+    pub(crate) unsafe fn borrow_cast_unchecked_mut<S: State>(&self) -> &mut S {
         let data_ref = &mut *self.data.get();
         let typed_ref = data_ref.downcast_mut::<S>().unwrap();
 

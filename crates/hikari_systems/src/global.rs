@@ -77,19 +77,19 @@ impl UnsafeGlobalState {
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_mut())
     }
-    pub unsafe fn get_unchecked<'a, S: State>(self: Pin<&'a Self>) -> Option<&'a S> {
+    pub(crate) unsafe fn get_unchecked<'a, S: State>(self: Pin<&'a Self>) -> Option<&'a S> {
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_unchecked())
     }
-    pub unsafe fn get_unchecked_mut<'a, S: State>(self: Pin<&'a Self>) -> Option<&'a mut S> {
+    pub(crate) unsafe fn get_unchecked_mut<'a, S: State>(self: Pin<&'a Self>) -> Option<&'a mut S> {
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_unchecked_mut())
     }
-    pub unsafe fn query<Q: Query>(self: Pin<&Self>) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
+    pub(crate) unsafe fn query<Q: Query>(self: Pin<&Self>) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
         Q::Fetch::get(self)
     }
 }
