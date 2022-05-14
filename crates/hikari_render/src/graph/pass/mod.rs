@@ -33,7 +33,7 @@ impl Default for ImageSize {
 
 impl ImageSize {
     pub fn get_physical_size(&self, graph_size: (u32, u32)) -> (u32, u32) {
-        match self.clone() {
+        match *self {
             ImageSize::Relative(fw, fh) => (
                 (fw * graph_size.0 as f32) as u32,
                 (fh * graph_size.1 as f32) as u32,

@@ -1,6 +1,7 @@
 use ash::vk;
 use vk_sync_fork::AccessType;
 
+#[allow(clippy::too_many_arguments)]
 pub fn image_memory_barrier(
     device: &ash::Device,
     cmd: vk::CommandBuffer,
@@ -95,8 +96,7 @@ pub fn to_sync2_stage_flags(flags: vk::PipelineStageFlags) -> vk::PipelineStageF
     // }
 }
 fn is_read(access: &AccessType) -> bool {
-    match access {
-        AccessType::Nothing
+    matches!(access, AccessType::Nothing
         | AccessType::CommandBufferReadNVX
         | AccessType::IndirectBuffer
         | AccessType::IndexBuffer
@@ -134,10 +134,7 @@ fn is_read(access: &AccessType) -> bool {
         | AccessType::RayTracingShaderReadColorInputAttachment
         | AccessType::RayTracingShaderReadDepthStencilInputAttachment
         | AccessType::RayTracingShaderReadAccelerationStructure
-        | AccessType::RayTracingShaderReadOther => true,
-
-        _ => false,
-    }
+        | AccessType::RayTracingShaderReadOther)
 }
 pub fn is_hazard(prev_accesses: &[AccessType], next_accesses: &[AccessType]) -> bool {
     if prev_accesses.is_empty() || next_accesses.is_empty() {

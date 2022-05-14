@@ -92,7 +92,7 @@ impl Swapchain {
         let images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
 
         let depth_stencil_image = SampledImage::with_dimensions(
-            &device,
+            device,
             swap_extent.width,
             swap_extent.height,
             ImageConfig {
@@ -109,13 +109,13 @@ impl Swapchain {
             },
         )?;
 
-        let image_views = Self::create_image_views(&device, &images, surface_format.format)?;
+        let image_views = Self::create_image_views(device, &images, surface_format.format)?;
 
         let renderpass =
-            Self::create_renderpass(&device, surface_format.format, &depth_stencil_image)?;
+            Self::create_renderpass(device, surface_format.format, &depth_stencil_image)?;
 
         let framebuffers = Self::create_framebuffers(
-            &device,
+            device,
             width,
             height,
             &image_views,

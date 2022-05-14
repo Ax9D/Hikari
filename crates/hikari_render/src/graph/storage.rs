@@ -11,7 +11,7 @@ impl<T> Clone for Handle<T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
-            _phantom: self._phantom.clone(),
+            _phantom: self._phantom,
         }
     }
 }
@@ -28,6 +28,7 @@ impl<T> PartialEq for Handle<T> {
 }
 impl<T> Eq for Handle<T> {}
 
+#[allow(clippy::from_over_into)]
 impl<T: 'static> Into<ErasedHandle> for Handle<T> {
     fn into(self) -> ErasedHandle {
         ErasedHandle {

@@ -188,11 +188,7 @@ impl<T: Args> Renderpass<T> {
         if self
             .outputs
             .iter()
-            .find(|output| match output {
-                Output::DrawImage(_, _) => true,
-                _ => false,
-            })
-            .is_some()
+            .any(|output| matches!(&output, Output::DrawImage(_, _)))
         {
             panic!("Renderpass has been marked for presentation, draws to other images is not permitted");
         }

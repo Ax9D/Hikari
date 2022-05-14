@@ -97,6 +97,7 @@ impl Backend {
 
         self.imgui.render()
     }
+    #[allow(clippy::needless_lifetimes)]
     pub fn new_frame_shared<'a>(&'a mut self, window: &Window, mut run_fn: impl FnMut(&imgui::Ui)) {
         self.platform
             .prepare_frame(self.imgui.io_mut(), window)

@@ -131,7 +131,6 @@ impl std::hash::Hash for DepthStencilState {
         bad_float_hash(self.max_depth_bounds, state);
     }
 }
-
 impl Eq for DepthStencilState {}
 
 impl DepthStencilState {
@@ -185,7 +184,6 @@ impl RasterizerState {
             .depth_bias_slope_factor(self.depth_bias_slope_factor)
     }
 }
-
 impl Eq for RasterizerState {}
 
 impl Hash for RasterizerState {
@@ -405,7 +403,7 @@ impl VertexInputLayoutBuilder {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct PipelineState {
     pub input_layout: VertexInputLayout,
     pub primitive_topology: PrimitiveTopology,
@@ -424,9 +422,10 @@ impl std::hash::Hash for PipelineState {
         self.input_layout.hash(state);
     }
 }
+impl Eq for PipelineState {}
 
 impl PipelineState {
-    pub unsafe fn create_pipeline(
+    pub(crate) unsafe fn create_pipeline(
         &self,
         device: &Arc<crate::Device>,
         shader: &crate::Shader,

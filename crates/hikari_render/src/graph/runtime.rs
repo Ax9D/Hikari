@@ -293,6 +293,7 @@ impl GraphExecutor {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn execute_renderpass<'cmd, 'graph, T: crate::Args>(
         device: &Arc<crate::Device>,
         cmd: &'cmd mut CommandBuffer<'graph>,
