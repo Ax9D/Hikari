@@ -19,6 +19,14 @@ impl Task {
             after: HashSet::new(),
         }
     }
+    pub unsafe fn with_raw_function(name: &str, function: Function) -> Self {
+        Self {
+            name: name.to_owned(),
+            function,
+            before: HashSet::new(),
+            after: HashSet::new(),
+        }
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
