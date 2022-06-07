@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-glam = { version = "0.20", features = ["serde"] }
+glam = { version = "0.20"}
 
 [features]
 serde = ["glam/serde"]
+mint = ["glam/mint"]
+fast-math = ["glam/fast-math"]
