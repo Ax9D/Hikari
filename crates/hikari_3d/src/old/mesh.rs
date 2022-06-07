@@ -12,12 +12,12 @@ pub enum MeshFormat {
     Fbx,
 }
 impl MeshFormat {
-    pub fn from_extension(ext: &OsStr) -> Result<MeshFormat, error::Error> {
+    pub fn from_extension(ext: &OsStr) -> Result<MeshFormat, super::Error> {
         let ext_str = ext.to_str().unwrap().to_ascii_lowercase();
         match ext_str.as_str() {
             "fbx" => Ok(MeshFormat::Fbx),
             "gltf" | "glb" => Ok(MeshFormat::Gltf),
-            _ => Err(error::Error::UnsupportedModelFormat(ext.to_owned())),
+            _ => Err(super::Error::UnsupportedModelFormat(ext.to_owned())),
         }
     }
 }

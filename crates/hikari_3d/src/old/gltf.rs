@@ -7,7 +7,7 @@ use rayon::iter::*;
 use rayon::*;
 use hikari_math::{Vec2, Vec3, Vec4};
 
-use crate::{
+use super::{
     material::{Material, TextureDesc},
     texture::Texture,
 };
@@ -63,12 +63,12 @@ fn parse_texture_data(
             let data = &parent_buffer[start..end];
 
             match mime_type {
-                "image/jpeg" => Ok(crate::image::load_from_data(
+                "image/jpeg" => Ok(super::image::load_from_data(
                     data,
                     image::ImageFormat::Jpeg,
                 )?),
-                "image/png" => Ok(crate::image::load_from_data(data, image::ImageFormat::Png)?),
-                _ => Err(crate::error::Error::UnsupportedImageFormat(
+                "image/png" => Ok(super::image::load_from_data(data, image::ImageFormat::Png)?),
+                _ => Err(super::error::Error::UnsupportedImageFormat(
                     mime_type.split(r"/").last().unwrap().to_string(),
                     texture.name().unwrap_or("unknown").to_string(),
                 )),
@@ -95,15 +95,15 @@ fn parse_texture_data(
                 };
 
                 match mime_type {
-                    "image/jpeg" => Ok(crate::image::load_from_data(
+                    "image/jpeg" => Ok(super::image::load_from_data(
                         &data,
                         image::ImageFormat::Jpeg,
                     )?),
-                    "image/png" => Ok(crate::image::load_from_data(
+                    "image/png" => Ok(super::image::load_from_data(
                         &data,
                         image::ImageFormat::Png,
                     )?),
-                    _ => Err(crate::error::Error::UnsupportedImageFormat(
+                    _ => Err(super::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
                         texture.name().unwrap_or("unknown").to_string(),
                     )),
@@ -116,15 +116,15 @@ fn parse_texture_data(
                     .join(uri);
 
                 match mime_type {
-                    "image/jpeg" => Ok(crate::image::load_from_file_with_format(
+                    "image/jpeg" => Ok(super::image::load_from_file_with_format(
                         &path,
                         image::ImageFormat::Jpeg,
                     )?),
-                    "image/png" => Ok(crate::image::load_from_file_with_format(
+                    "image/png" => Ok(super::image::load_from_file_with_format(
                         &path,
                         image::ImageFormat::Png,
                     )?),
-                    _ => Err(crate::error::Error::UnsupportedImageFormat(
+                    _ => Err(super::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
                         texture.name().unwrap_or("unknown").to_string(),
                     )),
@@ -135,7 +135,7 @@ fn parse_texture_data(
                     .parent()
                     .unwrap_or_else(|| Path::new("./"))
                     .join(uri);
-                crate::image::load_from_file(&path)?
+                super::image::load_from_file(&path)?
             }
         }
     })
@@ -156,15 +156,15 @@ fn load_texture_data(
     });
 
     let wrap_x = match texture.sampler().wrap_s() {
-        gltf::texture::WrappingMode::ClampToEdge => hikari_3d::texture::WrapMode::Clamp,
-        gltf::texture::WrappingMode::MirroredRepeat => hikari_3d::texture::WrapMode::Repeat,
-        gltf::texture::WrappingMode::Repeat => hikari_3d::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::ClampToEdge => crate::texture::WrapMode::Clamp,
+        gltf::texture::WrappingMode::MirroredRepeat => crate::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::Repeat => crate::texture::WrapMode::Repeat,
     };
 
     let wrap_y = match texture.sampler().wrap_t() {
-        gltf::texture::WrappingMode::ClampToEdge => hikari_3d::texture::WrapMode::Clamp,
-        gltf::texture::WrappingMode::MirroredRepeat => hikari_3d::texture::WrapMode::Repeat,
-        gltf::texture::WrappingMode::Repeat => hikari_3d::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::ClampToEdge => crate::texture::WrapMode::Clamp,
+        gltf::texture::WrappingMode::MirroredRepeat => crate::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::Repeat => crate::texture::WrapMode::Repeat,
     };
 
     let min_filter = texture
@@ -177,8 +177,8 @@ fn load_texture_data(
         .unwrap_or(gltf::texture::MagFilter::Linear);
 
     let filtering = match mag_filter {
-        gltf::texture::MagFilter::Nearest => hikari_3d::texture::FilterMode::Closest,
-        gltf::texture::MagFilter::Linear => hikari_3d::texture::FilterMode::Linear,
+        gltf::texture::MagFilter::Nearest => crate::texture::FilterMode::Closest,
+        gltf::texture::MagFilter::Linear => crate::texture::FilterMode::Linear,
     };
 
     let generate_mips = match min_filter {
@@ -198,9 +198,9 @@ fn load_texture_data(
 
     //Albedo textures are treated as SRGB
     let format = if is_albedo.is_some() {
-        hikari_3d::texture::Format::RGBA8
+        crate::texture::Format::RGBA8
     } else {
-        hikari_3d::texture::Format::RGBA8
+        crate::texture::Format::RGBA8
     };
 
     Ok(Texture {
@@ -225,7 +225,7 @@ fn load_textures(import_data: &ImportData) -> Result<Vec<Texture>, Box<dyn std::
         .map(|texture| load_texture_data(&texture, &import_data).unwrap())
         .collect())
 }
-fn load_materials(textures: &Vec<Texture>, import_data: &ImportData) -> Vec<Material> {
+fn load_materials(import_data: &ImportData) -> Vec<Material> {
     let mut ret = Vec::new();
 
     for material in import_data.document().materials() {
@@ -300,7 +300,7 @@ fn load_materials(textures: &Vec<Texture>, import_data: &ImportData) -> Vec<Mate
             ))
             .to_owned();
 
-        ret.push(crate::material::Material {
+        ret.push(super::Material {
             name,
             albedo,
             albedo_map,
@@ -313,7 +313,7 @@ fn load_materials(textures: &Vec<Texture>, import_data: &ImportData) -> Vec<Mate
     }
     ret
 }
-fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::mesh::Model {
+fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> super::Model {
     let mut meshes = Vec::new();
     let name = mesh
         .name()
@@ -331,7 +331,7 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::me
             let positions = iter.collect::<Vec<_>>();
             positions
                 .iter()
-                .map(|position| Vec3::from(*position))
+                .map(|&position| Vec3::from(position))
                 .collect()
         } else {
             continue;
@@ -341,7 +341,7 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::me
             let normals = iter.collect::<Vec<_>>();
             normals
                 .iter()
-                .map(|normal| Vec3::from(*normal))
+                .map(|&normal| Vec3::from(normal))
                 .collect()
         } else {
             crate::mesh::default_normals(positions.len())
@@ -375,7 +375,7 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::me
         } else {
             (0..positions.len()).map(|x| x as u32).collect::<Vec<_>>()
         };
-        meshes.push(crate::mesh::Mesh {
+        meshes.push(super::Mesh {
             positions,
             normals,
             texcoord0,
@@ -385,9 +385,9 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::me
         })
     }
 
-    crate::mesh::Model { name, meshes }
+    super::Model { name, meshes }
 }
-fn load_models(import_data: &ImportData) -> Vec<crate::mesh::Model> {
+fn load_models(import_data: &ImportData) -> Vec<super::Model> {
     // for mesh in importData.document().meshes() {
     //     tokio::spawn(loadModelData(importData, mesh));
     // }
@@ -406,28 +406,28 @@ fn load_models(import_data: &ImportData) -> Vec<crate::mesh::Model> {
     //     }
     // }
 }
-pub fn load_scene(path: &Path) -> Result<crate::Scene, crate::Error> {
+pub fn load_scene(path: &Path) -> Result<super::Scene, super::Error> {
     let import_data = ImportData::new(path)
-        .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
+        .map_err(|err| super::Error::FailedToParse(path.into(), err.to_string()))?;
 
-    let now = std::time::Instant::now();
+    //let now = std::time::Instant::now();
     let textures = load_textures(&import_data)
-        .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
+        .map_err(|err| super::Error::FailedToParse(path.into(), err.to_string()))?;
 
     //println!("Textures {:?}", now.elapsed());
     //println!("First import texture {}", importData.document().textures().next().unwrap().index());
     //println!("First texture {}", textures[0].name());
 
-    let now = std::time::Instant::now();
-    let materials = load_materials(&textures, &import_data);
+    //let now = std::time::Instant::now();
+    let materials = load_materials(&import_data);
 
-    let now = std::time::Instant::now();
+    //let now = std::time::Instant::now();
     //println!("Materials {:?}", now.elapsed());
     let models = load_models(&import_data);
 
     //println!("Models {:?}", now.elapsed());
 
-    Ok(crate::Scene {
+    Ok(super::Scene {
         textures,
         materials,
         models,
@@ -436,9 +436,9 @@ pub fn load_scene(path: &Path) -> Result<crate::Scene, crate::Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    
     #[test]
     fn godzilla() {
-        let model = gltf::load_scene("godzilla.glb".as_ref()).unwrap();
+        let _model = crate::old::gltf::load_scene("godzilla.glb".as_ref()).unwrap();
     }
 }

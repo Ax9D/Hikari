@@ -1,4 +1,4 @@
-use hikari_3d::texture::*;
+use crate::texture::*;
 
 pub struct Texture {
     pub name: String,
