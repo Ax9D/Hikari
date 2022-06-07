@@ -4,10 +4,18 @@ layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 tc0;
 layout(location = 3) in vec2 tc1;
 
+struct DirectionalLight {
+    float intensity;
+    vec3 color;
+    vec3 direction;
+};
+
 layout(std140, set = 0, binding = 0) uniform UBO {
     vec3 cameraPosition;
     mat4 viewProj;
     float exposure;
+
+    DirectionalLight dirLight;
 } ubo;
 
 
@@ -33,8 +41,9 @@ layout(push_constant) uniform Constants {
 
 
 void main() {
-    worldPosition = vec3(pc.transform * vec4(position, 1.0));
-    normalFs = transpose(inverse(mat3( pc.transform ))) * normal;
+    vec4 transPos = pc.transform * vec4(position, 1.0);
+    worldPosition = vec3(transPos);
+    normalFs = mat3(transpose(inverse(pc.transform))) * normal;
     tc0Fs = tc0;
     tc1Fs = tc1;
 

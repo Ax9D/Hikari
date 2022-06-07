@@ -1,7 +1,7 @@
-use hikari_3d::{Projection, Scene};
-use hikari_asset::{AssetManager, AssetManagerBuilder, Assets};
+use hikari_math::Transform;
+use itertools::izip;
 use simple_logger::SimpleLogger;
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
 use winit::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
@@ -10,145 +10,222 @@ use winit::{
 };
 
 pub use hikari_3d::texture::*;
-use hikari_math::*;
+use hikari_imgui as imgui;
 use hikari_render as rg;
-
 mod common;
 
-const WIDTH: u32 = 1280;
-const HEIGHT: u32 = 720;
-struct Params {
+const WIDTH: u32 = 1920;
+const HEIGHT: u32 = 1080;
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct Vertex {
+    position: [f32; 3],
+    normal: [f32; 3],
+    tc0: [f32; 2],
+    tc1: [f32; 2],
+}
+
+struct Material {
+    albedo: Option<Arc<Texture2D>>,
+    albedo_set: i32,
+    albedo_factor: hikari_math::Vec4,
+    roughness: Option<Arc<Texture2D>>,
+    roughness_set: i32,
+    roughness_factor: f32,
+    metallic: Option<Arc<Texture2D>>,
+    metallic_set: i32,
+    metallic_factor: f32,
+    normal: Option<Arc<Texture2D>>,
+    normal_set: i32,
+}
+struct Mesh {
+    vertices: rg::GpuBuffer<Vertex>,
+    indices: rg::GpuBuffer<u32>,
+    material: Arc<Material>,
+}
+struct Model {
+    meshes: Vec<Mesh>,
+}
+struct GameObject {
+    model: Arc<Model>,
+    transform: Transform,
+}
+
+impl GameObject {
+    pub fn new(model: &Arc<Model>) -> Self {
+
+        let transform = Transform::default();
+
+        Self {
+            model: model.clone(),
+            transform,
+        }
+    }
+}
+struct Settings {
     fxaa: bool,
+    vsync: bool,
     width: u32,
     height: u32,
 }
+type Args = (Scene, Settings, imgui::DrawData);
+struct Camera {
+    transform: Transform,
+    inner: hikari_3d::Camera,
+}
+impl Camera {
+    pub fn get_projection_matrix(&self, width: u32, height: u32) -> hikari_math::Mat4 {
+        self.inner.get_projection_matrix(width, height)
+    }
+    pub fn get_view_matrix(&self) -> hikari_math::Mat4 {
+        //hikari_math::Mat4::look_at_rh()
+        hikari_math::Mat4::from_rotation_translation(self.transform.rotation, self.transform.position).inverse()
+    }
+}
 
-// fn load_mesh(
-//     device: &Arc<rg::Device>,
-//     path: &str,
-// ) -> Result<Vec<Model>, Box<dyn std::error::Error>> {
-//     let scene = Scene::load(path)?;
-//     let mut textures = Vec::new();
-//     for texture in &scene.textures {
-//         let data = &texture.data;
+struct Light {
+    light: hikari_3d::Light,
+    transform: Transform
+}
+struct Scene {
+    objects: Vec<GameObject>,
+    camera: Camera,
+    dir_light: Light,
+}
+struct UiState {
+    gizmo: imgui::GizmoContext,
+    gizmo_operation: imgui::gizmo::Operation,
+    gizmo_mode: imgui::gizmo::Mode,
+    
+    euler_cache: HashMap<usize, (f32, f32, f32)> // Object Index To Euler Angles in Editor
+}
+fn load_mesh(
+    device: &Arc<rg::Device>,
+    path: &str,
+) -> Result<Vec<Model>, Box<dyn std::error::Error>> {
+    let scene = hikari_3d::old::Scene::load(path)?;
+    let mut textures = Vec::new();
+    for texture in &scene.textures {
+        let data = &texture.data;
 
-//         // let mut path = String::from("/home/atri/test_img/");
-//         // path.push_str(texture.name());
-//         // path.push_str(".png");
-//         // save_image(&path, data, texture.width(), texture.height());
+        // let mut path = String::from("/home/atri/test_img/");
+        // path.push_str(texture.name());
+        // path.push_str(".png");
+        // save_image(&path, data, texture.width(), texture.height());
 
-//         let config = TextureConfig {
-//             format: texture.format,
-//             filtering: FilterMode::Linear,
-//             wrap_x: texture.wrap_x,
-//             wrap_y: texture.wrap_y,
-//             aniso_level: 16,
-//             generate_mips: texture.generate_mips,
-//         };
+        let config = TextureConfig {
+            format: texture.format,
+            filtering: FilterMode::Linear,
+            wrap_x: texture.wrap_x,
+            wrap_y: texture.wrap_y,
+            aniso_level: 16.0,
+            generate_mips: texture.generate_mips,
+        };
 
-//         let texture = Texture2D::new(device, data, texture.width, texture.height, config)?;
+        let texture = Texture2D::new(device, data, texture.width, texture.height, config)?;
 
-//         textures.push(Arc::new(texture));
-//     }
+        textures.push(Arc::new(texture));
+    }
 
-//     let mut materials = Vec::new();
+    let mut materials = Vec::new();
 
-//     for material in &scene.materials {
-//         let albedo = material
-//             .albedo_map
-//             .as_ref()
-//             .map(|desc| textures[desc.index].clone());
-//         let albedo_factor = material.albedo;
+    for material in &scene.materials {
+        let albedo = material
+            .albedo_map
+            .as_ref()
+            .map(|desc| textures[desc.index].clone());
+        let albedo_factor = material.albedo;
 
-//         let metallic = material
-//             .metallic_map
-//             .as_ref()
-//             .map(|desc| textures[desc.index].clone());
+        let metallic = material
+            .metallic_map
+            .as_ref()
+            .map(|desc| textures[desc.index].clone());
 
-//         let metallic_factor = material.metallic;
+        let metallic_factor = material.metallic;
 
-//         let roughness = material
-//             .roughness_map
-//             .as_ref()
-//             .map(|desc| textures[desc.index].clone());
-//         let roughness_factor = material.roughness;
+        let roughness = material
+            .roughness_map
+            .as_ref()
+            .map(|desc| textures[desc.index].clone());
+        let roughness_factor = material.roughness;
 
-//         let normal = material
-//             .normal_map
-//             .as_ref()
-//             .map(|desc| textures[desc.index].clone());
+        let normal = material
+            .normal_map
+            .as_ref()
+            .map(|desc| textures[desc.index].clone());
 
-//         let albedo_set = material
-//             .albedo_map
-//             .as_ref()
-//             .map(|desc| desc.tex_coord_set as i32)
-//             .unwrap_or(-1);
-//         let roughness_set = material
-//             .roughness_map
-//             .as_ref()
-//             .map(|desc| desc.tex_coord_set as i32)
-//             .unwrap_or(-1);
-//         let metallic_set = material
-//             .metallic_map
-//             .as_ref()
-//             .map(|desc| desc.tex_coord_set as i32)
-//             .unwrap_or(-1);
-//         let normal_set = material
-//             .normal_map
-//             .as_ref()
-//             .map(|desc| desc.tex_coord_set as i32)
-//             .unwrap_or(-1);
+        let albedo_set = material
+            .albedo_map
+            .as_ref()
+            .map(|desc| desc.tex_coord_set as i32)
+            .unwrap_or(-1);
+        let roughness_set = material
+            .roughness_map
+            .as_ref()
+            .map(|desc| desc.tex_coord_set as i32)
+            .unwrap_or(-1);
+        let metallic_set = material
+            .metallic_map
+            .as_ref()
+            .map(|desc| desc.tex_coord_set as i32)
+            .unwrap_or(-1);
+        let normal_set = material
+            .normal_map
+            .as_ref()
+            .map(|desc| desc.tex_coord_set as i32)
+            .unwrap_or(-1);
 
-//         materials.push(Arc::new(Material {
-//             albedo,
-//             albedo_set,
-//             albedo_factor,
-//             roughness,
-//             roughness_set,
-//             roughness_factor,
-//             metallic,
-//             metallic_set,
-//             metallic_factor,
-//             normal,
-//             normal_set,
-//         }));
-//     }
-//     let mut models = Vec::new();
-//     for model in &scene.models {
-//         let mut meshes = Vec::new();
-//         for mesh in &model.meshes {
-//             let mut vertex_data = Vec::new();
-//             for (&position, &normal, &tc0, &tc1) in izip!(
-//                 mesh.positions.iter(),
-//                 mesh.normals.iter(),
-//                 mesh.texcoord0.iter(),
-//                 mesh.texcoord1.iter()
-//             ) {
-//                 vertex_data.push(Vertex {
-//                     position: position.into(),
-//                     normal: normal.into(),
-//                     tc0: tc0.into(),
-//                     tc1: tc1.into(),
-//                 });
-//             }
+        materials.push(Arc::new(Material {
+            albedo,
+            albedo_set,
+            albedo_factor,
+            roughness,
+            roughness_set,
+            roughness_factor,
+            metallic,
+            metallic_set,
+            metallic_factor,
+            normal,
+            normal_set,
+        }));
+    }
+    let mut models = Vec::new();
+    for model in &scene.models {
+        let mut meshes = Vec::new();
+        for mesh in &model.meshes {
+            let mut vertex_data = Vec::new();
+            for (&position, &normal, &tc0, &tc1) in izip!(
+                mesh.positions.iter(),
+                mesh.normals.iter(),
+                mesh.texcoord0.iter(),
+                mesh.texcoord1.iter()
+            ) {
+                vertex_data.push(Vertex {
+                    position: position.into(),
+                    normal: normal.into(),
+                    tc0: tc0.into(),
+                    tc1: tc1.into(),
+                });
+            }
 
-//             let mut vertices = rg::create_vertex_buffer(device, vertex_data.len())?;
-//             vertices.upload(&vertex_data, 0)?;
+            let mut vertices = rg::create_vertex_buffer(device, vertex_data.len())?;
+            vertices.upload(&vertex_data, 0)?;
 
-//             let mut indices = rg::create_index_buffer(device, mesh.indices.len())?;
-//             indices.upload(&mesh.indices, 0)?;
+            let mut indices = rg::create_index_buffer(device, mesh.indices.len())?;
+            indices.upload(&mesh.indices, 0)?;
 
-//             meshes.push(Mesh {
-//                 vertices,
-//                 material: materials[mesh.material.unwrap()].clone(),
-//                 indices,
-//             })
-//         }
-//         models.push(Model { meshes });
-//     }
+            meshes.push(Mesh {
+                vertices,
+                material: materials[mesh.material.unwrap()].clone(),
+                indices,
+            })
+        }
+        models.push(Model { meshes });
+    }
 
-//     Ok(models)
-// }
+    Ok(models)
+}
 fn depth_prepass(
     device: &Arc<rg::Device>,
     gb: &mut rg::GraphBuilder<Args>,
@@ -182,7 +259,7 @@ fn depth_prepass(
     #[repr(C)]
     #[derive(Copy, Clone)]
     struct UBO {
-        view_proj: Mat4,
+        view_proj: [f32; 16],
     }
 
     let mut ubo = rg::PerFrame::new([
@@ -193,7 +270,7 @@ fn depth_prepass(
     #[repr(C)]
     #[derive(Copy, Clone)]
     struct PushConstants {
-        transform: Mat4,
+        transform: hikari_math::Mat4,
     }
     let layout = rg::VertexInputLayout::builder()
         .buffer(
@@ -210,7 +287,7 @@ fn depth_prepass(
         rg::Renderpass::<Args>::new(
             "DepthPrepass",
             rg::ImageSize::default(),
-            move |cmd, (cam_transform, scene, _, _, _, _)| {
+            move |cmd, (scene, settings, _)| {
                 cmd.set_shader(&shader);
                 cmd.set_vertex_input_layout(layout);
 
@@ -221,24 +298,22 @@ fn depth_prepass(
                     ..Default::default()
                 });
 
-                let proj = scene.camera.get_projection_matrix(WIDTH, HEIGHT);
-
-                let cam_transform =
-                    Mat4::from_rotation_translation(cam_transform.rotation, cam_transform.position);
-                let view_proj = proj * cam_transform.inverse();
+                let proj = scene.camera.get_projection_matrix(settings.width, settings.height);
+                let view = scene.camera.get_view_matrix();
+                let view_proj = (proj * view).to_cols_array();
 
                 ubo.get_mut().mapped_slice_mut()[0] = UBO { view_proj };
 
                 cmd.set_uniform_buffer(ubo.get(), 0..1, 0, 0);
 
-                for mesh in &scene.meshes {
-                    let transform = Mat4::IDENTITY;
-
-                    for sub_mesh in &mesh.sub_meshes {
+                for object in &scene.objects {
+                    let transform = object.transform.get_matrix();
+                    let model = &object.model;
+                    for mesh in &model.meshes {
                         {
                             hikari_dev::profile_scope!("Set vertex and index buffers");
-                            cmd.set_vertex_buffer(&sub_mesh.vertices, 0);
-                            cmd.set_index_buffer(&sub_mesh.indices);
+                            cmd.set_vertex_buffer(&mesh.vertices, 0);
+                            cmd.set_index_buffer(&mesh.indices);
                         }
 
                         cmd.push_constants(&PushConstants { transform }, 0);
@@ -251,7 +326,7 @@ fn depth_prepass(
                         //     normal.raw().image()
                         // );
 
-                        cmd.draw_indexed(0..sub_mesh.indices.capacity(), 0, 0..1);
+                        cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
                     }
                 }
 
@@ -271,7 +346,7 @@ fn pbr_pass(
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     struct Material {
-        albedo: Vec4,
+        albedo: hikari_math::Vec4,
         roughness: f32,
         metallic: f32,
         albedo_uv_set: i32,
@@ -283,16 +358,26 @@ fn pbr_pass(
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     struct PushConstants {
-        transform: Mat4,
+        transform: hikari_math::Mat4,
         material: Material,
     }
 
     #[repr(C)]
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Default)]
+    struct DirLight {
+        intensity: f32,
+        color: hikari_math::Vec3A,
+        direction: hikari_math::Vec3A,
+    }
+    #[repr(C)]
+    #[derive(Copy, Clone, Default)]
+    
     struct UBO {
-        camera_position: Vec3A,
-        view_proj: Mat4,
+        camera_position: hikari_math::Vec3A,
+        view_proj: [f32; 16],
         exposure: f32,
+
+        dir_light: DirLight
     }
 
     log::debug!("sizeof(UBO)={}", std::mem::size_of::<UBO>());
@@ -315,8 +400,9 @@ fn pbr_pass(
     .build(device)
     .expect("Failed to create shader");
 
-    let (checkerboard, width, height) = hikari_3d::image::open_rgba8("examples/checkerboard.png")
-        .expect("Failed to load checkerboard texture");
+    let (checkerboard, width, height) =
+        hikari_3d::old::image::load_from_file("examples/checkerboard.png")
+            .expect("Failed to load checkerboard texture");
 
     let checkerboard = Texture2D::new(
         device,
@@ -335,20 +421,6 @@ fn pbr_pass(
     .expect("Failed to create checkerboard texture");
 
     let checkerboard = Arc::new(checkerboard);
-
-    let default_material = hikari_3d::Material {
-        albedo: None,
-        albedo_set: 0,
-        albedo_factor: hikari_math::Vec4::ONE,
-        roughness: None,
-        roughness_set: 0,
-        roughness_factor: 1.0,
-        metallic: None,
-        metallic_set: 0,
-        metallic_factor: 0.0,
-        normal: None,
-        normal_set: 0,
-    };
 
     let black = Texture2D::new(
         device,
@@ -372,7 +444,6 @@ fn pbr_pass(
         rg::create_uniform_buffer::<UBO>(device, 1).unwrap(),
         rg::create_uniform_buffer::<UBO>(device, 1).unwrap(),
     ]);
-
     let layout = rg::VertexInputLayout::builder()
         .buffer(
             &[
@@ -403,16 +474,24 @@ fn pbr_pass(
         rg::Renderpass::<Args>::new(
             "PBR",
             rg::ImageSize::default(),
-            move |cmd, (cam_transform, scene, textures, materials, _, _)| {
-                let proj = scene.camera.get_projection_matrix(WIDTH, HEIGHT);
-                let cam_transform =
-                    Mat4::from_rotation_translation(cam_transform.rotation, cam_transform.position);
-                let view_proj = proj * cam_transform.inverse();
+            move |cmd, (scene, settings, _)| {
+                let proj = scene.camera.get_projection_matrix(settings.width, settings.height);
+                let view = scene.camera.get_view_matrix();
+
+                let view_proj =( proj * view ).to_cols_array();
+
+                use hikari_math::Vec3;
+                let direction = scene.dir_light.transform.rotation * -Vec3::Y;
 
                 ubo.get_mut().mapped_slice_mut()[0] = UBO {
                     view_proj,
-                    camera_position: Vec3A::ZERO,
-                    exposure: scene.camera.exposure,
+                    camera_position: scene.camera.transform.position.into(),
+                    exposure: scene.camera.inner.exposure,
+                    dir_light: DirLight {
+                        color: scene.dir_light.light.color.into(),
+                        direction: direction.into(),
+                        intensity: scene.dir_light.light.intensity,
+                    }
                 };
 
                 cmd.set_shader(&shader);
@@ -430,63 +509,36 @@ fn pbr_pass(
 
                 {
                     hikari_dev::profile_scope!("Render scene");
-                    for mesh in &scene.meshes {
-                        let transform = Mat4::IDENTITY;
-
-                        for sub_mesh in &mesh.sub_meshes {
+                    for object in &scene.objects {
+                        let transform = object.transform.get_matrix();
+                        let model = &object.model;
+                        for mesh in &model.meshes {
                             {
                                 hikari_dev::profile_scope!("Set vertex and index buffers");
-                                cmd.set_vertex_buffer(&sub_mesh.vertices, 0);
-                                cmd.set_index_buffer(&sub_mesh.indices);
+                                cmd.set_vertex_buffer(&mesh.vertices, 0);
+                                cmd.set_index_buffer(&mesh.indices);
                             }
-                            let material = materials
-                                .get(&sub_mesh.material)
-                                .unwrap_or(&default_material);
-                            let gpu_material = Material {
-                                albedo: material.albedo_factor,
-                                roughness: material.roughness_factor,
-                                metallic: material.metallic_factor,
-                                albedo_uv_set: material.albedo_set,
-                                roughness_uv_set: material.roughness_set,
-                                metallic_uv_set: material.metallic_set,
-                                normal_uv_set: material.normal_set,
+                            let material = Material {
+                                albedo: mesh.material.albedo_factor,
+                                roughness: mesh.material.roughness_factor,
+                                metallic: mesh.material.metallic_factor,
+                                albedo_uv_set: mesh.material.albedo_set,
+                                roughness_uv_set: mesh.material.roughness_set,
+                                metallic_uv_set: mesh.material.metallic_set,
+                                normal_uv_set: mesh.material.normal_set,
                             };
 
                             let pc = PushConstants {
                                 transform,
-                                material: gpu_material,
+                                material,
                             };
 
                             cmd.push_constants(&pc, 0);
 
-                            let albedo = material
-                                .albedo
-                                .as_ref()
-                                .map(|handle| {
-                                    textures.get(handle).unwrap_or(&checkerboard.as_ref())
-                                })
-                                .unwrap_or(&checkerboard);
-                            let roughness = material
-                                .roughness
-                                .as_ref()
-                                .map(|handle| {
-                                    textures.get(handle).unwrap_or(&checkerboard.as_ref())
-                                })
-                                .unwrap_or(&black);
-                            let metallic = material
-                                .metallic
-                                .as_ref()
-                                .map(|handle| {
-                                    textures.get(handle).unwrap_or(&checkerboard.as_ref())
-                                })
-                                .unwrap_or(&black);
-                            let normal = material
-                                .normal
-                                .as_ref()
-                                .map(|handle| {
-                                    textures.get(handle).unwrap_or(&checkerboard.as_ref())
-                                })
-                                .unwrap_or(&black);
+                            let albedo = mesh.material.albedo.as_ref().unwrap_or(&checkerboard);
+                            let roughness = mesh.material.roughness.as_ref().unwrap_or(&black);
+                            let metallic = mesh.material.metallic.as_ref().unwrap_or(&black);
+                            let normal = mesh.material.normal.as_ref().unwrap_or(&black);
 
                             // println!(
                             //     "{:?} {:?} {:?} {:?}",
@@ -500,7 +552,7 @@ fn pbr_pass(
                             cmd.set_image(metallic.raw(), 1, 2);
                             cmd.set_image(normal.raw(), 1, 3);
 
-                            cmd.draw_indexed(0..sub_mesh.indices.capacity(), 0, 0..1);
+                            cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
                         }
                     }
                 }
@@ -530,25 +582,22 @@ fn fxaa_pass(
 ) -> rg::Handle<rg::SampledImage> {
     let vertex = r"
     #version 450
-
     vec2 positions[6] = vec2[](
-        vec2(1, 1),
+        vec2(-1, -1),
         vec2(1, -1),
-        vec2(-1, -1),
         vec2(1, 1),
+        vec2(-1, 1),
         vec2(-1, -1),
-        vec2(-1, 1)
+        vec2(1, 1)
     );
-
     vec2 texCoords[6] = vec2[](
-        vec2(1, 0),
+        vec2(0, 1),
         vec2(1, 1),
-        vec2(0, 1),
         vec2(1, 0),
+        vec2(0, 0),
         vec2(0, 1),
-        vec2(0, 0)
+        vec2(1, 0)
     );
-
     layout(location = 0) out vec2 texCoord;
     void main() {
         gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
@@ -575,7 +624,7 @@ fn fxaa_pass(
     #[repr(C)]
     #[derive(Copy, Clone)]
     struct PushConstants {
-        res: Vec2,
+        res: hikari_math::Vec2,
         enabled: i32,
     }
     let output = gb
@@ -589,13 +638,13 @@ fn fxaa_pass(
         rg::Renderpass::<Args>::new(
             "FXAA",
             rg::ImageSize::default(),
-            move |cmd, (_, _, _, _, params, _)| {
+            move |cmd, (_, settings, _)| {
                 cmd.set_shader(&shader);
 
                 cmd.push_constants(
                     &PushConstants {
-                        res: vec2(params.width as f32, params.height as f32),
-                        enabled: params.fxaa as _,
+                        res: hikari_math::vec2(settings.width as f32, settings.height as f32),
+                        enabled: settings.fxaa as _,
                     },
                     0,
                 );
@@ -638,7 +687,7 @@ fn imgui_pass(
         rg::Renderpass::<Args>::new(
             "ImguiRenderer",
             rg::ImageSize::default(),
-            move |cmd, (_, _scene, _, _, _, draw_data)| {
+            move |cmd, (_, _, draw_data)| {
                 renderer
                     .render(cmd.raw(), draw_data)
                     .expect("Failed to render imgui");
@@ -649,52 +698,142 @@ fn imgui_pass(
 
     imgui_image
 }
-fn transform_controls(ui: &imgui::Ui, transform: &mut Transform) {
-    let mut position: [f32; 3] = transform.position.into();
-    imgui::Drag::new("position").build_array(ui, &mut position);
-    transform.position = position.into();
+fn rotation_alt(ui: &imgui::Ui, quat: &mut hikari_math::Quat, entity_id: usize, euler_cache: &mut HashMap<usize, (f32, f32, f32)>) {
+    let (x, y, z) = euler_cache.entry(entity_id).or_insert_with(|| quat.to_euler(hikari_math::EulerRot::XYZ)).clone();
 
-    let (x, y, z) = transform.rotation.to_euler(EulerRot::XYZ);
-    let mut euler_xyz = [x, y, z].map(|x| x.to_degrees());
-    imgui::Drag::new("rotation")
-        .range(0.0001, 89.999)
-        .build_array(ui, &mut euler_xyz);
-    let quat = Quat::from_euler(
-        EulerRot::XYZ,
-        euler_xyz[0].to_radians(),
-        euler_xyz[1].to_radians(),
-        euler_xyz[2].to_radians(),
-    );
-    transform.rotation = quat;
+    let externally_changed = ! hikari_math::Quat::from_euler(hikari_math::EulerRot::XYZ, x, y, z).abs_diff_eq(*quat, std::f32::EPSILON);
+    
+    let (x, y, z) = if externally_changed {
+        quat.to_euler(hikari_math::EulerRot::XYZ)
+    } else {
+        (x, y, z)
+    };
 
-    let mut scale: [f32; 3] = transform.scale.into();
-    imgui::Drag::new("scale").build_array(ui, &mut scale);
-    transform.scale = scale.into();
+    let mut angles = [x.to_degrees(), y.to_degrees(), z.to_degrees()];
+
+    let changed = imgui::Drag::new("Rotation").speed(0.5).build_array(ui, &mut angles);
+
+    if changed {
+        let (x, y, z)  = (angles[0].to_radians(), angles[1].to_radians(), angles[2].to_radians());
+        *euler_cache.get_mut(&entity_id).unwrap() = (x, y, z);
+        *quat = hikari_math::Quat::from_euler(hikari_math::EulerRot::XYZ, x, y, z);
+    }
 }
-fn imgui_update(ui: &imgui::Ui, scene: &mut hikari_3d::Scene, vsync: &mut bool, fxaa: &mut bool) {
+fn transform_controls(ui: &imgui::Ui, transform: &mut Transform, entity_id: usize, state: &mut UiState) {
+        let mut position: [f32; 3] = transform.position.into();
+        imgui::Drag::new("position").speed(0.1).build_array(ui, &mut position);
+        transform.position = position.into();
+
+        rotation_alt(ui, &mut transform.rotation, entity_id, &mut state.euler_cache);
+    
+        let mut scale: [f32; 3] = transform.scale.into();
+        imgui::Drag::new("scale").speed(0.2).build_array(ui, &mut scale);
+        transform.scale = hikari_math::Vec3::from(scale);
+}
+fn imgui_update(
+    ui: &imgui::Ui,
+    scene: &mut Scene,
+    ui_state: &mut UiState,
+    settings: &mut Settings,
+) {
     //ui.show_demo_window(&mut true);
+    ui.window("Transform Object")
+    .build(|| {
+        transform_controls(ui, &mut scene.objects[1].transform, 1, ui_state);
 
-    ui.window("Camera").build(|| {
-        //transform_controls(ui, &mut scene.camera.transform);
-        imgui::Drag::new("near").build(ui, &mut scene.camera.near);
-        imgui::Drag::new("far").build(ui, &mut scene.camera.far);
-
-        match &mut scene.camera.projection {
-            Projection::Perspective(fov) => {
-                imgui::Drag::new("fov").build(ui, fov);
-            }
-            Projection::Orthographic => todo!(),
+        let operations = [imgui::Operation::Translate, imgui::Operation::Rotate, imgui::Operation::Scale];
+        let mut index = operations.iter().position(|operation| operation == &ui_state.gizmo_operation).unwrap();
+        ui.combo("Gizmo Operation", &mut index, 
+        &operations,
+        |item| {
+            std::borrow::Cow::Owned(format!("{:?}", item))
         }
+        );
+        ui_state.gizmo_operation = operations[index];
 
-        imgui::Drag::new("exposure").build(ui, &mut scene.camera.exposure);
+        let modes = [imgui::gizmo::Mode::World, imgui::gizmo::Mode::Local];
+        let mut index = modes.iter().position(|mode| mode == &ui_state.gizmo_mode).unwrap();
+        ui.combo("Gizmo Mode", &mut index, 
+        &modes,
+        |item| {
+            std::borrow::Cow::Owned(format!("{:?}", item))
+        }
+        );
 
-        ui.checkbox("vsync", vsync);
-        ui.checkbox("fxaa", fxaa);
+        ui_state.gizmo_mode = modes[index];
+
+        let _nobg = ui.push_style_color(
+            imgui::StyleColor::WindowBg,
+            imgui::ImColor32::TRANSPARENT.to_rgba_f32s(),
+        );
+        let _noborder = ui.push_style_color(
+            imgui::StyleColor::Border,
+            imgui::ImColor32::TRANSPARENT.to_rgba_f32s(),
+        );
+        let _norounding = ui.push_style_var(imgui::StyleVar::WindowRounding(0.0));
+
+        use imgui::WindowFlags;
+        ui.window("Gizmo")
+            .position(
+                [0.0, 0.0],
+                imgui::Condition::Always,
+            )
+            .size(
+                [settings.width as f32, settings.height as f32],
+                imgui::Condition::Always,
+            )
+            .flags(
+                WindowFlags::NO_TITLE_BAR
+                    | WindowFlags::NO_RESIZE
+                    | WindowFlags::NO_SCROLLBAR
+                    // | WindowFlags::NO_INPUTS
+                    | WindowFlags::NO_SAVED_SETTINGS
+                    | WindowFlags::NO_FOCUS_ON_APPEARING
+                    | WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS,
+            )
+            .build(|| {
+                    let new_transform = ui_state
+                    .gizmo
+                    .gizmo(ui)
+                    .size(75.0)
+                    .operation(ui_state.gizmo_operation)
+                    .mode(ui_state.gizmo_mode)
+                    .manipulate(
+                        scene.objects[1].transform.clone(),
+                        scene.camera.get_projection_matrix(settings.width, settings.height),
+                        scene.camera.get_view_matrix(),
+                    );
+
+                    if let Some(new_transform) = new_transform {
+                        scene.objects[1].transform = new_transform;
+                        //println!("{:#?}", new_transform);
+                    }
+        });
+
+
     });
 
-    // ui.window("Light").build(|| {
-    //     transform_controls(ui, &mut scene.camera.transform);
-    // });
+    ui.window("Camera").build(|| {
+        transform_controls(ui, &mut scene.camera.transform, 100, ui_state);
+        imgui::Drag::new("near").build(ui, &mut scene.camera.inner.near);
+        imgui::Drag::new("far").build(ui, &mut scene.camera.inner.far);
+
+        match &mut scene.camera.inner.projection {
+            hikari_3d::Projection::Perspective(fov) => {
+                imgui::Drag::new("fov").build(ui, fov);
+            }
+            hikari_3d::Projection::Orthographic => todo!(),
+        }
+
+        imgui::Drag::new("exposure").build(ui, &mut scene.camera.inner.exposure);
+
+        ui.checkbox("vsync", &mut settings.vsync);
+        ui.checkbox("fxaa", &mut settings.fxaa);
+    });
+
+    ui.window("Light").build(|| {
+        transform_controls(ui, &mut scene.dir_light.transform, 101, ui_state);
+    });
 }
 
 fn composite_pass(
@@ -705,25 +844,22 @@ fn composite_pass(
 ) {
     let vertex = r"
     #version 450
-
     vec2 positions[6] = vec2[](
-        vec2(1, 1),
+        vec2(-1, -1),
         vec2(1, -1),
-        vec2(-1, -1),
         vec2(1, 1),
+        vec2(-1, 1),
         vec2(-1, -1),
-        vec2(-1, 1)
+        vec2(1, 1)
     );
-
     vec2 texCoords[6] = vec2[](
-        vec2(1, 0),
+        vec2(0, 1),
         vec2(1, 1),
-        vec2(0, 1),
         vec2(1, 0),
+        vec2(0, 0),
         vec2(0, 1),
-        vec2(0, 0)
+        vec2(1, 0)
     );
-
     layout(location = 0) out vec2 texCoord;
     void main() {
         gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
@@ -735,7 +871,6 @@ fn composite_pass(
     #version 450
     layout(set = 0, binding = 0) uniform sampler2D pbr;
     layout(set = 0, binding = 1) uniform sampler2D imgui;
-
     layout(location = 0) in vec2 texCoord;
     layout(location = 0) out vec4 color;
     void main() {
@@ -786,62 +921,20 @@ fn composite_pass(
         .present(),
     );
 }
-
-type Args = (
-    Transform,
-    Scene,
-    Assets<hikari_3d::Texture2D>,
-    Assets<hikari_3d::Material>,
-    Params,
-    imgui::DrawData,
-);
-
-fn setup_assets(
-    device: &Arc<rg::Device>,
-) -> (
-    AssetManager,
-    Assets<hikari_3d::Texture2D>,
-    Assets<hikari_3d::Material>,
-    Assets<hikari_3d::Scene>,
-) {
-    let thread_pool = Arc::new(rayon::ThreadPoolBuilder::new().build().unwrap());
-    let manager = AssetManagerBuilder::new(&thread_pool);
-
-    let mut scenes = Assets::<hikari_3d::Scene>::new();
-    let mut textures = Assets::<hikari_3d::Texture2D>::new();
-    let mut materials = Assets::<hikari_3d::Material>::new();
-    let mut manager = AssetManagerBuilder::new(&thread_pool);
-    manager.add_loader(
-        hikari_3d::SceneLoader {
-            device: device.clone(),
-        },
-        &scenes,
-    );
-    manager.add_loader(
-        TextureLoader {
-            device: device.clone(),
-        },
-        &textures,
-    );
-    manager.add_loader((), &materials);
-
-    let ass_man = manager.build();
-
-    (ass_man, textures, materials, scenes)
-}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     SimpleLogger::new()
         .without_timestamps()
         //.with_level(log::LevelFilter::Info)
         .init()
         .unwrap();
+    hikari_dev::profiling_init();
 
     let event_loop = EventLoop::new();
     let mut window = WindowBuilder::new()
         .with_inner_size(LogicalSize::new(WIDTH, HEIGHT))
         .build(&event_loop)?;
 
-    let imgui = rg::imgui::Context::create();
+    let imgui = imgui::Context::create();
     let mut imgui = rg::imgui_support::Backend::new(&mut window, imgui)?;
     let hidpi_factor = imgui.hidpi_factor();
     imgui
@@ -853,27 +946,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             config: None,
         }]);
 
-    let mut vsync = true;
+
+    let mut settings = Settings {
+            fxaa: true,
+            vsync: true,
+            width: WIDTH,
+            height: HEIGHT
+        };
     let mut gfx = rg::Gfx::new(
         &window,
         rg::GfxConfig {
             debug: true,
             features: rg::Features::default(),
-            vsync,
+            vsync: settings.vsync,
             ..Default::default()
         },
     )?;
-    let mut gfx = rg::Gfx::headless(rg::GfxConfig {
-        debug: true,
-        features: rg::Features::default(),
-        vsync,
-        ..Default::default()
-    })?;
 
     let device = gfx.device().clone();
-
-    let (ass_man, mut textures, mut materials, mut scenes) = setup_assets(&device);
-
     let mut gb = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 
     let depth_prepass_output = depth_prepass(&device, &mut gb);
@@ -885,78 +975,82 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut graph = gb.build()?;
 
-    let sponza: hikari_asset::Handle<hikari_3d::Scene> =
-        ass_man.load("../../assets/models/sponza/sponza.glb")?;
-
-    let sponza_erased = sponza.clone().into();
-    loop {
-        ass_man.update(&mut scenes);
-        if let Some(load_status) = ass_man.get_load_status(&sponza_erased) {
-            if matches!(load_status, hikari_asset::LoadStatus::Loading) {
-                continue;
-            }
-        }
-        break;
-    }
-    println!("Loaded sponza");
-    // let mut scene = Scene {
-    //     objects: vec![GameObject::new(&Arc::new(
-    //         sponza.pop().expect("No model found"),
-    //     ))],
-
-    //     camera: Camera {
-    //         transform: Transform {
-    //             position: Vec3::ZERO,
-    //             rotation: Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2),
-    //             scale: Vec3::ONE,
-    //         },
-    //         near: 0.1,
-    //         far: 10_000.0,
-    //         exposure: 1.0,
-    //         projection: Projection::Perspective(45.0),
-    //     },
-    // };
-
-    let mut dt = 0.0;
-    let mut fxaa = true;
-
-    let mut camera_transform = Transform {
-        position: Vec3::ZERO,
-        rotation: Quat::from_axis_angle(Vec3::Y, std::f32::consts::FRAC_PI_2),
-        scale: Vec3::ONE,
+    //let mut sponza = load_mesh(&device, "../../assets/models/sponza/sponza.glb")?;
+    let mut sponza = load_mesh(&device, "/home/atri/honza.glb")?;
+    let mut helmet = load_mesh(&device, "../../assets/models/cerberus/cerberus.gltf")?;
+    //let mut sponza =  load_mesh(&device, "../../assets/models/cube.glb")?;
+    let mut scene = Scene {
+        objects: vec![
+            GameObject::new(&Arc::new(
+            sponza.pop().expect("No model found"),
+        )),
+        GameObject::new(&Arc::new(
+            helmet.pop().expect("No model found"),
+        )),
+        ],
+        camera: Camera {
+            transform: Transform {
+                position: hikari_math::Vec3::ZERO,
+                rotation: hikari_math::Quat::IDENTITY,
+                // rotation: hikari_math::Quat::from_axis_angle(
+                //     hikari_math::Vec3::Y,
+                //     std::f32::consts::FRAC_PI_2,
+                // ),
+                scale: hikari_math::Vec3::ONE,
+            },
+            inner: hikari_3d::Camera {
+                near: 0.1,
+                far: 10000.0,
+                exposure: 1.0,
+                projection: hikari_3d::Projection::Perspective(45.0),
+            },
+        },
+        dir_light: Light {
+            light: hikari_3d::Light {
+                color: hikari_math::Vec4::ONE,
+                intensity: 1.0,
+                cast_shadows: true,
+                kind: hikari_3d::LightKind::Directional,
+            },
+            transform: Transform::default()
+        },
     };
+    // proj_view.project_point3()
+    // println!("{:?}", proj_view);
+    // panic!();
+    let mut ui_state = UiState {
+        gizmo: imgui::GizmoContext::new(),
+        gizmo_operation: imgui::gizmo::Operation::Translate,
+        gizmo_mode: imgui::gizmo::Mode::World,
+
+        euler_cache: HashMap::new()
+    };
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
-        let mut scene = scenes.get_mut(&sponza).expect("Sponza not present");
         imgui.handle_event(&window, &event);
         match event {
             Event::RedrawRequested(_) => {
                 hikari_dev::profile_scope!("mainloop");
-                let now = std::time::Instant::now();
-
                 let draw_data = imgui.new_frame(&window, |ui| {
-                    imgui_update(ui, &mut scene, &mut vsync, &mut fxaa);
+                    imgui_update(ui, &mut scene, &mut ui_state, &mut settings);
                 });
-                gfx.set_vsync(vsync);
+
+                // I hate this too, but winit won't allow me to get a non static reference to DrawData
+                // I don't understand what the problem here is
+                let draw_data = unsafe { std::mem::transmute(draw_data) };
+
+                gfx.set_vsync(settings.vsync);
 
                 graph
                     .execute((
-                        &camera_transform,
                         &scene,
-                        &textures,
-                        &materials,
-                        &Params {
-                            fxaa,
-                            width: window.inner_size().width,
-                            height: window.inner_size().height,
-                        },
+                        &settings,
                         draw_data,
                     ))
                     .unwrap();
 
-                //scene.objects[0].position.y += 1.0 * dt;
-                dt = now.elapsed().as_secs_f32();
                 hikari_dev::finish_frame!();
             }
             Event::MainEventsCleared => {
@@ -972,6 +1066,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     graph
                         .resize(size.width, size.height)
                         .expect("Failed to resize graph");
+                    settings.width = size.width;
+                    settings.height = size.height;
                 }
                 WindowEvent::CloseRequested => {
                     println!("Closing");
@@ -985,9 +1081,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             _ => (),
         }
-
-        ass_man.update(&mut textures);
-        ass_man.update(&mut materials);
-        ass_man.update(&mut scenes);
     })
 }
