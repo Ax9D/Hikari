@@ -13,7 +13,7 @@ const HEIGHT: u32 = 720;
 
 const QUAD_VERTS: [f32; 4 * 2] = [0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5];
 
-const QUAD_INDS: [u32; 6] = [0, 1, 2, 0, 2, 3];
+const QUAD_INDS: [u32; 6] = [2, 1 , 0, 3, 2, 0];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     SimpleLogger::new()
@@ -22,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init()
         .unwrap();
 
+    hikari_dev::profiling_init();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_inner_size(LogicalSize::new(WIDTH, HEIGHT))

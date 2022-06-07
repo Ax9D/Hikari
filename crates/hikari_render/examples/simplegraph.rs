@@ -15,8 +15,8 @@ const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 720;
 
 fn triangle_shader(device: &Arc<rg::Device>) -> Arc<rg::Shader> {
-    let vertex = std::fs::read_to_string("shaders/triangle.vert").unwrap();
-    let fragment = std::fs::read_to_string("shaders/screen.frag").unwrap();
+    let vertex = std::fs::read_to_string("examples/shaders/triangle.vert").unwrap();
+    let fragment = std::fs::read_to_string("examples/shaders/screen.frag").unwrap();
     rg::ShaderProgramBuilder::vertex_and_fragment(
         "TriangleShader",
         &rg::ShaderCode {
@@ -33,7 +33,7 @@ fn triangle_shader(device: &Arc<rg::Device>) -> Arc<rg::Shader> {
 }
 fn blue_shader(device: &Arc<rg::Device>) -> Arc<rg::Shader> {
     let vertex = std::fs::read_to_string("examples/shaders/screenSpaceQuad.vert").unwrap();
-    let fragment = std::fs::read_to_string("shaders/blue.frag").unwrap();
+    let fragment = std::fs::read_to_string("examples/shaders/blue.frag").unwrap();
     rg::ShaderProgramBuilder::vertex_and_fragment(
         "BlueShader",
         &rg::ShaderCode {
@@ -55,7 +55,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //.with_level(log::LevelFilter::Info)
         .init()
         .unwrap();
-
+        
+    hikari_dev::profiling_init();
     let window = WindowBuilder::new().with_inner_size(LogicalSize::new(WIDTH, HEIGHT));
 
     let (mut gfx, gameloop) = common::GameLoop::new(

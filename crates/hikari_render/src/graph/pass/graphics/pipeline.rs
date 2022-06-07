@@ -177,7 +177,7 @@ impl RasterizerState {
             .polygon_mode(self.polygon_mode.into_vk())
             .line_width(1.0)
             .cull_mode(vk::CullModeFlags::BACK)
-            .front_face(vk::FrontFace::CLOCKWISE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .depth_bias_enable(self.depth_bias_enable)
             .depth_bias_constant_factor(self.depth_bias_constant_factor)
             .depth_bias_clamp(self.depth_bias_clamp)

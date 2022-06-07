@@ -15,7 +15,7 @@ pub enum Projection {
 impl Camera {
     pub fn get_projection_matrix(&self, width: u32, height: u32) -> hikari_math::Mat4 {
         match self.projection {
-            Projection::Perspective(fov) => hikari_math::Mat4::perspective_lh(
+            Projection::Perspective(fov) => hikari_math::Mat4::perspective_rh(
                 fov.to_radians(),
                 width as f32 / height as f32,
                 self.near,
