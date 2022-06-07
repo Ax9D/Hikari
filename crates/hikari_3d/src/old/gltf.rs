@@ -3,9 +3,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use hikari_math::{Vec2, Vec3, Vec4};
 use rayon::iter::*;
 use rayon::*;
-use hikari_math::{Vec2, Vec3, Vec4};
 
 use super::{
     material::{Material, TextureDesc},
@@ -339,10 +339,7 @@ fn load_model_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> super::Mo
 
         let normals = if let Some(iter) = reader.read_normals() {
             let normals = iter.collect::<Vec<_>>();
-            normals
-                .iter()
-                .map(|&normal| Vec3::from(normal))
-                .collect()
+            normals.iter().map(|&normal| Vec3::from(normal)).collect()
         } else {
             crate::mesh::default_normals(positions.len())
         };
@@ -436,7 +433,7 @@ pub fn load_scene(path: &Path) -> Result<super::Scene, super::Error> {
 
 #[cfg(test)]
 mod tests {
-    
+
     #[test]
     fn godzilla() {
         let _model = crate::old::gltf::load_scene("godzilla.glb".as_ref()).unwrap();

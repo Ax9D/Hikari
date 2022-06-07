@@ -13,7 +13,7 @@ const HEIGHT: u32 = 720;
 
 const QUAD_VERTS: [f32; 4 * 2] = [0.5, 0.5, 0.5, -0.5, -0.5, -0.5, -0.5, 0.5];
 
-const QUAD_INDS: [u32; 6] = [2, 1 , 0, 3, 2, 0];
+const QUAD_INDS: [u32; 6] = [2, 1, 0, 3, 2, 0];
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     SimpleLogger::new()

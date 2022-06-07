@@ -1,6 +1,14 @@
-use crate::{GizmoContext};
+use crate::GizmoContext;
 
-use super::{draw::Painter3D, math::{segment_to_segment, plane_local_origin, plane_tangent, plane_binormal, plane_size, world_to_screen, ray_to_plane_origin}, ray::Ray, subgizmo::SubGizmo};
+use super::{
+    draw::Painter3D,
+    math::{
+        plane_binormal, plane_local_origin, plane_size, plane_tangent, ray_to_plane_origin,
+        segment_to_segment, world_to_screen,
+    },
+    ray::Ray,
+    subgizmo::SubGizmo,
+};
 use hikari_math::*;
 
 #[derive(Default, Debug, Copy, Clone)]
@@ -11,9 +19,11 @@ pub(crate) struct ScaleState {
 
 /// Picks given scale subgizmo. If the subgizmo is close enough to
 /// the mouse pointer, distance from camera to the subgizmo is returned.
-pub(crate) fn pick_vector(subgizmo: &SubGizmo,
+pub(crate) fn pick_vector(
+    subgizmo: &SubGizmo,
     context: &mut GizmoContext,
-    ray: &Ray) -> Option<f32> {
+    ray: &Ray,
+) -> Option<f32> {
     let origin = subgizmo.state.transform.position;
     let dir = subgizmo.normal();
     let scale = subgizmo.state.scale_factor * subgizmo.state.gizmo_size;
@@ -46,7 +56,11 @@ pub(crate) fn pick_vector(subgizmo: &SubGizmo,
 }
 /// Picks given scale plane subgizmo. If the subgizmo is close enough to
 /// the mouse pointer, distance from camera to the subgizmo is returned.
-pub(crate) fn pick_plane(subgizmo: &SubGizmo, context: &mut GizmoContext, ray: &Ray) -> Option<f32> {
+pub(crate) fn pick_plane(
+    subgizmo: &SubGizmo,
+    context: &mut GizmoContext,
+    ray: &Ray,
+) -> Option<f32> {
     let origin = scale_plane_global_origin(subgizmo);
 
     let normal = subgizmo.normal();
@@ -57,7 +71,7 @@ pub(crate) fn pick_plane(subgizmo: &SubGizmo, context: &mut GizmoContext, ray: &
 
     *context.scale_state(subgizmo.id) = ScaleState {
         start_scale: subgizmo.state.transform.scale,
-        start_delta: start_delta
+        start_delta: start_delta,
     };
 
     if dist_from_origin <= plane_size(subgizmo) {
@@ -68,7 +82,11 @@ pub(crate) fn pick_plane(subgizmo: &SubGizmo, context: &mut GizmoContext, ray: &
 }
 /// Updates given scale subgizmo.
 /// If the subgizmo is active, returns the scale result.
-pub(crate) fn update_vector(subgizmo: &SubGizmo, context: &mut GizmoContext, _ray: &Ray) -> Option<Transform> {
+pub(crate) fn update_vector(
+    subgizmo: &SubGizmo,
+    context: &mut GizmoContext,
+    _ray: &Ray,
+) -> Option<Transform> {
     let state = context.scale_state(subgizmo.id);
 
     let current_state = *state;
@@ -84,16 +102,20 @@ pub(crate) fn update_vector(subgizmo: &SubGizmo, context: &mut GizmoContext, _ra
 
     let offset = Vec3::ONE + (subgizmo.local_normal() * delta);
 
-    Some(Transform{
-            scale: current_state.start_scale * offset,
-            rotation: subgizmo.state.transform.rotation,
-            position: subgizmo.state.transform.position,
+    Some(Transform {
+        scale: current_state.start_scale * offset,
+        rotation: subgizmo.state.transform.rotation,
+        position: subgizmo.state.transform.position,
     })
 }
 
 /// Updates given scale plane subgizmo.
 /// If the subgizmo is active, returns the scale result.
-pub(crate) fn update_plane(subgizmo: &SubGizmo, context: &mut GizmoContext, _ray: &Ray) -> Option<Transform> {
+pub(crate) fn update_plane(
+    subgizmo: &SubGizmo,
+    context: &mut GizmoContext,
+    _ray: &Ray,
+) -> Option<Transform> {
     let state = context.scale_state(subgizmo.id);
     let current_state = *state;
 
@@ -111,13 +133,12 @@ pub(crate) fn update_plane(subgizmo: &SubGizmo, context: &mut GizmoContext, _ray
 
     let offset = Vec3::ONE + (direction * delta);
 
-    Some(Transform{
+    Some(Transform {
         scale: current_state.start_scale * offset,
         rotation: subgizmo.state.transform.rotation,
         position: subgizmo.state.transform.position,
     })
 }
-
 
 pub(crate) fn draw_vector(subgizmo: &SubGizmo, ui: &imgui::Ui) {
     let state = &subgizmo.state;
@@ -163,7 +184,10 @@ pub(crate) fn draw_plane(subgizmo: &SubGizmo, ui: &imgui::Ui) {
 }
 fn scale_transform(subgizmo: &SubGizmo) -> Mat4 {
     if subgizmo.state.local_space() {
-        Mat4::from_rotation_translation(subgizmo.state.transform.rotation, subgizmo.state.transform.position)
+        Mat4::from_rotation_translation(
+            subgizmo.state.transform.rotation,
+            subgizmo.state.transform.position,
+        )
     } else {
         Mat4::from_translation(subgizmo.state.transform.position)
     }

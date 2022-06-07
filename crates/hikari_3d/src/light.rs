@@ -6,7 +6,7 @@ pub struct Light {
     pub kind: LightKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub enum LightKind {
     Point,
     Directional,

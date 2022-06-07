@@ -8,7 +8,10 @@ pub struct Function {
 }
 impl Function {
     pub unsafe fn from_raw(exec: Box<dyn FnMut(Pin<&UnsafeGlobalState>) + 'static>) -> Self {
-        Self { borrows: Borrows::default(), exec }
+        Self {
+            borrows: Borrows::default(),
+            exec,
+        }
     }
     #[inline]
     pub(crate) unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) {

@@ -1,6 +1,12 @@
-use crate::{GizmoContext};
+use crate::GizmoContext;
 
-use super::{draw::Painter3D, math::{world_to_screen, ray_to_plane_origin, rotation_align}, ray::Ray, subgizmo::SubGizmo, Direction};
+use super::{
+    draw::Painter3D,
+    math::{ray_to_plane_origin, rotation_align, world_to_screen},
+    ray::Ray,
+    subgizmo::SubGizmo,
+    Direction,
+};
 use hikari_math::*;
 use imgui::ImColor32;
 
@@ -43,10 +49,10 @@ pub(crate) fn pick(subgizmo: &SubGizmo, context: &mut GizmoContext, ray: &Ray) -
 
     let rotation_angle = rotation_angle(subgizmo).unwrap_or(0.0);
     *context.rotation_state(subgizmo.id) = RotationState {
-        start_axis_angle : angle,
+        start_axis_angle: angle,
         start_rotation_angle: rotation_angle,
         last_rotation_angle: rotation_angle,
-        current_delta: 0.0
+        current_delta: 0.0,
     };
 
     println!("arc_angle {}", arc_angle(subgizmo).to_degrees());
@@ -59,7 +65,11 @@ pub(crate) fn pick(subgizmo: &SubGizmo, context: &mut GizmoContext, ray: &Ray) -
 
 /// Updates given rotation subgizmo.
 /// If the subgizmo is active, returns the rotation result.
-pub(crate) fn update(subgizmo: &SubGizmo, context: &mut GizmoContext, _ray: &Ray) -> Option<Transform> {
+pub(crate) fn update(
+    subgizmo: &SubGizmo,
+    context: &mut GizmoContext,
+    _ray: &Ray,
+) -> Option<Transform> {
     let state = context.rotation_state(subgizmo.id);
     let current_state = *state;
 
@@ -86,13 +96,11 @@ pub(crate) fn update(subgizmo: &SubGizmo, context: &mut GizmoContext, _ray: &Ray
     let rotation =
         Quat::from_axis_angle(subgizmo.normal(), -angle_delta) * subgizmo.state.transform.rotation;
 
-    Some(
-        Transform {
-            rotation,
-            scale: subgizmo.state.transform.scale,
-            position: subgizmo.state.transform.position
-        }
-    )
+    Some(Transform {
+        rotation,
+        scale: subgizmo.state.transform.scale,
+        position: subgizmo.state.transform.position,
+    })
 }
 pub(crate) fn draw(subgizmo: &SubGizmo, context: &mut GizmoContext, ui: &imgui::Ui) {
     //let state = subgizmo.state::<RotationState>(ui);
@@ -110,7 +118,13 @@ pub(crate) fn draw(subgizmo: &SubGizmo, context: &mut GizmoContext, ui: &imgui::
 
     if !subgizmo.active {
         let angle = arc_angle(subgizmo);
-        painter.arc(radius, FRAC_PI_2 - angle, FRAC_PI_2 + angle, color, subgizmo.style.line_thickness);
+        painter.arc(
+            radius,
+            FRAC_PI_2 - angle,
+            FRAC_PI_2 + angle,
+            color,
+            subgizmo.style.line_thickness,
+        );
         //painter.circle(radius, color, subgizmo.style.line_thickness);
     } else {
         let state = context.rotation_state(subgizmo.id);
@@ -128,7 +142,7 @@ pub(crate) fn draw(subgizmo: &SubGizmo, context: &mut GizmoContext, ui: &imgui::
                 Vec3::new(end_angle.cos() * radius, 0.0, end_angle.sin() * radius),
             ],
             color,
-            subgizmo.style.line_thickness
+            subgizmo.style.line_thickness,
         );
 
         painter.sector(
@@ -143,10 +157,17 @@ pub(crate) fn draw(subgizmo: &SubGizmo, context: &mut GizmoContext, ui: &imgui::
 
         drop(painter);
         let delta_angles = subgizmo.local_normal() * state.current_delta;
-        let delta_string = format!("dx: {}° dy: {}° dz: {}°", delta_angles.x.to_degrees(), delta_angles.y.to_degrees(), delta_angles.z.to_degrees());
-        ui
-        .get_window_draw_list()
-        .add_text(subgizmo.state.viewport.max - Vec2::new(150.0, 75.0), ImColor32::WHITE, &delta_string);
+        let delta_string = format!(
+            "dx: {}° dy: {}° dz: {}°",
+            delta_angles.x.to_degrees(),
+            delta_angles.y.to_degrees(),
+            delta_angles.z.to_degrees()
+        );
+        ui.get_window_draw_list().add_text(
+            subgizmo.state.viewport.max - Vec2::new(150.0, 75.0),
+            ImColor32::WHITE,
+            &delta_string,
+        );
         // // Draw snapping ticks
         // if config.snapping {
         //     let stroke_width = stroke.0 / 2.0;
@@ -207,7 +228,7 @@ fn rotation_matrix(subgizmo: &SubGizmo) -> Mat4 {
 fn rotation_angle(subgizmo: &SubGizmo) -> Option<f32> {
     let cursor_pos = subgizmo.state.cursor_pos;
     let viewport = subgizmo.state.viewport;
-    let gizmo_pos = world_to_screen( subgizmo.state.mvp, viewport, Vec3::new(0.0, 0.0, 0.0))?;
+    let gizmo_pos = world_to_screen(subgizmo.state.mvp, viewport, Vec3::new(0.0, 0.0, 0.0))?;
     let delta = Vec2::new(cursor_pos.x - gizmo_pos.x, cursor_pos.y - gizmo_pos.y).normalize();
 
     if delta.is_nan() {

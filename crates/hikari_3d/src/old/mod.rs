@@ -7,9 +7,9 @@ mod mesh;
 mod scene;
 mod texture;
 
-pub use texture::*;
-pub use error::*;
-pub use mesh::*;
-pub use material::*;
 pub use self::gltf::*;
+pub use error::*;
+pub use material::*;
+pub use mesh::*;
 pub use scene::*;
+pub use texture::*;

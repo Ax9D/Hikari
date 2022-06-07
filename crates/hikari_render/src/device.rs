@@ -145,9 +145,9 @@ impl PhysicalDevice {
             let properties =
                 unsafe { instance.get_physical_device_format_properties(self.raw, format) };
             let supported = match tiling {
-                vk::ImageTiling::OPTIMAL => {properties.optimal_tiling_features.contains(features)}
-                vk::ImageTiling::LINEAR => {properties.linear_tiling_features.contains(features)}
-                _=> unreachable!()
+                vk::ImageTiling::OPTIMAL => properties.optimal_tiling_features.contains(features),
+                vk::ImageTiling::LINEAR => properties.linear_tiling_features.contains(features),
+                _ => unreachable!(),
             };
             if supported {
                 return Some(format);

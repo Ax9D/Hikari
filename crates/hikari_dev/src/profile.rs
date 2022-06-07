@@ -20,11 +20,15 @@ mod tracy {
     #[macro_export]
     macro_rules! profile_scope {
         ($name: expr) => {
-            let _tracy_span = $crate::tracy_client::Client::running().expect("tracy_client::Client is not running!").span_alloc($name, "", file!(), line!(), 0);
+            let _tracy_span = $crate::tracy_client::Client::running()
+                .expect("tracy_client::Client is not running!")
+                .span_alloc($name, "", file!(), line!(), 0);
         };
 
         ($name: expr, $data: expr) => {
-            let _tracy_span = $crate::tracy_client::Client::running().expect("tracy_client::Client is not running!").span_alloc($name, "", file!(), line!(), 0);
+            let _tracy_span = $crate::tracy_client::Client::running()
+                .expect("tracy_client::Client is not running!")
+                .span_alloc($name, "", file!(), line!(), 0);
             _tracy_span.emit_text($data);
         };
     }
@@ -38,8 +42,8 @@ mod tracy {
     macro_rules! finish_frame {
         () => {
             $crate::tracy_client::Client::running()
-            .expect("finish_frame! without a running tracy_client::Client")
-            .frame_mark();
+                .expect("finish_frame! without a running tracy_client::Client")
+                .frame_mark();
         };
     }
     #[macro_export]
@@ -82,7 +86,7 @@ mod noop {
     pub fn profiling_init() {}
 }
 
-#[cfg(not(feature = "profiling_disabled"))]
-pub use tracy::*;
 #[cfg(feature = "profiling_disabled")]
 pub use noop::*;
+#[cfg(not(feature = "profiling_disabled"))]
+pub use tracy::*;

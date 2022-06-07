@@ -1,7 +1,7 @@
 use hikari_math::Transform;
 use itertools::izip;
 use simple_logger::SimpleLogger;
-use std::{sync::Arc, collections::HashMap};
+use std::{collections::HashMap, sync::Arc};
 use winit::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
@@ -54,7 +54,6 @@ struct GameObject {
 
 impl GameObject {
     pub fn new(model: &Arc<Model>) -> Self {
-
         let transform = Transform::default();
 
         Self {
@@ -80,13 +79,17 @@ impl Camera {
     }
     pub fn get_view_matrix(&self) -> hikari_math::Mat4 {
         //hikari_math::Mat4::look_at_rh()
-        hikari_math::Mat4::from_rotation_translation(self.transform.rotation, self.transform.position).inverse()
+        hikari_math::Mat4::from_rotation_translation(
+            self.transform.rotation,
+            self.transform.position,
+        )
+        .inverse()
     }
 }
 
 struct Light {
     light: hikari_3d::Light,
-    transform: Transform
+    transform: Transform,
 }
 struct Scene {
     objects: Vec<GameObject>,
@@ -97,8 +100,8 @@ struct UiState {
     gizmo: imgui::GizmoContext,
     gizmo_operation: imgui::gizmo::Operation,
     gizmo_mode: imgui::gizmo::Mode,
-    
-    euler_cache: HashMap<usize, (f32, f32, f32)> // Object Index To Euler Angles in Editor
+
+    euler_cache: HashMap<usize, (f32, f32, f32)>, // Object Index To Euler Angles in Editor
 }
 fn load_mesh(
     device: &Arc<rg::Device>,
@@ -298,7 +301,9 @@ fn depth_prepass(
                     ..Default::default()
                 });
 
-                let proj = scene.camera.get_projection_matrix(settings.width, settings.height);
+                let proj = scene
+                    .camera
+                    .get_projection_matrix(settings.width, settings.height);
                 let view = scene.camera.get_view_matrix();
                 let view_proj = (proj * view).to_cols_array();
 
@@ -371,13 +376,13 @@ fn pbr_pass(
     }
     #[repr(C)]
     #[derive(Copy, Clone, Default)]
-    
+
     struct UBO {
         camera_position: hikari_math::Vec3A,
         view_proj: [f32; 16],
         exposure: f32,
 
-        dir_light: DirLight
+        dir_light: DirLight,
     }
 
     log::debug!("sizeof(UBO)={}", std::mem::size_of::<UBO>());
@@ -475,10 +480,12 @@ fn pbr_pass(
             "PBR",
             rg::ImageSize::default(),
             move |cmd, (scene, settings, _)| {
-                let proj = scene.camera.get_projection_matrix(settings.width, settings.height);
+                let proj = scene
+                    .camera
+                    .get_projection_matrix(settings.width, settings.height);
                 let view = scene.camera.get_view_matrix();
 
-                let view_proj =( proj * view ).to_cols_array();
+                let view_proj = (proj * view).to_cols_array();
 
                 use hikari_math::Vec3;
                 let direction = scene.dir_light.transform.rotation * -Vec3::Y;
@@ -491,7 +498,7 @@ fn pbr_pass(
                         color: scene.dir_light.light.color.into(),
                         direction: direction.into(),
                         intensity: scene.dir_light.light.intensity,
-                    }
+                    },
                 };
 
                 cmd.set_shader(&shader);
@@ -698,11 +705,20 @@ fn imgui_pass(
 
     imgui_image
 }
-fn rotation_alt(ui: &imgui::Ui, quat: &mut hikari_math::Quat, entity_id: usize, euler_cache: &mut HashMap<usize, (f32, f32, f32)>) {
-    let (x, y, z) = euler_cache.entry(entity_id).or_insert_with(|| quat.to_euler(hikari_math::EulerRot::XYZ)).clone();
+fn rotation_alt(
+    ui: &imgui::Ui,
+    quat: &mut hikari_math::Quat,
+    entity_id: usize,
+    euler_cache: &mut HashMap<usize, (f32, f32, f32)>,
+) {
+    let (x, y, z) = euler_cache
+        .entry(entity_id)
+        .or_insert_with(|| quat.to_euler(hikari_math::EulerRot::XYZ))
+        .clone();
 
-    let externally_changed = ! hikari_math::Quat::from_euler(hikari_math::EulerRot::XYZ, x, y, z).abs_diff_eq(*quat, std::f32::EPSILON);
-    
+    let externally_changed = !hikari_math::Quat::from_euler(hikari_math::EulerRot::XYZ, x, y, z)
+        .abs_diff_eq(*quat, std::f32::EPSILON);
+
     let (x, y, z) = if externally_changed {
         quat.to_euler(hikari_math::EulerRot::XYZ)
     } else {
@@ -711,24 +727,44 @@ fn rotation_alt(ui: &imgui::Ui, quat: &mut hikari_math::Quat, entity_id: usize, 
 
     let mut angles = [x.to_degrees(), y.to_degrees(), z.to_degrees()];
 
-    let changed = imgui::Drag::new("Rotation").speed(0.5).build_array(ui, &mut angles);
+    let changed = imgui::Drag::new("Rotation")
+        .speed(0.5)
+        .build_array(ui, &mut angles);
 
     if changed {
-        let (x, y, z)  = (angles[0].to_radians(), angles[1].to_radians(), angles[2].to_radians());
+        let (x, y, z) = (
+            angles[0].to_radians(),
+            angles[1].to_radians(),
+            angles[2].to_radians(),
+        );
         *euler_cache.get_mut(&entity_id).unwrap() = (x, y, z);
         *quat = hikari_math::Quat::from_euler(hikari_math::EulerRot::XYZ, x, y, z);
     }
 }
-fn transform_controls(ui: &imgui::Ui, transform: &mut Transform, entity_id: usize, state: &mut UiState) {
-        let mut position: [f32; 3] = transform.position.into();
-        imgui::Drag::new("position").speed(0.1).build_array(ui, &mut position);
-        transform.position = position.into();
+fn transform_controls(
+    ui: &imgui::Ui,
+    transform: &mut Transform,
+    entity_id: usize,
+    state: &mut UiState,
+) {
+    let mut position: [f32; 3] = transform.position.into();
+    imgui::Drag::new("position")
+        .speed(0.1)
+        .build_array(ui, &mut position);
+    transform.position = position.into();
 
-        rotation_alt(ui, &mut transform.rotation, entity_id, &mut state.euler_cache);
-    
-        let mut scale: [f32; 3] = transform.scale.into();
-        imgui::Drag::new("scale").speed(0.2).build_array(ui, &mut scale);
-        transform.scale = hikari_math::Vec3::from(scale);
+    rotation_alt(
+        ui,
+        &mut transform.rotation,
+        entity_id,
+        &mut state.euler_cache,
+    );
+
+    let mut scale: [f32; 3] = transform.scale.into();
+    imgui::Drag::new("scale")
+        .speed(0.2)
+        .build_array(ui, &mut scale);
+    transform.scale = hikari_math::Vec3::from(scale);
 }
 fn imgui_update(
     ui: &imgui::Ui,
@@ -737,28 +773,31 @@ fn imgui_update(
     settings: &mut Settings,
 ) {
     //ui.show_demo_window(&mut true);
-    ui.window("Transform Object")
-    .build(|| {
+    ui.window("Transform Object").build(|| {
         transform_controls(ui, &mut scene.objects[1].transform, 1, ui_state);
 
-        let operations = [imgui::Operation::Translate, imgui::Operation::Rotate, imgui::Operation::Scale];
-        let mut index = operations.iter().position(|operation| operation == &ui_state.gizmo_operation).unwrap();
-        ui.combo("Gizmo Operation", &mut index, 
-        &operations,
-        |item| {
+        let operations = [
+            imgui::Operation::Translate,
+            imgui::Operation::Rotate,
+            imgui::Operation::Scale,
+        ];
+        let mut index = operations
+            .iter()
+            .position(|operation| operation == &ui_state.gizmo_operation)
+            .unwrap();
+        ui.combo("Gizmo Operation", &mut index, &operations, |item| {
             std::borrow::Cow::Owned(format!("{:?}", item))
-        }
-        );
+        });
         ui_state.gizmo_operation = operations[index];
 
         let modes = [imgui::gizmo::Mode::World, imgui::gizmo::Mode::Local];
-        let mut index = modes.iter().position(|mode| mode == &ui_state.gizmo_mode).unwrap();
-        ui.combo("Gizmo Mode", &mut index, 
-        &modes,
-        |item| {
+        let mut index = modes
+            .iter()
+            .position(|mode| mode == &ui_state.gizmo_mode)
+            .unwrap();
+        ui.combo("Gizmo Mode", &mut index, &modes, |item| {
             std::borrow::Cow::Owned(format!("{:?}", item))
-        }
-        );
+        });
 
         ui_state.gizmo_mode = modes[index];
 
@@ -774,10 +813,7 @@ fn imgui_update(
 
         use imgui::WindowFlags;
         ui.window("Gizmo")
-            .position(
-                [0.0, 0.0],
-                imgui::Condition::Always,
-            )
+            .position([0.0, 0.0], imgui::Condition::Always)
             .size(
                 [settings.width as f32, settings.height as f32],
                 imgui::Condition::Always,
@@ -792,7 +828,7 @@ fn imgui_update(
                     | WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS,
             )
             .build(|| {
-                    let new_transform = ui_state
+                let new_transform = ui_state
                     .gizmo
                     .gizmo(ui)
                     .size(75.0)
@@ -800,17 +836,17 @@ fn imgui_update(
                     .mode(ui_state.gizmo_mode)
                     .manipulate(
                         scene.objects[1].transform.clone(),
-                        scene.camera.get_projection_matrix(settings.width, settings.height),
+                        scene
+                            .camera
+                            .get_projection_matrix(settings.width, settings.height),
                         scene.camera.get_view_matrix(),
                     );
 
-                    if let Some(new_transform) = new_transform {
-                        scene.objects[1].transform = new_transform;
-                        //println!("{:#?}", new_transform);
-                    }
-        });
-
-
+                if let Some(new_transform) = new_transform {
+                    scene.objects[1].transform = new_transform;
+                    //println!("{:#?}", new_transform);
+                }
+            });
     });
 
     ui.window("Camera").build(|| {
@@ -946,13 +982,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             config: None,
         }]);
 
-
     let mut settings = Settings {
-            fxaa: true,
-            vsync: true,
-            width: WIDTH,
-            height: HEIGHT
-        };
+        fxaa: true,
+        vsync: true,
+        width: WIDTH,
+        height: HEIGHT,
+    };
     let mut gfx = rg::Gfx::new(
         &window,
         rg::GfxConfig {
@@ -981,12 +1016,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //let mut sponza =  load_mesh(&device, "../../assets/models/cube.glb")?;
     let mut scene = Scene {
         objects: vec![
-            GameObject::new(&Arc::new(
-            sponza.pop().expect("No model found"),
-        )),
-        GameObject::new(&Arc::new(
-            helmet.pop().expect("No model found"),
-        )),
+            GameObject::new(&Arc::new(sponza.pop().expect("No model found"))),
+            GameObject::new(&Arc::new(helmet.pop().expect("No model found"))),
         ],
         camera: Camera {
             transform: Transform {
@@ -1012,7 +1043,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cast_shadows: true,
                 kind: hikari_3d::LightKind::Directional,
             },
-            transform: Transform::default()
+            transform: Transform::default(),
         },
     };
     // proj_view.project_point3()
@@ -1023,7 +1054,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         gizmo_operation: imgui::gizmo::Operation::Translate,
         gizmo_mode: imgui::gizmo::Mode::World,
 
-        euler_cache: HashMap::new()
+        euler_cache: HashMap::new(),
     };
 
     event_loop.run(move |event, _, control_flow| {
@@ -1043,13 +1074,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 gfx.set_vsync(settings.vsync);
 
-                graph
-                    .execute((
-                        &scene,
-                        &settings,
-                        draw_data,
-                    ))
-                    .unwrap();
+                graph.execute((&scene, &settings, draw_data)).unwrap();
 
                 hikari_dev::finish_frame!();
             }

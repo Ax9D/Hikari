@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::imgui;
 
-use super::{Editor};
+use super::Editor;
 
 pub struct ContentBrowser {
     cwd: PathBuf,

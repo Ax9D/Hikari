@@ -2,13 +2,10 @@ use crate::imgui;
 
 use super::Editor;
 
-pub struct Tools {
-}
+pub struct Tools {}
 impl Tools {
     pub fn new() -> Self {
         Self {}
     }
 }
-pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
-
-}
+pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {}

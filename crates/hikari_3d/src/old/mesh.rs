@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 
-use hikari_math::{Vec3, Vec2};
+use hikari_math::{Vec2, Vec3};
 
 // impl Mesh {
 //     pub fn new() -> Arc<Mesh> {

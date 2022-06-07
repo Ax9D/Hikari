@@ -68,7 +68,14 @@ impl<'ui> Painter3D<'ui> {
             .filled(true)
             .build();
     }
-    pub fn arc(&self, radius: f32, start_angle: f32, end_angle: f32, color: ImColor32, thickness: f32) {
+    pub fn arc(
+        &self,
+        radius: f32,
+        start_angle: f32,
+        end_angle: f32,
+        color: ImColor32,
+        thickness: f32,
+    ) {
         let angle = end_angle - start_angle;
         let step_count = steps(angle);
         let mut points = Vec::with_capacity(step_count);
@@ -87,11 +94,11 @@ impl<'ui> Painter3D<'ui> {
             .filter_map(|point| world_to_screen(self.mvp, self.viewport, point))
             .collect::<Vec<_>>();
 
-
-        self.draw_list.add_polyline(points, color)
-        .thickness(thickness)
-        .build();
-    }    
+        self.draw_list
+            .add_polyline(points, color)
+            .thickness(thickness)
+            .build();
+    }
     pub fn circle(&self, radius: f32, color: ImColor32, thickness: f32) {
         self.arc(radius, 0.0, TAU, color, thickness)
     }
@@ -99,14 +106,14 @@ impl<'ui> Painter3D<'ui> {
     pub fn polyline(&self, points: &[Vec3], color: ImColor32, thickness: f32) {
         let points = points
             .iter()
-            .filter_map(|pos| world_to_screen( self.mvp, self.viewport, *pos))
+            .filter_map(|pos| world_to_screen(self.mvp, self.viewport, *pos))
             .collect::<Vec<_>>();
 
         if points.len() > 1 {
             self.draw_list
-            .add_polyline(points, color)
-            .thickness(thickness)
-            .build();
+                .add_polyline(points, color)
+                .thickness(thickness)
+                .build();
         }
     }
 
@@ -117,7 +124,7 @@ impl<'ui> Painter3D<'ui> {
         end_angle: f32,
         fill: ImColor32,
         thickness: f32,
-    )  {
+    ) {
         let angle_delta = end_angle - start_angle;
         let step_count = steps(angle_delta.abs());
         let mut points = Vec::with_capacity(step_count);
@@ -135,14 +142,14 @@ impl<'ui> Painter3D<'ui> {
 
         let points = points
             .into_iter()
-            .filter_map(|point| world_to_screen( self.mvp, self.viewport, point))
+            .filter_map(|point| world_to_screen(self.mvp, self.viewport, point))
             .collect::<Vec<_>>();
 
         self.draw_list
-        .add_polyline(points, fill)
-        .thickness(thickness)
-        .filled(true)
-        .build();
+            .add_polyline(points, fill)
+            .thickness(thickness)
+            .filled(true)
+            .build();
     }
 }
 const STEPS_PER_RAD: f32 = 20.0;

@@ -96,45 +96,48 @@ pub fn to_sync2_stage_flags(flags: vk::PipelineStageFlags) -> vk::PipelineStageF
     // }
 }
 fn is_read(access: &AccessType) -> bool {
-    matches!(access, AccessType::Nothing
-        | AccessType::CommandBufferReadNVX
-        | AccessType::IndirectBuffer
-        | AccessType::IndexBuffer
-        | AccessType::VertexBuffer
-        | AccessType::VertexShaderReadUniformBuffer
-        | AccessType::VertexShaderReadSampledImageOrUniformTexelBuffer
-        | AccessType::VertexShaderReadOther
-        | AccessType::TessellationControlShaderReadUniformBuffer
-        | AccessType::TessellationControlShaderReadSampledImageOrUniformTexelBuffer
-        | AccessType::TessellationControlShaderReadOther
-        | AccessType::TessellationEvaluationShaderReadUniformBuffer
-        | AccessType::TessellationEvaluationShaderReadSampledImageOrUniformTexelBuffer
-        | AccessType::TessellationEvaluationShaderReadOther
-        | AccessType::GeometryShaderReadUniformBuffer
-        | AccessType::GeometryShaderReadSampledImageOrUniformTexelBuffer
-        | AccessType::GeometryShaderReadOther
-        | AccessType::FragmentShaderReadUniformBuffer
-        | AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer
-        | AccessType::FragmentShaderReadColorInputAttachment
-        | AccessType::FragmentShaderReadDepthStencilInputAttachment
-        | AccessType::FragmentShaderReadOther
-        | AccessType::ColorAttachmentRead
-        | AccessType::DepthStencilAttachmentRead
-        | AccessType::ComputeShaderReadUniformBuffer
-        | AccessType::ComputeShaderReadSampledImageOrUniformTexelBuffer
-        | AccessType::ComputeShaderReadOther
-        | AccessType::AnyShaderReadUniformBuffer
-        | AccessType::AnyShaderReadUniformBufferOrVertexBuffer
-        | AccessType::AnyShaderReadSampledImageOrUniformTexelBuffer
-        | AccessType::AnyShaderReadOther
-        | AccessType::TransferRead
-        | AccessType::HostRead
-        | AccessType::Present
-        | AccessType::RayTracingShaderReadSampledImageOrUniformTexelBuffer
-        | AccessType::RayTracingShaderReadColorInputAttachment
-        | AccessType::RayTracingShaderReadDepthStencilInputAttachment
-        | AccessType::RayTracingShaderReadAccelerationStructure
-        | AccessType::RayTracingShaderReadOther)
+    matches!(
+        access,
+        AccessType::Nothing
+            | AccessType::CommandBufferReadNVX
+            | AccessType::IndirectBuffer
+            | AccessType::IndexBuffer
+            | AccessType::VertexBuffer
+            | AccessType::VertexShaderReadUniformBuffer
+            | AccessType::VertexShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::VertexShaderReadOther
+            | AccessType::TessellationControlShaderReadUniformBuffer
+            | AccessType::TessellationControlShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::TessellationControlShaderReadOther
+            | AccessType::TessellationEvaluationShaderReadUniformBuffer
+            | AccessType::TessellationEvaluationShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::TessellationEvaluationShaderReadOther
+            | AccessType::GeometryShaderReadUniformBuffer
+            | AccessType::GeometryShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::GeometryShaderReadOther
+            | AccessType::FragmentShaderReadUniformBuffer
+            | AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::FragmentShaderReadColorInputAttachment
+            | AccessType::FragmentShaderReadDepthStencilInputAttachment
+            | AccessType::FragmentShaderReadOther
+            | AccessType::ColorAttachmentRead
+            | AccessType::DepthStencilAttachmentRead
+            | AccessType::ComputeShaderReadUniformBuffer
+            | AccessType::ComputeShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::ComputeShaderReadOther
+            | AccessType::AnyShaderReadUniformBuffer
+            | AccessType::AnyShaderReadUniformBufferOrVertexBuffer
+            | AccessType::AnyShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::AnyShaderReadOther
+            | AccessType::TransferRead
+            | AccessType::HostRead
+            | AccessType::Present
+            | AccessType::RayTracingShaderReadSampledImageOrUniformTexelBuffer
+            | AccessType::RayTracingShaderReadColorInputAttachment
+            | AccessType::RayTracingShaderReadDepthStencilInputAttachment
+            | AccessType::RayTracingShaderReadAccelerationStructure
+            | AccessType::RayTracingShaderReadOther
+    )
 }
 pub fn is_hazard(prev_accesses: &[AccessType], next_accesses: &[AccessType]) -> bool {
     if prev_accesses.is_empty() || next_accesses.is_empty() {

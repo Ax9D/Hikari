@@ -1,14 +1,13 @@
 /// This is heavily based on https://github.com/urholaukkarinen/egui-gizmo
 /// I have mostly adapted their code for use with imgui
 /// All credit goes to Urho Laukkarinen <urho.laukkarinen@gmail.com>
-
 mod draw;
 mod math;
 mod ray;
-mod translate;
 mod rotate;
 mod scale;
 mod subgizmo;
+mod translate;
 
 use std::ops::Sub;
 
@@ -18,11 +17,10 @@ use nohash_hasher::IntMap;
 use subgizmo::SubGizmo;
 use subgizmo::SubGizmoKind;
 
-
 use self::ray::Ray;
-use self::translate::TranslationState;
 use self::rotate::RotationState;
 use self::scale::ScaleState;
+use self::translate::TranslationState;
 
 const TRANSLATE_X_ID: u32 = 0;
 const TRANSLATE_Y_ID: u32 = 1;
@@ -65,8 +63,6 @@ pub enum Mode {
     Local,
     World,
 }
-
-
 
 #[derive(Default, Debug)]
 pub struct GizmoContext {

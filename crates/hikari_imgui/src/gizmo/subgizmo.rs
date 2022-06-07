@@ -3,7 +3,7 @@ use imgui::{ImColor32, Ui};
 
 use crate::{GizmoContext, GizmoState, GizmoStyle};
 
-use super::{ray::Ray, translate, Direction, scale, rotate};
+use super::{ray::Ray, rotate, scale, translate, Direction};
 
 #[derive(Copy, Clone)]
 pub(crate) struct SubGizmo {

@@ -1,10 +1,11 @@
+use crate::imgui;
 use clipboard::ClipboardProvider;
 use hikari::render::*;
-use crate::imgui;
 
 use self::{
     content_browser::ContentBrowser,
-    logging::{LogListener, Logging}, tools::Tools,
+    logging::{LogListener, Logging},
+    tools::Tools,
 };
 pub mod logging;
 
@@ -162,8 +163,7 @@ impl Editor {
                             #[cfg(target_os = "linux")]
                             let tracy_exe = "tracy";
 
-                            let result = std::process::Command::new(path.join(tracy_exe))
-                            .spawn();
+                            let result = std::process::Command::new(path.join(tracy_exe)).spawn();
 
                             if let Err(err) = result {
                                 log::error!("Failed to spawn tracy: {}", err);

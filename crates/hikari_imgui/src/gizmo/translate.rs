@@ -1,8 +1,11 @@
-use crate::{GizmoContext, gizmo::math::plane_global_origin};
+use crate::{gizmo::math::plane_global_origin, GizmoContext};
 
 use super::{
     draw::Painter3D,
-    math::{intersect_plane, ray_to_plane_origin, ray_to_ray, segment_to_segment, plane_local_origin, plane_tangent, plane_binormal, plane_size},
+    math::{
+        intersect_plane, plane_binormal, plane_local_origin, plane_size, plane_tangent,
+        ray_to_plane_origin, ray_to_ray, segment_to_segment,
+    },
     ray::Ray,
     subgizmo::SubGizmo,
 };
@@ -46,7 +49,6 @@ pub(crate) fn pick_vector(
     };
 
     if dist <= subgizmo.state.focus_distance {
-
         Some(ray.origin.distance(ray_point))
     } else {
         None
@@ -134,11 +136,7 @@ pub(crate) fn update_plane(
     let state = context.translation_state(subgizmo.id);
     let current_state = *state;
 
-    let new_point = point_on_plane(
-        subgizmo.normal(),
-        plane_global_origin(subgizmo),
-        *ray,
-    )?;
+    let new_point = point_on_plane(subgizmo.normal(), plane_global_origin(subgizmo), *ray)?;
 
     let new_delta = new_point - current_state.start_point;
 

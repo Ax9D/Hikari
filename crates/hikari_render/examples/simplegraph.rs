@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         //.with_level(log::LevelFilter::Info)
         .init()
         .unwrap();
-        
+
     hikari_dev::profiling_init();
     let window = WindowBuilder::new().with_inner_size(LogicalSize::new(WIDTH, HEIGHT));
 

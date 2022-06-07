@@ -1,4 +1,4 @@
-use hikari_math::{Vec2, vec2};
+use hikari_math::{vec2, Vec2};
 use winit::{dpi::PhysicalPosition, event::WindowEvent};
 pub type MouseButtonState = winit::event::ElementState;
 pub type MouseButton = winit::event::MouseButton;

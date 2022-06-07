@@ -2,7 +2,7 @@ use hikari_math::*;
 
 use crate::Viewport;
 
-use super::{subgizmo::{SubGizmo}, Direction};
+use super::{subgizmo::SubGizmo, Direction};
 
 pub(crate) fn world_to_screen(mvp: Mat4, viewport: Viewport, pos: Vec3) -> Option<Vec2> {
     let mut pos = mvp * Vec4::from((pos, 1.0));
@@ -167,7 +167,6 @@ pub fn ray_to_plane_origin(
         (t, f32::MAX)
     }
 }
-
 
 pub(crate) fn plane_binormal(direction: Direction) -> Vec3 {
     match direction {

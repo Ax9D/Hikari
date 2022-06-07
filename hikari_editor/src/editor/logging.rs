@@ -1,10 +1,10 @@
 #![allow(dead_code)]
-use std::{collections::{VecDeque}, ops::Index};
+use std::{collections::VecDeque, ops::Index};
 
+use crate::imgui::{self, ImColor32};
 use chrono::Utc;
 use fern::colors::{Color, ColoredLevelConfig};
 use flume::{self, Receiver, Sender};
-use crate::imgui::{self, ImColor32};
 
 use super::Editor;
 
@@ -103,7 +103,7 @@ impl LogListener {
     }
     pub fn buffer(&mut self) -> &RollingBuffer<Line> {
         self.listen();
-        
+
         &self.buffer
     }
     pub fn len(&self) -> usize {
@@ -237,7 +237,6 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
             let clipper = imgui::ListClipper::new(lines.len() as i32);
             let mut clipper = clipper.begin(ui);
             while clipper.step() {
-
                 for line_ix in clipper.display_start()..clipper.display_end() {
                     hikari::dev::profile_scope!("Draw Lines");
                     let line = &lines[line_ix as usize];
@@ -248,13 +247,10 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
                         log::Level::Debug => ImColor32::from_rgb(142, 68, 173),
                         log::Level::Trace => ImColor32::from_rgb(29, 208, 147),
                     };
-    
+
                     ui.text(line.timestamp.to_string());
                     ui.same_line();
-                    ui.text_colored(
-                        color.to_rgba_f32s(),
-                        line.log_level.to_string(),
-                    );
+                    ui.text_colored(color.to_rgba_f32s(), line.log_level.to_string());
                     ui.same_line();
                     ui.text_wrapped(&line.message);
                 }

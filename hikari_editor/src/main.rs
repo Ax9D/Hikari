@@ -1,3 +1,5 @@
+pub use hikari_imgui as imgui;
+
 use editor::Editor;
 use hikari::input::InputPlugin;
 use hikari::*;

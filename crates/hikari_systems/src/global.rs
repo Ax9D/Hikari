@@ -89,7 +89,9 @@ impl UnsafeGlobalState {
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_unchecked_mut())
     }
-    pub(crate) unsafe fn query<Q: Query>(self: Pin<&Self>) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
+    pub(crate) unsafe fn query<Q: Query>(
+        self: Pin<&Self>,
+    ) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
         Q::Fetch::get(self)
     }
 }
