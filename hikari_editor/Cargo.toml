@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 hikari = {path = "../"}
+hikari_imgui = {path = "../crates/hikari_imgui"}
 winit = "0.25.0"
 log = {version = "^0.4"}
 fern = {version = "0.6", features = ["colored"] }

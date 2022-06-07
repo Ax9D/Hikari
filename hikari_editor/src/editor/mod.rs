@@ -1,5 +1,6 @@
 use clipboard::ClipboardProvider;
 use hikari::render::*;
+use crate::imgui;
 
 use self::{
     content_browser::ContentBrowser,
@@ -8,7 +9,7 @@ use self::{
 pub mod logging;
 
 mod content_browser;
-mod utils;
+//mod utils;
 mod tools;
 
 struct Clipboard(clipboard::ClipboardContext);

@@ -1,8 +1,10 @@
 use std::{ptr::NonNull, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
-use imgui_rs_vulkan_renderer::Options;
-use imgui_winit_support::{HiDpiMode, WinitPlatform};
+
+use hikari_imgui as imgui;
+use hikari_imgui::imgui_winit_support::{HiDpiMode, WinitPlatform};
+use imgui::imgui_rs_vulkan_renderer::{self, Options};
 use parking_lot::Mutex;
 use winit::{event::Event, window::Window};
 

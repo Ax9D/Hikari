@@ -1,0 +1,19 @@
+[package]
+name = "hikari_imgui"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+imgui = {git = "https://github.com/Ax9D/imgui-docking-rs", features = ["docking", "tables-api"]}
+imgui-rs-vulkan-renderer = { git = "https://github.com/Ax9D/imgui-rs-vulkan-renderer", features = ["gpu-allocator"], optional=true }
+imgui-winit-support = { git = "https://github.com/Ax9D/imgui-docking-rs", optional=true }
+arrayvec = "0.7.2"
+nohash-hasher = "0.2.0"
+
+hikari_math = {path = "../hikari_math", features = ["mint"]}
+hikari_dev = {path = "../hikari_dev"}
+[features]
+default = []
+backend = ["imgui-rs-vulkan-renderer", "imgui-winit-support"]

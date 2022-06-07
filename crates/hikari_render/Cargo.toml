@@ -35,9 +35,7 @@ lru = "0.7"
 fxhash = {version = "0.2.1"}
 arrayvec = "0.7"
 
-imgui = {git = "https://github.com/Ax9D/imgui-docking-rs", features = ["docking", "tables-api"], optional = true}
-imgui-rs-vulkan-renderer = { git = "https://github.com/Ax9D/imgui-rs-vulkan-renderer", features = ["gpu-allocator"], optional=true }
-imgui-winit-support = { git = "https://github.com/Ax9D/imgui-docking-rs", optional=true }
+hikari_imgui = { path = "../hikari_imgui", optional = true}
 
 [dev-dependencies]
 simple_logger = "2"
@@ -51,4 +49,4 @@ rayon = "1"
 
 [features]
 default = ["imgui-support"]
-imgui-support = ["imgui", "imgui-winit-support", "imgui-rs-vulkan-renderer"]
+imgui-support = ["hikari_imgui/backend"]

@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use hikari::render::imgui;
+use crate::imgui;
 
-use super::{utils::ImguiExt, Editor};
+use super::{Editor};
 
 pub struct ContentBrowser {
     cwd: PathBuf,
@@ -27,7 +27,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
                 let entry = entry.unwrap();
                 if entry.path().is_dir() {
                     ui.button(entry.file_name().to_str().unwrap());
-                    let folder_dbl_click = ui.is_double_click(imgui::MouseButton::Left);
+                    let folder_dbl_click = ui.is_mouse_clicked(imgui::MouseButton::Left);
                     if folder_dbl_click {
                         editor.content_browser.cwd.push(entry.file_name())
                     }
