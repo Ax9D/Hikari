@@ -315,15 +315,17 @@ impl AllocationData {
 
         let renderpass = &self.renderpasses[ix];
 
-        let framebuffer = super::framebuffer::from_allocation_data(
-            device,
-            graph_resources,
-            &image_handles,
-            renderpass.pass,
-        )?;
+        if pass.record_fn.is_some() {
+            let framebuffer = super::framebuffer::from_allocation_data(
+                device,
+                graph_resources,
+                &image_handles,
+                renderpass.pass,
+            )?;
 
-        if self.framebuffers.insert(ix, framebuffer).is_some() {
-            panic!("Framebuffer with same index already exists");
+            if self.framebuffers.insert(ix, framebuffer).is_some() {
+                panic!("Framebuffer with same index already exists");
+            }
         }
 
         Ok(())

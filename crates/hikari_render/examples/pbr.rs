@@ -232,7 +232,7 @@ fn load_mesh(
 fn depth_prepass(
     device: &Arc<rg::Device>,
     gb: &mut rg::GraphBuilder<Args>,
-) -> rg::Handle<rg::SampledImage> {
+) -> rg::GpuHandle<rg::SampledImage> {
     let shader = rg::ShaderProgramBuilder::vertex_and_fragment(
         "DepthPrepass",
         &rg::ShaderCode {
@@ -345,9 +345,9 @@ fn depth_prepass(
 }
 fn pbr_pass(
     device: &Arc<rg::Device>,
-    depth_prepass: &rg::Handle<rg::SampledImage>,
+    depth_prepass: &rg::GpuHandle<rg::SampledImage>,
     gb: &mut rg::GraphBuilder<Args>,
-) -> rg::Handle<rg::SampledImage> {
+) -> rg::GpuHandle<rg::SampledImage> {
     #[repr(C)]
     #[derive(Debug, Copy, Clone)]
     struct Material {
@@ -584,9 +584,9 @@ fn pbr_pass(
 }
 fn fxaa_pass(
     device: &Arc<rg::Device>,
-    pbr_pass: rg::Handle<rg::SampledImage>,
+    pbr_pass: rg::GpuHandle<rg::SampledImage>,
     gb: &mut rg::GraphBuilder<Args>,
-) -> rg::Handle<rg::SampledImage> {
+) -> rg::GpuHandle<rg::SampledImage> {
     let vertex = r"
     #version 450
     vec2 positions[6] = vec2[](
@@ -673,7 +673,7 @@ fn imgui_pass(
     device: &Arc<rg::Device>,
     imgui: &mut rg::imgui_support::Backend,
     gb: &mut rg::GraphBuilder<Args>,
-) -> rg::Handle<rg::SampledImage> {
+) -> rg::GpuHandle<rg::SampledImage> {
     let mut renderer = rg::imgui_support::Renderer::new(
         device,
         imgui,
@@ -874,8 +874,8 @@ fn imgui_update(
 
 fn composite_pass(
     device: &Arc<rg::Device>,
-    pbr_output: rg::Handle<rg::SampledImage>,
-    imgui_output: rg::Handle<rg::SampledImage>,
+    pbr_output: rg::GpuHandle<rg::SampledImage>,
+    imgui_output: rg::GpuHandle<rg::SampledImage>,
     gb: &mut rg::GraphBuilder<Args>,
 ) {
     let vertex = r"

@@ -20,7 +20,7 @@ pub use command::CommandBuffer;
 pub use command::RenderpassCommands;
 
 pub use resources::*;
-pub use storage::Handle;
+pub use storage::GpuHandle;
 
 pub use pass::compute::*;
 pub use pass::graphics::*;
@@ -71,7 +71,7 @@ impl<'a, T: Args> GraphBuilder<'a, T> {
         name: &str,
         config: ImageConfig,
         size: ImageSize,
-    ) -> Result<Handle<SampledImage>, GraphCreationError> {
+    ) -> Result<GpuHandle<SampledImage>, GraphCreationError> {
         let (width, height) = size.get_physical_size(self.size);
         let image = SampledImage::with_dimensions(self.gfx.device(), width, height, config)
             .map_err(|err| GraphCreationError::AllocationFailed(err.to_string()))?;
@@ -259,7 +259,9 @@ impl<T: Args> Graph<T> {
     pub fn finish(&mut self) -> VkResult<()> {
         self.executor.finish()
     }
-
+    pub fn size(&self) -> (u32, u32) {
+        self.size
+    }
     pub fn resize(
         &mut self,
         new_width: u32,
@@ -281,5 +283,9 @@ impl<T: Args> Graph<T> {
     ///Should be called after done using the graph just before its dropped to ensure gpu resources can be safely deallocated
     pub fn prepare_exit(&mut self) {
         unsafe { self.device.raw().device_wait_idle() }.unwrap();
+    }
+
+    pub fn resources(&self) -> &GraphResources {
+        &self.resources
     }
 }

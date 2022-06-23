@@ -4,7 +4,7 @@ use ash::{prelude::VkResult, vk};
 
 use crate::texture::SampledImage;
 
-use super::{resources::GraphResources, Handle};
+use super::{resources::GraphResources, GpuHandle};
 
 // pub(crate) struct Framebuffer {
 //     device: Arc<crate::Device>,
@@ -16,7 +16,7 @@ use super::{resources::GraphResources, Handle};
 pub(super) fn from_allocation_data(
     device: &Arc<crate::Device>,
     allocation_data: &GraphResources,
-    image_handles: &[Handle<SampledImage>],
+    image_handles: &[GpuHandle<SampledImage>],
     renderpass: vk::RenderPass,
 ) -> VkResult<vk::Framebuffer> {
     let images: Vec<_> = image_handles
@@ -32,13 +32,14 @@ pub(super) fn from_allocation_data(
     let width = images
         .iter()
         .max_by(|a, b| a.width().cmp(&b.width()))
-        .unwrap()
-        .width();
+        .map(|image| image.width())
+        .unwrap_or(0);
+
     let height = images
         .iter()
         .max_by(|a, b| a.height().cmp(&b.height()))
-        .unwrap()
-        .height();
+        .map(|image| image.height())
+        .unwrap_or(0);
 
     let create_info = vk::FramebufferCreateInfo::builder()
         .render_pass(renderpass)

@@ -5,13 +5,13 @@ use std::{
 
 use crate::texture::SampledImage;
 
-use super::{storage::Storage, Handle, ImageSize};
+use super::{storage::Storage, GpuHandle, ImageSize};
 
-pub type HandlesIter<'a> = Values<'a, String, Handle<SampledImage>>;
+pub type HandlesIter<'a> = Values<'a, String, GpuHandle<SampledImage>>;
 
 pub struct GraphResources {
     images: Storage<SampledImage>,
-    img_handles: HashMap<String, Handle<SampledImage>>,
+    img_handles: HashMap<String, GpuHandle<SampledImage>>,
 }
 impl GraphResources {
     pub fn new() -> Self {
@@ -27,7 +27,7 @@ impl GraphResources {
         name: String,
         image: SampledImage,
         size: ImageSize,
-    ) -> Handle<SampledImage> {
+    ) -> GpuHandle<SampledImage> {
         if self.img_handles.get(&name).is_none() {
             let handle = self.images.add(image, size);
 
@@ -39,18 +39,21 @@ impl GraphResources {
     }
 
     #[inline]
-    pub fn get_image(&self, handle: &Handle<SampledImage>) -> Option<&SampledImage> {
+    pub fn get_image(&self, handle: &GpuHandle<SampledImage>) -> Option<&SampledImage> {
         self.images.get(handle)
+    }
+    pub fn get_image_by_name(&self, name: &str) -> Option<&SampledImage> {
+        self.get_image(&self.get_image_handle(name)?)
     }
     #[inline]
     pub fn get_image_with_size(
         &self,
-        handle: &Handle<SampledImage>,
+        handle: &GpuHandle<SampledImage>,
     ) -> Option<(&SampledImage, &ImageSize)> {
         self.images.get_with_metadata(handle)
     }
 
-    pub fn get_image_handle(&self, name: &str) -> Option<Handle<SampledImage>> {
+    pub fn get_image_handle(&self, name: &str) -> Option<GpuHandle<SampledImage>> {
         self.img_handles.get(name).cloned()
     }
     pub fn image_handles(&self) -> HandlesIter {

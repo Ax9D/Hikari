@@ -306,54 +306,55 @@ impl GraphExecutor {
         swapchain_data: Option<(&mut Swapchain, u32)>,
     ) -> VkResult<()> {
         hikari_dev::profile_function!();
-
-        let (vk_pass, framebuffer) = if pass.present_to_swapchain {
-            let (swapchain, image_ix) = swapchain_data.expect("Swapchain not provided");
-            (
-                swapchain.renderpass(),
-                swapchain.framebuffers()[image_ix as usize],
-            )
-        } else {
-            (
-                allocation_data.get_renderpass(ix),
-                allocation_data.get_framebuffer(ix),
-            )
-        };
-
-        let (width, height) = pass.render_area.get_physical_size(size);
-        let area = vk::Rect2D {
-            offset: vk::Offset2D { x: 0, y: 0 },
-            extent: vk::Extent2D { width, height },
-        };
-
         let barriers = allocation_data.get_barrier_storage(ix);
 
         unsafe {
             barriers.apply(device, cmd.raw());
         }
-        let mut rcmd = cmd.begin_renderpass(super::command::RenderpassBeginInfo {
-            renderpass: vk_pass,
-            area,
-            framebuffer,
-        });
 
-        rcmd.set_viewport(0.0, 0.0, width as f32, height as f32);
-        rcmd.set_scissor(0, 0, width, height);
+        if pass.record_fn.is_some() {
+            let (vk_pass, framebuffer) = if pass.present_to_swapchain {
+                let (swapchain, image_ix) = swapchain_data.expect("Swapchain not provided");
+                (
+                    swapchain.renderpass(),
+                    swapchain.framebuffers()[image_ix as usize],
+                )
+            } else {
+                (
+                    allocation_data.get_renderpass(ix),
+                    allocation_data.get_framebuffer(ix),
+                )
+            };
+    
+            let (width, height) = pass.render_area.get_physical_size(size);
+            let area = vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: vk::Extent2D { width, height },
+            };
+            
+            let mut rcmd = cmd.begin_renderpass(super::command::RenderpassBeginInfo {
+                renderpass: vk_pass,
+                area,
+                framebuffer,
+            });
 
-        //log::debug!("Binding renderpass resources");
-        for input in pass.inputs() {
-            match input {
-                crate::graph::pass::Input::SampleImage(handle, _, binding) => {
-                    let image = resources.get_image(handle).unwrap();
+            rcmd.set_viewport(0.0, 0.0, width as f32, height as f32);
+            rcmd.set_scissor(0, 0, width, height);
 
-                    rcmd.set_image(image, 0, *binding);
+            //log::debug!("Binding renderpass resources");
+            for input in pass.inputs() {
+                match input {
+                    crate::graph::pass::Input::SampleImage(handle, _, binding) => {
+                        let image = resources.get_image(handle).unwrap();
+
+                        rcmd.set_image(image, 0, *binding);
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
+
+            (pass.record_fn.as_mut().unwrap())(&mut rcmd, args);
         }
-
-        (pass.record_fn)(&mut rcmd, args);
-
         Ok(())
     }
     fn submit(

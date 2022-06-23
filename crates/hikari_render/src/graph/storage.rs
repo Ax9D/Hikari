@@ -3,11 +3,11 @@ use std::marker::PhantomData;
 
 /// An opaque handle to resources used by the Graph
 #[derive(Copy)]
-pub struct Handle<T> {
+pub struct GpuHandle<T> {
     pub(crate) id: usize,
     _phantom: PhantomData<T>,
 }
-impl<T> Clone for Handle<T> {
+impl<T> Clone for GpuHandle<T> {
     fn clone(&self) -> Self {
         Self {
             id: self.id,
@@ -15,21 +15,21 @@ impl<T> Clone for Handle<T> {
         }
     }
 }
-impl<T> std::hash::Hash for Handle<T> {
+impl<T> std::hash::Hash for GpuHandle<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }
 }
 
-impl<T> PartialEq for Handle<T> {
+impl<T> PartialEq for GpuHandle<T> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
-impl<T> Eq for Handle<T> {}
+impl<T> Eq for GpuHandle<T> {}
 
 #[allow(clippy::from_over_into)]
-impl<T: 'static> Into<ErasedHandle> for Handle<T> {
+impl<T: 'static> Into<ErasedHandle> for GpuHandle<T> {
     fn into(self) -> ErasedHandle {
         ErasedHandle {
             id: self.id,
@@ -44,13 +44,13 @@ use crate::texture::SampledImage;
 
 use super::ImageSize;
 
-impl<T> Debug for Handle<T> {
+impl<T> Debug for GpuHandle<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Handle").field("id", &self.id).finish()
     }
 }
 
-impl<T> Handle<T> {
+impl<T> GpuHandle<T> {
     pub(crate) fn new(id: usize) -> Self {
         Self {
             id,
@@ -70,9 +70,9 @@ impl ErasedHandle {
     pub fn is_of_type<T: 'static>(&self) -> bool {
         self.type_id == TypeId::of::<T>()
     }
-    pub fn into_typed<T: 'static>(self) -> Option<Handle<T>> {
+    pub fn into_typed<T: 'static>(self) -> Option<GpuHandle<T>> {
         if self.is_of_type::<T>() {
-            Some(Handle::new(self.id))
+            Some(GpuHandle::new(self.id))
         } else {
             None
         }
@@ -104,11 +104,11 @@ impl<T: Resource> ResourceList<T> {
         Self { inner: Vec::new() }
     }
     #[inline(always)]
-    pub fn get(&self, handle: &Handle<T>) -> Option<&(T, T::Metadata)> {
+    pub fn get(&self, handle: &GpuHandle<T>) -> Option<&(T, T::Metadata)> {
         self.inner.get(handle.id)
     }
     #[inline(always)]
-    pub fn get_mut(&mut self, handle: &Handle<T>) -> Option<&mut (T, T::Metadata)> {
+    pub fn get_mut(&mut self, handle: &GpuHandle<T>) -> Option<&mut (T, T::Metadata)> {
         self.inner.get_mut(handle.id)
     }
 
@@ -126,11 +126,11 @@ pub struct HandleIter<'a, T> {
     _phantom: PhantomData<&'a T>,
 }
 impl<'a, T> Iterator for HandleIter<'a, T> {
-    type Item = Handle<T>;
+    type Item = GpuHandle<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.ix < self.len {
-            let handle = Handle::new(self.ix);
+            let handle = GpuHandle::new(self.ix);
             self.ix += 1;
             Some(handle)
         } else {
@@ -147,23 +147,23 @@ impl<T: Resource> Storage<T> {
     pub fn new() -> Self {
         Self { inner: Vec::new() }
     }
-    pub fn add(&mut self, data: T, metadata: T::Metadata) -> Handle<T> {
+    pub fn add(&mut self, data: T, metadata: T::Metadata) -> GpuHandle<T> {
         let id = self.inner.len();
         self.inner.push((data, metadata));
 
-        Handle::new(id)
+        GpuHandle::new(id)
     }
 
     #[inline]
-    pub fn get(&self, handle: &Handle<T>) -> Option<&T> {
+    pub fn get(&self, handle: &GpuHandle<T>) -> Option<&T> {
         self.inner.get(handle.id).map(|(data, _)| data)
     }
     #[inline]
-    pub fn get_mut(&mut self, handle: &Handle<T>) -> Option<&mut T> {
+    pub fn get_mut(&mut self, handle: &GpuHandle<T>) -> Option<&mut T> {
         self.inner.get_mut(handle.id).map(|(data, _)| data)
     }
     #[inline]
-    pub fn get_with_metadata(&self, handle: &Handle<T>) -> Option<(&T, &T::Metadata)> {
+    pub fn get_with_metadata(&self, handle: &GpuHandle<T>) -> Option<(&T, &T::Metadata)> {
         self.inner
             .get(handle.id)
             .map(|(data, metadata)| (data, metadata))
@@ -171,7 +171,7 @@ impl<T: Resource> Storage<T> {
     #[inline]
     pub fn get_with_metadata_mut(
         &mut self,
-        handle: &Handle<T>,
+        handle: &GpuHandle<T>,
     ) -> Option<(&mut T, &mut T::Metadata)> {
         self.inner
             .get_mut(handle.id)
@@ -180,7 +180,7 @@ impl<T: Resource> Storage<T> {
 
     pub fn replace(
         &mut self,
-        handle: &Handle<T>,
+        handle: &GpuHandle<T>,
         new_data: T,
         new_metadata: T::Metadata,
     ) -> Option<(T, T::Metadata)> {

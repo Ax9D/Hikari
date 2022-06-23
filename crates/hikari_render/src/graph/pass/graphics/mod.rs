@@ -1,7 +1,7 @@
 pub mod pipeline;
 use vk_sync_fork::AccessType;
 
-use crate::{graph::Handle, texture::SampledImage, Args, ByRef, RenderpassCommands};
+use crate::{graph::GpuHandle, texture::SampledImage, Args, ByRef, RenderpassCommands};
 
 use super::{AttachmentConfig, ImageSize, Input, Output};
 
@@ -15,7 +15,7 @@ pub struct Renderpass<T: Args> {
     outputs: Vec<Output>,
     pub(crate) present_to_swapchain: bool,
     pub(crate) record_fn:
-        Box<dyn FnMut(&mut RenderpassCommands, <T::Ref as ByRef>::Item) + Send + Sync>,
+        Option<Box<dyn FnMut(&mut RenderpassCommands, <T::Ref as ByRef>::Item) + Send + Sync>>,
 }
 
 impl<T: Args> Renderpass<T> {
@@ -34,7 +34,19 @@ impl<T: Args> Renderpass<T> {
             inputs: Vec::new(),
             outputs: Vec::new(),
             present_to_swapchain: false,
-            record_fn: Box::new(record_fn),
+            record_fn: Some(Box::new(record_fn)),
+        }
+    }
+    // Create a dummy renderpass. Useful for layout transitioning resources for use outside of the graph
+    pub fn empty(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            id: crate::util::quick_hash(name),
+            render_area: ImageSize::default(),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            present_to_swapchain: false,
+            record_fn: None,
         }
     }
     pub fn name(&self) -> &str {
@@ -49,7 +61,7 @@ impl<T: Args> Renderpass<T> {
     pub fn outputs(&self) -> &[Output] {
         &self.outputs
     }
-    fn read_image_check(&mut self, image: &Handle<SampledImage>, access_type: AccessType) {
+    fn read_image_check(&mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) {
         if self.inputs.iter().any(|input| match input {
             Input::SampleImage(existing_image, _, _) | Input::ReadImage(existing_image, _) => {
                 existing_image == image
@@ -73,7 +85,7 @@ impl<T: Args> Renderpass<T> {
             ),
         }
     }
-    pub fn read_image(mut self, image: &Handle<SampledImage>, access_type: AccessType) -> Self {
+    pub fn read_image(mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) -> Self {
         self.read_image_check(image, access_type);
 
         self.inputs
@@ -83,7 +95,7 @@ impl<T: Args> Renderpass<T> {
     /// Used to add an "input" image to this pass, which will be automatically bound at the specified binding and be available in shaders for sampling
     pub fn sample_image(
         mut self,
-        image: &Handle<SampledImage>,
+        image: &GpuHandle<SampledImage>,
         access_type: AccessType,
         binding: u32,
     ) -> Self {
@@ -162,7 +174,7 @@ impl<T: Args> Renderpass<T> {
     /// Draws to the particular image as a render attachment when the renderpass is executed
     pub fn draw_image(
         mut self,
-        image: &Handle<SampledImage>,
+        image: &GpuHandle<SampledImage>,
         attachment_config: AttachmentConfig,
     ) -> Self {
         // if self.outputs.iter().any(|output| match output {
