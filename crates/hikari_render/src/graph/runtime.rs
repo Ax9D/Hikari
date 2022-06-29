@@ -143,11 +143,7 @@ impl GraphExecutor {
         unsafe {
             hikari_dev::profile_scope!("Waiting on GPU");
             let fences = &[frame_state.last_frame().render_finished_fence];
-            device.raw().wait_for_fences(fences, true, 1000000000)?;
-
-            device
-                .raw()
-                .reset_fences(&[frame_state.current_frame().render_finished_fence])?;
+            device.raw().wait_for_fences(fences, true, 5_000_000_000)?;
         }
 
         Ok(())
@@ -364,6 +360,11 @@ impl GraphExecutor {
         signal_semaphores: &[vk::Semaphore],
         fence: vk::Fence,
     ) -> VkResult<()> {
+        unsafe {
+            device
+            .raw()
+            .reset_fences(&[fence])?;
+        }
         let cbs = [cmd.raw()];
         let submit_info = vk::SubmitInfo::builder()
             .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
