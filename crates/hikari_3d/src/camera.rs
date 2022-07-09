@@ -6,11 +6,20 @@ pub struct Camera {
     pub projection: Projection,
 }
 
+impl Default for Camera {
+    fn default() -> Self {
+        Self { near: 0.1,
+        far: 1000.0,
+    exposure: 1.0,
+projection: Projection::Perspective(45.0) }
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub enum Projection {
     Perspective(f32), //fov in degrees
     Orthographic,
 }
+
 
 impl Camera {
     pub fn get_projection_matrix(&self, width: u32, height: u32) -> hikari_math::Mat4 {
