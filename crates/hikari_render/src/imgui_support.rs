@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use once_cell::sync::OnceCell;
+
 use std::{ptr::NonNull, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
@@ -7,6 +10,9 @@ use hikari_imgui::imgui_winit_support::{HiDpiMode, WinitPlatform};
 use imgui::imgui_rs_vulkan_renderer::{self, Options};
 use parking_lot::Mutex;
 use winit::{event::Event, window::Window};
+
+use crate::SampledImage;
+use crate::descriptor::{ DescriptorSetLayout, DescriptorSetAllocator, DescriptorSetState};
 
 unsafe impl Send for SharedDrawData {}
 unsafe impl Sync for SharedDrawData {}
@@ -122,6 +128,7 @@ pub struct Renderer {
     device: Arc<crate::Device>,
     renderer: imgui_rs_vulkan_renderer::Renderer,
     compatible_renderpass: vk::RenderPass,
+    textures: TextureMap
 }
 
 impl Renderer {
@@ -224,6 +231,7 @@ impl Renderer {
             device: device.clone(),
             renderer,
             compatible_renderpass,
+            textures: TextureMap::new(&device)?
         })
     }
     /// Assumes that a compatible renderpass has been started
@@ -249,6 +257,19 @@ impl Renderer {
         self.renderer.cmd_draw(cmd, draw_data)?;
         Ok(())
     }
+
+    pub fn get_texture_id(&mut self, sampled_image: &SampledImage) -> imgui::TextureId {
+        if let Some(texture_id) = self.textures.get_texture_id(sampled_image) {
+            return texture_id;
+        }
+
+        let set = self.textures.get_descriptor_set(sampled_image);
+        let new_id = self.renderer.textures().insert(set);
+
+        self.textures.register_texture_id(sampled_image, new_id);
+
+        new_id
+    }
 }
 
 impl Drop for Renderer {
@@ -258,5 +279,70 @@ impl Drop for Renderer {
                 .raw()
                 .destroy_render_pass(self.compatible_renderpass, None);
         }
+    }
+}
+
+pub trait TextureExt {
+    fn initialize_texture_support(renderer: Arc<Mutex<Renderer>>);
+    fn get_texture_id(&self, image: &SampledImage) -> imgui::TextureId;
+}
+static IMGUI_RENDERER: OnceCell<Arc<Mutex<Renderer>>> = OnceCell::new();
+
+impl TextureExt for imgui::Ui {
+    fn initialize_texture_support(renderer: Arc<Mutex<Renderer>>) {
+        let _ = IMGUI_RENDERER.set(renderer);
+    }
+    fn get_texture_id(&self, image: &SampledImage) -> imgui::TextureId {
+        hikari_dev::profile_function!();
+        IMGUI_RENDERER.get().expect("Renderer has not been initialized")
+        .lock()
+        .get_texture_id(image)
+    }
+}
+
+struct TextureMap {
+    device: Arc<crate::Device>,
+    set_allocator: DescriptorSetAllocator,
+    set_state: DescriptorSetState,
+    image_to_set: HashMap<vk::ImageView, vk::DescriptorSet, crate::util::BuildHasher>,
+    image_to_id: HashMap<vk::ImageView, imgui::TextureId, crate::util::BuildHasher>,
+}
+
+impl TextureMap {
+    pub fn new(device: &Arc<crate::Device>) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut set_layout = DescriptorSetLayout::builder();
+        set_layout.with_binding(0, vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 1, vk::ShaderStageFlags::FRAGMENT);
+
+        let set_layout = device.set_layout_cache().get_layout(&set_layout)?;
+
+        let set_allocator = DescriptorSetAllocator::new(device, set_layout)?;
+
+        let set_state = DescriptorSetState::new(0, set_layout);
+        Ok(Self {
+            device: device.clone(),
+            set_allocator,
+            set_state,
+            image_to_set: Default::default(),
+            image_to_id: Default::default()
+        })
+
+    }
+    pub fn register_texture_id(&mut self, image: &SampledImage, id: imgui::TextureId) {
+        self.image_to_id.insert(image.image_view(1).unwrap(), id);
+    } 
+    pub fn get_texture_id(&self, image: &SampledImage) -> Option<imgui::TextureId> {
+        self.image_to_id.get(&image.image_view(1).unwrap()).cloned()
+    }
+    pub fn get_descriptor_set(&mut self, image: &SampledImage) -> vk::DescriptorSet {
+        let set_allocator = &mut self.set_allocator;
+        let set_state = &mut self.set_state;
+        let image_view = image.image_view(1).unwrap();
+        let sampler = image.sampler();
+        let set = self.image_to_set.entry(image_view).or_insert_with(|| {
+            set_state.set_image(0, 0, image_view, sampler);
+            set_allocator.get(&set_state)
+        });
+
+        *set
     }
 }
