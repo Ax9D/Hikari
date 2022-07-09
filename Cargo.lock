@@ -910,6 +910,7 @@ dependencies = [
  "base64 0.13.0",
  "gltf",
  "hikari_asset",
+ "hikari_core",
  "hikari_math",
  "hikari_render",
  "image 0.24.2",
@@ -928,22 +929,14 @@ name = "hikari_asset"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.13.0",
  "flume",
- "gltf",
- "hikari_core",
- "hikari_math",
- "image 0.24.2",
- "itertools",
  "log",
  "once_cell",
  "parking_lot 0.12.0",
- "rand",
  "rayon",
  "serde",
  "serde_yaml",
  "simple_logger 2.1.0",
- "thiserror",
  "uuid",
 ]
 
@@ -2569,9 +2562,9 @@ checksum = "52fee519a3e570f7df377a06a1a7775cdbfb7aa460be7e08de2b1f0e69973a44"
 
 [[package]]
 name = "uuid"
-version = "0.8.2"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
+checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
 dependencies = [
  "getrandom",
  "serde",
