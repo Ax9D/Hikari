@@ -1,9 +1,10 @@
 pub mod scene;
+
 pub use scene::*;
 
 #[cfg(feature = "serialize")]
 pub mod serialize;
 
-pub trait Component: hecs::Component {}
+pub trait Component: Send + Sync + 'static {}
 
-impl<T: hecs::Component> Component for T {}
+impl<T: Send + Sync + 'static> Component for T {}
