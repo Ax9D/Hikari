@@ -10,11 +10,13 @@ winit = "0.25"
 log = "0.4"
 serde = {version = "1.0", features = ["derive"], optional = true}
 
-hecs = "0.7.5"
+hecs = "0.7"
 
 hikari_systems = {path = "../hikari_systems"}
 hikari_dev = {path = "../hikari_dev"}
-
+hikari_math = {path = "../hikari_math"}
+hikari_asset = {path = "../hikari_asset"}
+rayon = "1"
 
 [features]
 default = ["serialize"]
