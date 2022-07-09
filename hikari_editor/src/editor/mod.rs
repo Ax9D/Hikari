@@ -1,17 +1,24 @@
-use crate::imgui;
-use clipboard::ClipboardProvider;
-use hikari::render::*;
-
 use self::{
+    components::EditorComponents,
     content_browser::ContentBrowser,
     logging::{LogListener, Logging},
+    outliner::Outliner,
+    properties::Properties,
     tools::Tools,
 };
+use crate::{imgui, EngineState};
+use clipboard::ClipboardProvider;
+use hikari::{core::Game, asset::AssetManager};
 pub mod logging;
 
-mod content_browser;
 //mod utils;
+mod component_impls;
+mod components;
+mod content_browser;
+mod outliner;
+mod properties;
 mod tools;
+mod viewport;
 
 struct Clipboard(clipboard::ClipboardContext);
 impl Clipboard {
@@ -34,11 +41,20 @@ pub struct EditorConfig {
     pub log_listener: LogListener,
     pub hidpi_factor: f32,
 }
+
+#[derive(PartialEq, Eq)]
+pub enum RenameState {
+    Idle,
+    Renaming(imgui::Id, String, i32),
+}
 pub struct Editor {
+    outliner: Outliner,
+    properties: Properties,
     content_browser: ContentBrowser,
     logging: Logging,
     tools: Tools,
     show_demo: bool,
+    rename_state: RenameState,
 }
 
 impl Editor {
@@ -100,7 +116,7 @@ impl Editor {
         style.colors[imgui::StyleColor::SliderGrab as usize] = [0.71, 0.71, 0.71, 1.00];
         style.colors[imgui::StyleColor::DockingPreview as usize] = [0.36, 0.37, 0.38, 0.70];
     }
-    pub fn new(ctx: &mut imgui::Context, config: EditorConfig) -> Self {
+    pub fn init(game: &mut Game, ctx: &mut imgui::Context, config: EditorConfig) {
         ctx.style_mut().tab_rounding = 0.0;
         ctx.style_mut().frame_rounding = 2.0;
         ctx.io_mut().config_flags = imgui::ConfigFlags::DOCKING_ENABLE;
@@ -117,14 +133,30 @@ impl Editor {
             log::error!("Failed to init clipboard");
         }
         Self::set_dark_theme(ctx);
-        Self {
+
+        let mut components = EditorComponents::default();
+        component_impls::register_components(&mut components);
+
+        let mut editor = Self {
             logging: Logging::new(config.log_listener),
             tools: Tools::new(),
             show_demo: false,
             content_browser: ContentBrowser::new(),
+            outliner: Outliner::default(),
+            properties: Properties::default(),
+            rename_state: RenameState::Idle,
+        };
+        {
+        //let _sponza = game.get::<AssetManager>().load::<hikari::g3d::Scene>(std::path::Path::new("assets/models/sponza/sponza.glb")).unwrap();
+        let mut world = game.get_mut::<hikari::core::World>();
+        let entity = editor.outliner.add_entity(&mut world, "Camera");
+        world.add_component(entity, hikari::g3d::Camera::default()).expect("Failed to add camera");
         }
+        game.add_state(editor);
+        game.add_state(components);
+
     }
-    pub fn run(&mut self, ui: &imgui::Ui) {
+    pub fn run(&mut self, ui: &imgui::Ui, state: EngineState) {
         ui.window("Main")
             .flags(
                 imgui::WindowFlags::NO_DECORATION
@@ -158,6 +190,7 @@ impl Editor {
                     ui.menu("Tools", || {
                         if ui.menu_item("Start Tracy") {
                             let path = std::path::Path::new("./tools/");
+
                             #[cfg(target_os = "windows")]
                             let tracy_exe = "Tracy.exe";
                             #[cfg(target_os = "linux")]
@@ -176,34 +209,15 @@ impl Editor {
                 });
             });
 
-        self.outliner(ui);
-        self.properties(ui);
-        content_browser::draw(ui, self);
-        self.viewport(ui);
+        content_browser::draw(ui, self, state).unwrap();
+        viewport::draw(ui, self, state).expect("Failed to draw viewport");
+        outliner::draw(ui, self, state).unwrap();
         logging::draw(ui, self);
+        properties::draw(ui, self, state).unwrap();
 
         if self.show_demo {
             ui.show_demo_window(&mut self.show_demo);
         }
-    }
-
-    fn outliner(&mut self, ui: &imgui::Ui) {
-        ui.window("Outliner")
-            .size([300.0, 400.0], imgui::Condition::Once)
-            .resizable(true)
-            .build(|| {});
-    }
-    fn properties(&mut self, ui: &imgui::Ui) {
-        ui.window("Properties")
-            .size([300.0, 400.0], imgui::Condition::Once)
-            .resizable(true)
-            .build(|| {});
-    }
-    fn viewport(&mut self, ui: &imgui::Ui) {
-        ui.window("Viewport")
-            .size([950.0, 200.0], imgui::Condition::Once)
-            .resizable(true)
-            .build(|| {});
     }
 
     pub fn handle_exit(&mut self) {
