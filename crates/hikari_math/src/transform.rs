@@ -1,8 +1,9 @@
+use crate::*;
 #[derive(Copy, Clone, Debug)]
 pub struct Transform {
-    pub position: glam::Vec3,
-    pub rotation: glam::Quat,
-    pub scale: glam::Vec3,
+    pub position: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
 }
 
 impl Default for Transform {
@@ -16,6 +17,12 @@ impl Default for Transform {
 }
 
 impl Transform {
+    pub fn from_position(position: Vec3) -> Self {
+        Self {
+            position,
+            ..Default::default()
+        }
+    }
     #[inline]
     pub fn get_matrix(&self) -> glam::Mat4 {
         glam::Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
