@@ -18,7 +18,7 @@ fn format_size(format: vk::Format) -> u32 {
         | vk::Format::R32G32B32A32_UINT => 4 * 4,
         vk::Format::D16_UNORM => 2,
         vk::Format::D16_UNORM_S8_UINT => 3,
-        vk::Format::D24_UNORM_S8_UINT => 3,
+        vk::Format::D24_UNORM_S8_UINT => 4,
         vk::Format::D32_SFLOAT => 4,
         vk::Format::D32_SFLOAT_S8_UINT => 5,
         _ => todo!(),
@@ -310,6 +310,7 @@ impl SampledImage {
             slice.copy_from_slice(data);
         }
         unsafe {
+            hikari_dev::profile_scope!("Image Upload");
             device.submit_commands_immediate(|cmd| {
                 let device = device.raw();
 
@@ -346,12 +347,13 @@ impl SampledImage {
                     image,
                     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                     &buffer_copy_region,
-                );
+                );                
                 Ok(())
             })?;
 
             device.submit_commands_immediate(|cmd| {
                 if vkconfig.mip_levels > 1 {
+                    hikari_dev::profile_scope!("Generate mips");
                     Self::generate_mips(device.raw(), cmd, image, width, height, &vkconfig);
                 } else {
                     crate::barrier::image_memory_barrier(
@@ -367,7 +369,6 @@ impl SampledImage {
                         vk::PipelineStageFlags::FRAGMENT_SHADER,
                     );
                 }
-
                 Ok(())
             })?;
         }
@@ -395,7 +396,7 @@ impl SampledImage {
             download_buffer,
         })
     }
-    fn generate_mips(
+    fn  generate_mips(
         device: &ash::Device,
         cmd: vk::CommandBuffer,
         image: vk::Image,
