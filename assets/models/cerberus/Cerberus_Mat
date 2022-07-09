@@ -1,0 +1,24 @@
+---
+albedo:
+  uuid: b5b246b2-4d05-4450-94f3-964069f81135
+  path: /home/atri/Hikari/assets/models/cerberus/cerberus_baseColor.png
+albedo_set: 0
+albedo_factor:
+  - 1.0
+  - 1.0
+  - 1.0
+  - 1.0
+roughness:
+  uuid: 67f96c3d-a0c4-4e5e-bbe2-f80d6cb99cb2
+  path: /home/atri/Hikari/assets/models/cerberus/cerberus_roughnessMetallic.png
+roughness_set: 0
+roughness_factor: 1.0
+metallic:
+  uuid: 67f96c3d-a0c4-4e5e-bbe2-f80d6cb99cb2
+  path: /home/atri/Hikari/assets/models/cerberus/cerberus_roughnessMetallic.png
+metallic_set: 0
+metallic_factor: 1.0
+normal:
+  uuid: feea69a7-e013-471f-9404-93112797557e
+  path: /home/atri/Hikari/assets/models/cerberus/cerberus_normal.png
+normal_set: 0
