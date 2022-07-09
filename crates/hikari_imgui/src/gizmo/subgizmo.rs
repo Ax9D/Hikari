@@ -1,7 +1,7 @@
 use hikari_math::{Transform, Vec3};
 use imgui::{ImColor32, Ui};
 
-use crate::{GizmoContext, GizmoState, GizmoStyle};
+use super::{GizmoContext, GizmoState, GizmoStyle};
 
 use super::{ray::Ray, rotate, scale, translate, Direction};
 

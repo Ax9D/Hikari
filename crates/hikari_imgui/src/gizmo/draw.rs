@@ -3,7 +3,9 @@ use std::f32::consts::TAU;
 use hikari_math::{Mat4, Vec3};
 use imgui::ImColor32;
 
-use crate::{gizmo::math::world_to_screen, Viewport};
+use crate::{gizmo::math::world_to_screen};
+
+use super::Viewport;
 
 pub(crate) struct Painter3D<'ui> {
     mvp: Mat4,
