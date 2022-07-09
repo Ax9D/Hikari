@@ -76,7 +76,7 @@ impl TextureConfig {
 
 use std::sync::Arc;
 
-use hikari_asset::{Asset, Load, LoadContext, MetaData};
+use hikari_asset::{Asset, LoadContext, Loader};
 use hikari_render::*;
 
 pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageConfig {
@@ -163,28 +163,51 @@ pub struct TextureLoader {
 }
 
 impl Asset for Texture2D {
-    const NAME: &'static str = "Texture2D";
-
-    fn extensions<'a>() -> &'a [&'static str] {
-        &["png", "jpeg", "jpg"]
-    }
+    type Settings = TextureConfig;
 }
-impl Load for Texture2D {
-    type Loader = TextureLoader;
-    type LoadSettings = TextureConfig;
-
+impl Loader for TextureLoader {
     fn load(
-        loader: &Self::Loader,
-        bytes: &[u8],
-        meta: &MetaData<Self>,
-        _context: &mut LoadContext,
-    ) -> Result<Self, hikari_asset::Error> {
-        let image = image::load_from_memory(bytes)?;
+        &self, 
+        context: &mut LoadContext,
+    ) -> anyhow::Result<()> {
+        let image = match context.source() {
+            hikari_asset::Source::FileSystem(path) => image::open(path)?,
+            hikari_asset::Source::Data(_, data) => image::load_from_memory(data)?,
+        };
         let image = image.to_rgba8();
         let data = image.as_bytes();
         let width = image.width();
         let height = image.height();
 
-        Self::new(&loader.device, data, width, height, meta.settings)
+        let texture = Texture2D::new(&self.device, data, width, height, *context.settings::<Texture2D>())?;
+        context.set_asset(texture);
+
+        Ok(())
     }
+
+    fn extensions(&self) -> &[&str] {
+        &["png", "jpg", "jpeg"]
+    }
+}
+
+
+#[test]
+fn parallel_load() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::*;
+    use crate::image::*;
+    use rayon::prelude::*;
+
+    let gfx = Gfx::headless(GfxConfig {
+        debug: true,
+        features: Features::default(),
+        vsync: false,
+    })?;
+
+    let path = "../../assets/models/sponza/14930275953430797156.png";
+    let (image, width, height) = image::open_rgba8(path).unwrap();
+
+    let textures: Vec<_> = (0..1000).into_par_iter().map(|_| {
+        Texture2D::new(gfx.device(), &image, width, height, TextureConfig::default()).unwrap()
+    }).collect();
+    Ok(())
 }

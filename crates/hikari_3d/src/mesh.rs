@@ -1,8 +1,8 @@
-use hikari_asset::Handle;
+use hikari_asset::{Handle};
 use hikari_math::*;
-use hikari_render::GpuBuffer;
+use hikari_render::{GpuBuffer};
 
-use crate::Material;
+use crate::{Material, Scene};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -25,4 +25,14 @@ pub struct Mesh {
 pub fn default_normals(n: usize) -> Vec<Vec3> {
     //Flat normals
     vec![Vec3::ZERO; n]
+}
+
+#[derive(Clone)]
+pub enum MeshSource {
+    Scene(Handle<Scene>, usize),
+    None,
+}
+#[derive(Clone)]
+pub struct MeshRender {
+    pub source: MeshSource
 }

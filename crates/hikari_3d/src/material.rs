@@ -1,12 +1,12 @@
 use hikari_asset::Handle;
-use hikari_asset::MetaData;
-use hikari_asset::{Asset, Load};
+use hikari_asset::LoadContext;
+use hikari_asset::{Asset, Loader};
 use hikari_math::*;
 use serde::{Deserialize, Serialize};
 
 use crate::texture::Texture2D;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Material {
     pub albedo: Option<Handle<Texture2D>>,
     pub albedo_set: i32,
@@ -22,27 +22,25 @@ pub struct Material {
 }
 
 impl Asset for Material {
-    const NAME: &'static str = "Material";
-
-    fn extensions<'a>() -> &'a [&'static str] {
-        &["hmat"]
-    }
+    type Settings = ();
 }
+pub struct MaterialLoader;
 
-impl Load for Material {
-    type Loader = ();
+impl Loader for MaterialLoader {
 
-    type LoadSettings = ();
-
-    fn load(
-        _loader: &Self::Loader,
-        data: &[u8],
-        _meta: &MetaData<Self>,
-        _context: &mut hikari_asset::LoadContext,
-    ) -> Result<Self, hikari_asset::Error>
+    fn load(&self, context: &mut LoadContext) -> anyhow::Result<()>
     where
         Self: Sized,
     {
-        Ok(serde_yaml::from_slice(data)?)
+        let material: Material = match context.source() {
+            hikari_asset::Source::FileSystem(path) => serde_yaml::from_str(&std::fs::read_to_string(path)?)?,
+            hikari_asset::Source::Data(_, data) => serde_yaml::from_slice(data)?,
+        };
+        context.set_asset(material);
+        Ok(())
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["hmat"]
     }
 }

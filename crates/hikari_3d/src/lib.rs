@@ -12,6 +12,9 @@ use std::ffi::OsStr;
 
 pub use camera::*;
 pub use error::Error;
+use hikari_asset::AssetManager;
+use hikari_core::Plugin;
+use hikari_render::Gfx;
 pub use light::*;
 pub use material::*;
 pub use mesh::*;
@@ -34,3 +37,22 @@ impl MeshFormat {
 }
 
 pub mod old;
+
+
+pub struct Plugin3D;
+
+impl Plugin for Plugin3D {
+    fn build(self, game: &mut hikari_core::Game) {
+        game.create_asset::<Texture2D>();
+        game.create_asset::<Material>();
+        game.create_asset::<Scene>();
+
+        let gfx = game.get::<Gfx>();
+        let mut manager = game.get_mut::<AssetManager>();
+        manager.add_loader::<Texture2D, TextureLoader>(TextureLoader {
+            device: gfx.device().clone()
+        });
+        manager.add_loader::<Material, MaterialLoader>(MaterialLoader);
+        manager.add_loader::<Scene, GLTFLoader>(GLTFLoader { device: gfx.device().clone() });
+    }
+}

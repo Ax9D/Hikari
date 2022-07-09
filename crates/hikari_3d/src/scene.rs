@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use hikari_asset::{Asset, Load};
+use hikari_asset::{Asset, Loader, LoadContext};
 
 use crate::{Camera, Mesh, MeshFormat};
 
@@ -8,47 +8,36 @@ pub struct Scene {
     pub meshes: Vec<Mesh>,
     pub camera: Camera,
 }
-pub struct SceneLoader {
+pub struct GLTFLoader {
     pub device: Arc<hikari_render::Device>,
 }
-impl Load for Scene {
-    type Loader = SceneLoader;
+impl Loader for GLTFLoader {
+    fn load(&self, context: &mut LoadContext) -> anyhow::Result<()> {
+        let path = match context.source() {
+            hikari_asset::Source::FileSystem(path) => path.as_path(),
+            hikari_asset::Source::Data(_, _) => todo!(),
+        };
 
-    type LoadSettings = ();
+        let path = path.to_owned();
 
-    fn load(
-        loader: &Self::Loader,
-        data: &[u8],
-        meta: &hikari_asset::MetaData<Self>,
-        context: &mut hikari_asset::LoadContext,
-    ) -> Result<Self, hikari_asset::Error>
-    where
-        Self: Sized,
-    {
-        let path = &meta.data_path;
-        let extension = path
-            .extension()
-            .ok_or(crate::Error::FailedToIdentifyFormat(
-                path.as_os_str().to_owned(),
-            ))?;
+        let data = std::fs::read(&path)?;
+        let scene = crate::gltf::load_scene(&self.device, &path, &data, context)?;
 
-        let format = MeshFormat::from_extension(extension)?;
+        context.set_asset(scene);
 
-        match format {
-            MeshFormat::Gltf => crate::gltf::load_scene(&loader.device, path, data, context),
-            MeshFormat::Fbx => {
-                todo!()
-            }
-        }
+        Ok(())
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["gltf", "glb"]
     }
 }
 #[cfg(test)]
 mod tests {
     use hikari_asset::*;
     use simple_logger::SimpleLogger;
-    use winit::platform::unix::EventLoopExtUnix;
 
-    use crate::texture::TextureLoader;
+    use crate::{texture::TextureLoader, MaterialLoader, Scene, Texture2D, Material};
     #[test]
     fn sponza() {
         use std::sync::Arc;
@@ -56,7 +45,7 @@ mod tests {
         use hikari_render::GfxConfig;
         use rayon::ThreadPoolBuilder;
 
-        use crate::SceneLoader;
+        use crate::GLTFLoader;
 
         SimpleLogger::new().init().unwrap();
 
@@ -78,10 +67,7 @@ mod tests {
             }
         });
 
-        let eloop = winit::event_loop::EventLoop::<()>::new_any_thread();
-        let window = winit::window::Window::new(&eloop).unwrap();
-        let gfx = hikari_render::Gfx::new(
-            &window,
+        let gfx = hikari_render::Gfx::headless(
             GfxConfig {
                 debug: true,
                 features: hikari_render::Features::default(),
@@ -91,47 +77,49 @@ mod tests {
         .unwrap();
 
         let thread_pool = Arc::new(ThreadPoolBuilder::new().build().unwrap());
-        let mut meshes = Assets::<crate::Scene>::new();
-        let mut textures = Assets::<crate::Texture2D>::new();
-        let mut materials = Assets::<crate::Material>::new();
-        let mut manager = AssetManagerBuilder::new(&thread_pool);
-        manager.add_loader(
-            SceneLoader {
+        let mut meshes = AssetPool::<crate::Scene>::default();
+        let mut textures = AssetPool::<crate::Texture2D>::default();
+        let mut materials = AssetPool::<crate::Material>::default();
+        let mut manager = AssetManager::with_threadpool(thread_pool);
+        manager.register_asset(&meshes);
+        manager.register_asset(&textures);
+        manager.register_asset(&materials);
+        manager.add_loader::<Scene, GLTFLoader>(
+            GLTFLoader {
                 device: gfx.device().clone(),
             },
-            &meshes,
         );
-        manager.add_loader(
+        manager.add_loader::<Texture2D, TextureLoader>(
             TextureLoader {
                 device: gfx.device().clone(),
-            },
-            &textures,
+            }
         );
-        manager.add_loader((), &materials);
-        let manager = manager.build();
+        manager.add_loader::<Material, MaterialLoader>(MaterialLoader);
+
+        hikari_asset::serde::init(manager.clone());
 
         let sponza: Handle<crate::Scene> = manager
-            .load("/home/atri/sponza/sponza.glb")
+            .load("/home/atri/sponza/sponza.glb".as_ref())
             .expect("Failed to load sponza");
 
         let sponza: ErasedHandle = sponza.into();
         loop {
-            manager.update(&mut meshes);
-            manager.update(&mut textures);
-            manager.update(&mut materials);
+            manager.update(&mut meshes).expect("Failed meshes");
+            manager.update(&mut textures).expect("Failed textures");
+            manager.update(&mut materials).expect("Failed materials");
 
-            if let Some(load_status) = manager.get_load_status(&sponza) {
-                if matches!(load_status, LoadStatus::Loading) {
-                    continue;
+            if let Some(load_status) = manager.load_status(&sponza) {
+                if matches!(load_status, LoadStatus::Loaded) {
+                    break;
                 }
             }
         }
+
+        // For race condition in hikari_render related to Textures
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        
     }
 }
 impl Asset for Scene {
-    const NAME: &'static str = "Mesh";
-
-    fn extensions<'a>() -> &'a [&'static str] {
-        &["gltf"]
-    }
+    type Settings = ();
 }

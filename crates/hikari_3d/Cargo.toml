@@ -17,6 +17,7 @@ serde_yaml = "0.8"
 rayon = "1"
 parking_lot = { version = "0.12", features = ["deadlock_detection"] }
 
+hikari_core = {path = "../hikari_core"}
 hikari_asset = {path = "../hikari_asset"}
 hikari_math = {path = "../hikari_math", features = ["serde"] }
 hikari_render = {path = "../hikari_render"}

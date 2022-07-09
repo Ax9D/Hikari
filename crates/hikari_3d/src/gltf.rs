@@ -273,6 +273,7 @@ fn parse_texture_data(
     let mut fake_texture_path = base_path.to_owned();
     fake_texture_path.push(texture_name);
 
+    let asset_manager = load_context.asset_manager();
     match texture.source().source() {
         gltf::image::Source::View { view, mime_type } => {
             let start = view.offset();
@@ -280,13 +281,9 @@ fn parse_texture_data(
 
             let parent_buffer = &gltf.buffers()[view.buffer().index()].0;
             let data = &parent_buffer[start..end];
-            let owned_data = data.to_owned();
 
             match mime_type {
-                "image/jpeg" | "image/png" => load_context.load_dependency::<Texture2D>(
-                    hikari_asset::Source::RawData(fake_texture_path, owned_data),
-                    config,
-                ),
+                "image/jpeg" | "image/png" => asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data.to_owned(), config),
                 _ => Err(anyhow::anyhow!(
                     crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
@@ -316,8 +313,8 @@ fn parse_texture_data(
                 };
 
                 match mime_type {
-                    "image/jpeg" | "image/png" => load_context.load_dependency::<Texture2D>(
-                        hikari_asset::Source::RawData(fake_texture_path, data),
+                    "image/jpeg" | "image/png" => asset_manager.load_with_data::<Texture2D>(&fake_texture_path,
+                        data,
                         config,
                     ),
                     _ => Err(anyhow::anyhow!(
@@ -331,8 +328,7 @@ fn parse_texture_data(
                 let path = gltf.parent_path().join(uri);
 
                 match mime_type {
-                    "image/jpeg" | "image/png" => load_context
-                        .load_dependency::<Texture2D>(hikari_asset::Source::Path(path), config),
+                    "image/jpeg" | "image/png" => asset_manager.load_with_settings(&path, config),
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
                             mime_type.split(r"/").last().unwrap().to_string(),
@@ -343,7 +339,7 @@ fn parse_texture_data(
             } else {
                 let path = gltf.parent_path().join(uri);
 
-                load_context.load_dependency::<Texture2D>(hikari_asset::Source::Path(path), config)
+                asset_manager.load_with_settings(&path, config)
             }
         }
     }
@@ -446,7 +442,7 @@ fn load_material(
 
     println!("Creating material {ix} {:#?}", material_path);
 
-    load_context.load_dependency::<crate::Material>(hikari_asset::Source::Path(material_path), ())
+    load_context.asset_manager().load::<crate::Material>(&material_path)
 }
 
 fn load_mesh(
