@@ -2,7 +2,7 @@
 [![Test and Build](https://github.com/Ax9D/Hikari/actions/workflows/ci.yml/badge.svg)](https://github.com/Ax9D/Hikari/actions/workflows/ci.yml)
 
 Hikari is my personal Game Engine that I'm writing in my free time. 
-The code is very messy and a bit broken in some places.
+The code is messy and a bit broken in some places.
 
 ![hikari_render_demo](./demo.png)
 ![editor_demo](./editor_demo.png)
@@ -48,16 +48,12 @@ cargo run --release --example pbr
 
 There are also two additional crates `hikari_editor` and `hikari_cli`, which are for the editor and cli interface (which are mostly stubs atm)
 
-To run each of these, run the following commands from the root of the workspace:
+You can run the editor from the project root: 
 ```rust
 cargo run -p hikari_editor
 ```
-and
-```rust
-cargo run -p hikari_cli
-```
 
-...respectively
+**The `testing` branch has an updated version the editor as seen in the screenshot above.**
 
 ## Thanks
 Here is a list of projects that I'd like to thank which have heavily inspired the development of Hikari:
