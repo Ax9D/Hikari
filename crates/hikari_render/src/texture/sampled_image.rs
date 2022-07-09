@@ -205,6 +205,7 @@ impl SampledImage {
             .samples(vk::SampleCountFlags::TYPE_1)
             .tiling(vk::ImageTiling::OPTIMAL)
             .sharing_mode(vk::SharingMode::EXCLUSIVE /**/)
+            .queue_family_indices(&[0])
             .initial_layout(vk::ImageLayout::UNDEFINED)
             .extent(vk::Extent3D {
                 width,
