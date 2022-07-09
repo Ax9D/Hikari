@@ -7,32 +7,23 @@ use serde::{
     Deserialize, Serialize,
 };
 
-use crate::{handle::Handle, Asset, AssetManager};
+use crate::{Asset, AssetManager, Handle};
 
 static ASSET_MANAGER: OnceCell<AssetManager> = OnceCell::new();
 
-pub fn init_serde(ass_man: AssetManager) {
-    let result = ASSET_MANAGER.set(ass_man);
-
-    if result.is_err() {
-        panic!("Asset Manager has already been set");
-    }
+pub fn init(ass_man: AssetManager) {
+    ASSET_MANAGER.get_or_init(|| ass_man);
 }
-
 impl<T: Asset> Serialize for Handle<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let ass_man = ASSET_MANAGER.get().expect("Asset Manager has not been set");
-        let meta_maps = ass_man.meta_maps().expect("Handle not registered");
-        let meta = meta_maps
-            .handle_to_metadata(self)
-            .expect("No metadata associated with handle, something is wrong");
-
         let mut state = serializer.serialize_struct("Handle", 2)?;
-        state.serialize_field("uuid", &meta.uuid)?;
-        state.serialize_field("path", &meta.data_path)?;
+        let ass_man = ASSET_MANAGER.get().expect("Asset Manager not initialized");
+
+        state.serialize_field("uuid", &ass_man.get_uuid(self))?;
+        state.serialize_field("path", &ass_man.get_path(self))?;
         state.end()
     }
 }
@@ -98,17 +89,10 @@ impl<'de, T: Asset> Visitor<'de> for HandleVisitor<T> {
         let ass_man = ASSET_MANAGER.get().expect("Asset Manager has not been set");
 
         let handle = ass_man
-            .load(path)
-            .map_err(|err| de::Error::custom("Failed to load asset"))?;
+            .load(&path)
+            .map_err(|_| de::Error::custom("Failed to load asset"))?;
 
-        let loader_uuid = ass_man
-            .get_uuid(&handle)
-            .expect("Failed to get uuid of asset");
-
-        //assert!(uuid == loader_uuid);
-        if uuid != loader_uuid {
-            return Err(de::Error::custom("Asset no longer exists"));
-        }
+        let loader_uuid = ass_man.get_uuid(&handle);
 
         Ok(handle)
     }
