@@ -283,7 +283,10 @@ fn parse_texture_data(
             let data = &parent_buffer[start..end];
 
             match mime_type {
-                "image/jpeg" | "image/png" => asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data.to_owned(), config),
+                "image/jpeg" | "image/png" => {
+                    fake_texture_path.set_extension("png");
+                    asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data.to_owned(), config) 
+                },
                 _ => Err(anyhow::anyhow!(
                     crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
@@ -313,10 +316,13 @@ fn parse_texture_data(
                 };
 
                 match mime_type {
-                    "image/jpeg" | "image/png" => asset_manager.load_with_data::<Texture2D>(&fake_texture_path,
+                    "image/jpeg" | "image/png" => {
+                        fake_texture_path.set_extension("png");
+                        asset_manager.load_with_data::<Texture2D>(&fake_texture_path,
                         data,
                         config,
-                    ),
+                    )
+                },
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
                             mime_type.split(r"/").last().unwrap().to_string(),
@@ -365,14 +371,15 @@ fn load_material(
     material: &gltf::Material,
     load_context: &mut LoadContext,
 ) -> Result<Handle<crate::Material>, anyhow::Error> {
-    let file_name = material
+    let mut file_name = material
         .name()
         .unwrap_or(&format!(
-            "{}_material_{}.hmat",
+            "{}_material_{}",
             import_data.filename(),
             material.index().unwrap_or(ix)
         ))
         .to_owned();
+    file_name.push_str(".hmat");
 
     let material_path = import_data.parent_path().join(file_name);
     if !material_path.exists() {
