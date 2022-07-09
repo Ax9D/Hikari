@@ -1,3 +1,4 @@
+use hikari_asset::{AssetStorage, Asset, AssetManager};
 use hikari_systems::*;
 
 use winit::{
@@ -66,6 +67,23 @@ impl Game {
         plugin.build(self);
         log::debug!("Successfully added plugin: {}", std::any::type_name::<P>());
 
+        self
+    }
+    pub fn create_asset<T: Asset>(&mut self) -> &mut Self {
+        {
+            let mut asset_storage = self.get_mut::<AssetStorage>();
+            let mut asset_manager = self.get_mut::<AssetManager>();
+
+            asset_storage.add::<T>();
+            asset_manager.register_asset(&asset_storage.get::<T>().unwrap());
+
+        }
+        let mut task_name = String::from(std::any::type_name::<T>());
+        task_name.push_str("_asset_update");
+        self.add_task(crate::LAST, Task::new(&task_name,|asset_manager: &AssetManager, asset_storage: &mut AssetStorage| {
+            let mut pool = asset_storage.get::<T>().unwrap();
+            asset_manager.update(&mut pool).expect("Failed to update asset pool");
+        }));
         self
     }
     pub fn window(&mut self) -> &mut Window {
