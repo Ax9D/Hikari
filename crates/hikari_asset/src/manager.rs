@@ -227,7 +227,7 @@ impl AssetManagerInner {
     fn get_loader<T: Asset>(&self, path: &Path) -> anyhow::Result<&Arc<dyn Loader>> {
         let file_ext = path
             .extension()
-            .ok_or_else(|| anyhow!("Couldn't determine file extension"))?;
+            .ok_or_else(|| anyhow!("Couldn't determine file extension: {:#?}", path))?;
         let file_ext = file_ext.to_str().unwrap();
         let loaders = self
             .loaders

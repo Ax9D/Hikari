@@ -59,21 +59,19 @@ impl FrameData {
         }
     }
     pub unsafe fn delete(&self, device: &Arc<crate::Device>) {
-        unsafe {
-            device
+        device
                 .raw()
                 .wait_for_fences(&[self.render_finished_fence], true, 1000000000)
                 .unwrap();
 
-            device.raw().destroy_command_pool(self.command_pool, None);
-            device.raw().destroy_fence(self.render_finished_fence, None);
-            device
-                .raw()
-                .destroy_semaphore(self.render_finished_semaphore, None);
-            device
-                .raw()
-                .destroy_semaphore(self.image_available_semaphore, None);
-        }
+        device.raw().destroy_command_pool(self.command_pool, None);
+        device.raw().destroy_fence(self.render_finished_fence, None);
+        device
+            .raw()
+            .destroy_semaphore(self.render_finished_semaphore, None);
+        device
+            .raw()
+            .destroy_semaphore(self.image_available_semaphore, None);
 
         log::debug!("Deleted Framedata");
     }
@@ -178,10 +176,10 @@ impl GraphExecutor {
         cmd.begin()?;
 
         let swapchain_image_ix = swapchain.acquire_next_image_ix(
-            1000000000,
+            5_000_000_000,
             self.frame_state.current_frame().image_available_semaphore,
             vk::Fence::null(),
-        )?;
+        ).expect("Swapchain image");
 
         for (ix, pass) in passes.iter_mut().enumerate() {
             match pass {
@@ -207,7 +205,7 @@ impl GraphExecutor {
 
         cmd.end()?;
 
-        Self::finish_internal(&self.device, &mut self.frame_state)?;
+        Self::finish_internal(&self.device, &mut self.frame_state).expect("Finish internal");
 
         Self::submit_and_present(
             device,
@@ -215,7 +213,7 @@ impl GraphExecutor {
             &cmd,
             swapchain,
             swapchain_image_ix,
-        )?;
+        ).expect("Submit");
         self.frame_state.update();
         self.descriptor_pool.new_frame();
         self.pipeline_lookup.new_frame();
@@ -372,7 +370,14 @@ impl GraphExecutor {
             .signal_semaphores(signal_semaphores)
             .command_buffers(&cbs);
 
-        unsafe { device.queue_submit(device.graphics_queue(), &[*submit_info], fence) }
+        let result = device.graphics_queue_submit(&[*submit_info], fence);
+        match result {
+            Ok(_) => {},
+            Err(err) => {
+                assert!(err != vk::Result::ERROR_DEVICE_LOST && err != vk::Result::NOT_READY);
+            },
+        }
+        Ok(())
     }
     fn submit_and_present(
         device: &Arc<crate::Device>,
@@ -404,7 +409,7 @@ impl GraphExecutor {
                 }
             }
             Err(err) => {
-                if err == vk::Result::ERROR_OUT_OF_DATE_KHR {
+                if err == vk::Result::ERROR_OUT_OF_DATE_KHR || err == vk::Result::NOT_READY {
                     log::warn!("Swapchain out of date");
                 }
             }

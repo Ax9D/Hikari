@@ -1,4 +1,4 @@
-use crate::imgui;
+use crate::{imgui, EngineState};
 
 use super::Editor;
 
@@ -8,4 +8,6 @@ impl Tools {
         Self {}
     }
 }
-pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {}
+pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+    Ok(())
+}

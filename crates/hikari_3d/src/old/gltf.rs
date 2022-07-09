@@ -430,12 +430,3 @@ pub fn load_scene(path: &Path) -> Result<super::Scene, super::Error> {
         models,
     })
 }
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn godzilla() {
-        let _model = crate::old::gltf::load_scene("godzilla.glb".as_ref()).unwrap();
-    }
-}
