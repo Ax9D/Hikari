@@ -13,7 +13,7 @@ use super::RenameState;
 #[derive(Clone)]
 struct EditorInfo {
     name: String,
-    index: usize
+    index: usize,
 }
 
 #[derive(Default)]
@@ -25,10 +25,15 @@ impl Outliner {
         let index = world.len();
         let entity = world.create_entity();
 
-        world.add_component(entity, EditorInfo {
-            name: name.to_owned(),
-            index
-        }).unwrap();
+        world
+            .add_component(
+                entity,
+                EditorInfo {
+                    name: name.to_owned(),
+                    index,
+                },
+            )
+            .unwrap();
         entity
     }
     pub fn remove_entity(&mut self, world: &mut World, entity: Entity) -> Result<(), NoSuchEntity> {

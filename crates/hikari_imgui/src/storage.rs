@@ -1,4 +1,7 @@
-use std::{any::{Any, TypeId}, hash::Hasher};
+use std::{
+    any::{Any, TypeId},
+    hash::Hasher,
+};
 
 use fxhash::FxHasher;
 use imgui::Ui;
@@ -10,10 +13,14 @@ static STORAGE: OnceCell<Mutex<Storage>> = OnceCell::new();
 
 #[derive(Default)]
 pub struct Storage {
-    id_type_to_data: IntMap<u64, Box<dyn Any + Send + Sync + 'static>>
+    id_type_to_data: IntMap<u64, Box<dyn Any + Send + Sync + 'static>>,
 }
 impl Storage {
-    pub fn get_or_insert_with<T: Any + Send + Sync + 'static>(&mut self, id: imgui::Id, default: impl FnOnce() -> T) -> &mut T {
+    pub fn get_or_insert_with<T: Any + Send + Sync + 'static>(
+        &mut self,
+        id: imgui::Id,
+        default: impl FnOnce() -> T,
+    ) -> &mut T {
         let hash = hash(id, TypeId::of::<T>());
 
         let data = self.id_type_to_data.entry(hash).or_insert_with(|| {
@@ -29,7 +36,9 @@ pub trait StorageExt {
 }
 
 fn get_storage<'a>() -> MutexGuard<'a, Storage> {
-    STORAGE.get_or_init(|| Mutex::new(Storage::default())).lock()
+    STORAGE
+        .get_or_init(|| Mutex::new(Storage::default()))
+        .lock()
 }
 fn hash(id: imgui::Id, type_id: TypeId) -> u64 {
     use std::hash::Hash;

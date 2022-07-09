@@ -347,7 +347,7 @@ impl SampledImage {
                     image,
                     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                     &buffer_copy_region,
-                );                
+                );
                 Ok(())
             })?;
 
@@ -396,7 +396,7 @@ impl SampledImage {
             download_buffer,
         })
     }
-    fn  generate_mips(
+    fn generate_mips(
         device: &ash::Device,
         cmd: vk::CommandBuffer,
         image: vk::Image,

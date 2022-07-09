@@ -1,7 +1,7 @@
-mod transform;
-mod mesh_render;
 mod camera;
 mod light;
+mod mesh_render;
+mod transform;
 
 use super::components::EditorComponents;
 

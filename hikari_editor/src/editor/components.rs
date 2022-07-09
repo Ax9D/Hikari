@@ -1,5 +1,8 @@
 #![allow(unused)]
-use std::{any::TypeId, collections::{HashMap, hash_map::Iter}};
+use std::{
+    any::TypeId,
+    collections::{hash_map::Iter, HashMap},
+};
 
 use hikari::core::{Component, ComponentError, Entity, NoSuchEntity, World};
 use hikari_imgui::Ui;
@@ -89,7 +92,13 @@ pub trait EditorComponent: Component {
     fn new() -> Self
     where
         Self: Sized;
-    fn draw(&mut self, ui: &Ui, entity: Entity, editor: &mut Editor, state: EngineState) -> anyhow::Result<()>;
+    fn draw(
+        &mut self,
+        ui: &Ui,
+        entity: Entity,
+        editor: &mut Editor,
+        state: EngineState,
+    ) -> anyhow::Result<()>;
     fn clone(&self) -> Self
     where
         Self: Sized;
@@ -109,7 +118,11 @@ pub trait EditorComponent: Component {
 
         Ok(())
     }
-    fn clone_component(entity: Entity, src: &mut World, dst: &mut World) -> Result<(), ComponentError>
+    fn clone_component(
+        entity: Entity,
+        src: &mut World,
+        dst: &mut World,
+    ) -> Result<(), ComponentError>
     where
         Self: Sized,
     {

@@ -1,21 +1,34 @@
-use hikari::{g3d::{MeshRender, MeshSource, Scene}, asset::AssetManager};
+use hikari::{
+    asset::AssetManager,
+    g3d::{MeshRender, MeshSource, Scene},
+};
 
 use crate::{editor::components::EditorComponent, *};
 
 impl EditorComponent for MeshRender {
     fn name() -> &'static str
     where
-        Self: Sized {
+        Self: Sized,
+    {
         "Mesh Render Component"
     }
 
     fn new() -> Self
     where
-        Self: Sized {
-        MeshRender { source: g3d::MeshSource::None }
+        Self: Sized,
+    {
+        MeshRender {
+            source: g3d::MeshSource::None,
+        }
     }
 
-    fn draw(&mut self, ui: &imgui::Ui, _entity: Entity, _editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+    fn draw(
+        &mut self,
+        ui: &imgui::Ui,
+        _entity: Entity,
+        _editor: &mut Editor,
+        state: EngineState,
+    ) -> anyhow::Result<()> {
         let ass_man = state.get::<AssetManager>().unwrap();
 
         let mut path = if let MeshSource::Scene(scene, _) = &self.source {
@@ -23,8 +36,7 @@ impl EditorComponent for MeshRender {
         } else {
             "None".into()
         };
-        ui.input_text("Asset", &mut path)
-        .build();
+        ui.input_text("Asset", &mut path).build();
         ui.same_line();
         if ui.button("/") {
             if let Some(path) = rfd::FileDialog::new().pick_file() {
@@ -39,7 +51,8 @@ impl EditorComponent for MeshRender {
 
     fn clone(&self) -> Self
     where
-        Self: Sized {
+        Self: Sized,
+    {
         Clone::clone(&self)
     }
 }

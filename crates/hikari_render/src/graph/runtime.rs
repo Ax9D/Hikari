@@ -60,9 +60,9 @@ impl FrameData {
     }
     pub unsafe fn delete(&self, device: &Arc<crate::Device>) {
         device
-                .raw()
-                .wait_for_fences(&[self.render_finished_fence], true, 1000000000)
-                .unwrap();
+            .raw()
+            .wait_for_fences(&[self.render_finished_fence], true, 1000000000)
+            .unwrap();
 
         device.raw().destroy_command_pool(self.command_pool, None);
         device.raw().destroy_fence(self.render_finished_fence, None);
@@ -175,11 +175,13 @@ impl GraphExecutor {
         cmd.reset()?;
         cmd.begin()?;
 
-        let swapchain_image_ix = swapchain.acquire_next_image_ix(
-            5_000_000_000,
-            self.frame_state.current_frame().image_available_semaphore,
-            vk::Fence::null(),
-        ).expect("Swapchain image");
+        let swapchain_image_ix = swapchain
+            .acquire_next_image_ix(
+                5_000_000_000,
+                self.frame_state.current_frame().image_available_semaphore,
+                vk::Fence::null(),
+            )
+            .expect("Swapchain image");
 
         for (ix, pass) in passes.iter_mut().enumerate() {
             match pass {
@@ -213,7 +215,8 @@ impl GraphExecutor {
             &cmd,
             swapchain,
             swapchain_image_ix,
-        ).expect("Submit");
+        )
+        .expect("Submit");
         self.frame_state.update();
         self.descriptor_pool.new_frame();
         self.pipeline_lookup.new_frame();
@@ -319,13 +322,13 @@ impl GraphExecutor {
                     allocation_data.get_framebuffer(ix),
                 )
             };
-    
+
             let (width, height) = pass.render_area.get_physical_size(size);
             let area = vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: vk::Extent2D { width, height },
             };
-            
+
             let mut rcmd = cmd.begin_renderpass(super::command::RenderpassBeginInfo {
                 renderpass: vk_pass,
                 area,
@@ -359,9 +362,7 @@ impl GraphExecutor {
         fence: vk::Fence,
     ) -> VkResult<()> {
         unsafe {
-            device
-            .raw()
-            .reset_fences(&[fence])?;
+            device.raw().reset_fences(&[fence])?;
         }
         let cbs = [cmd.raw()];
         let submit_info = vk::SubmitInfo::builder()
@@ -372,10 +373,10 @@ impl GraphExecutor {
 
         let result = device.graphics_queue_submit(&[*submit_info], fence);
         match result {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(err) => {
                 assert!(err != vk::Result::ERROR_DEVICE_LOST && err != vk::Result::NOT_READY);
-            },
+            }
         }
         Ok(())
     }

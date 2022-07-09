@@ -227,14 +227,16 @@ pub fn build_pass(
                                         let mesh = &scene.meshes[*mesh_ix];
                                         for submesh in &mesh.sub_meshes {
                                             {
-                                                hikari_dev::profile_scope!("Set vertex and index buffers");
+                                                hikari_dev::profile_scope!(
+                                                    "Set vertex and index buffers"
+                                                );
                                                 cmd.set_vertex_buffer(&submesh.vertices, 0);
                                                 cmd.set_index_buffer(&submesh.indices);
                                             }
                                             let material = materials
                                                 .get(&submesh.material)
                                                 .unwrap_or_else(|| &defaults.default_mat);
-            
+
                                             let material_data = Material {
                                                 albedo: material.albedo_factor,
                                                 roughness: material.roughness_factor,
@@ -244,14 +246,14 @@ pub fn build_pass(
                                                 metallic_uv_set: material.metallic_set,
                                                 normal_uv_set: material.normal_set,
                                             };
-            
+
                                             let pc = PushConstants {
                                                 transform,
                                                 material_data,
                                             };
-            
+
                                             cmd.push_constants(&pc, 0);
-            
+
                                             let albedo = resolve_texture(
                                                 &material.albedo,
                                                 &textures,
@@ -262,11 +264,17 @@ pub fn build_pass(
                                                 &textures,
                                                 &defaults.black,
                                             );
-                                            let metallic =
-                                                resolve_texture(&material.metallic, &textures, &defaults.black);
-                                            let normal =
-                                                resolve_texture(&material.normal, &textures, &defaults.black);
-            
+                                            let metallic = resolve_texture(
+                                                &material.metallic,
+                                                &textures,
+                                                &defaults.black,
+                                            );
+                                            let normal = resolve_texture(
+                                                &material.normal,
+                                                &textures,
+                                                &defaults.black,
+                                            );
+
                                             // println!(
                                             //     "{:?} {:?} {:?} {:?}",
                                             //     albedo.raw().image(),
@@ -278,11 +286,15 @@ pub fn build_pass(
                                             cmd.set_image(roughness.raw(), 1, 1);
                                             cmd.set_image(metallic.raw(), 1, 2);
                                             cmd.set_image(normal.raw(), 1, 3);
-            
-                                            cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
+
+                                            cmd.draw_indexed(
+                                                0..submesh.indices.capacity(),
+                                                0,
+                                                0..1,
+                                            );
                                         }
                                     }
-                                },
+                                }
                                 MeshSource::None => {}
                             }
                         }

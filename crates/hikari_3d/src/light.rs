@@ -1,7 +1,5 @@
 use hikari_math::Vec4;
 
-
-
 #[derive(Clone, Copy, Debug)]
 pub struct Light {
     pub color: Vec4,
@@ -12,7 +10,12 @@ pub struct Light {
 
 impl Default for Light {
     fn default() -> Self {
-        Self { color: Vec4::ONE, intensity: 1.0, cast_shadows: true, kind: LightKind::Directional }
+        Self {
+            color: Vec4::ONE,
+            intensity: 1.0,
+            cast_shadows: true,
+            kind: LightKind::Directional,
+        }
     }
 }
 

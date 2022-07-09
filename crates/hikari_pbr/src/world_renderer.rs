@@ -3,13 +3,13 @@ use hikari_core::World;
 use hikari_render::{Gfx, GraphBuilder, SampledImage};
 
 #[cfg(feature = "editor")]
-use hikari_render::{ Renderpass, AccessType};
+use hikari_render::{AccessType, Renderpass};
 
-use crate::{depth_prepass, fxaa, pbr, Args, Settings, Config};
+use crate::{depth_prepass, fxaa, pbr, Args, Config, Settings};
 
 pub struct WorldRenderer {
     graph: hikari_render::Graph<Args>,
-    settings: Settings
+    settings: Settings,
 }
 
 impl WorldRenderer {
@@ -20,38 +20,33 @@ impl WorldRenderer {
         let pbr_output = pbr::build_pass(&device, &mut graph, &depth_prepass)?;
         let _fxaa_output = fxaa::build_pass(&device, &mut graph, &pbr_output)?;
 
-        
         #[cfg(feature = "editor")]
-        graph.add_renderpass(
-        Renderpass::empty("DummyTransitionForImGui")
-        .read_image(&_fxaa_output, AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer));
+        graph.add_renderpass(Renderpass::empty("DummyTransitionForImGui").read_image(
+            &_fxaa_output,
+            AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+        ));
 
         Ok(Self {
             graph: graph.build()?,
-            settings: Default::default()
+            settings: Default::default(),
         })
     }
     pub fn settings(&mut self) -> &mut Settings {
         &mut self.settings
     }
     pub fn get_output_image(&self) -> &SampledImage {
-        self
-        .graph
-        .resources()
-        .get_image_by_name("FXAAOutput")
-        .unwrap()
+        self.graph
+            .resources()
+            .get_image_by_name("FXAAOutput")
+            .unwrap()
     }
-    pub fn render(
-        &mut self,
-        world: &World,
-        asset_storage: &AssetStorage,
-    ) -> anyhow::Result<()> {
-        hikari_dev::profile_function!();   
+    pub fn render(&mut self, world: &World, asset_storage: &AssetStorage) -> anyhow::Result<()> {
+        hikari_dev::profile_function!();
         let (width, height) = self.graph.size();
         let config = Config {
             width,
             height,
-            settings: self.settings.clone()
+            settings: self.settings.clone(),
         };
         self.graph.execute((world, &config, asset_storage))?;
 
@@ -61,13 +56,13 @@ impl WorldRenderer {
         &mut self,
         world: &World,
         asset_storage: &AssetStorage,
-    ) -> anyhow::Result<&SampledImage> {   
-        hikari_dev::profile_function!();     
+    ) -> anyhow::Result<&SampledImage> {
+        hikari_dev::profile_function!();
         let (width, height) = self.graph.size();
         let config = Config {
             width,
             height,
-            settings: self.settings.clone()
+            settings: self.settings.clone(),
         };
         self.graph.execute_sync((world, &config, asset_storage))?;
 

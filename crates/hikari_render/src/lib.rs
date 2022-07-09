@@ -42,8 +42,8 @@ use renderpass::PhysicalRenderpass;
 
 pub use ash::vk;
 pub use util::PerFrame;
-pub use vk_sync_fork as vk_sync;
 pub use vk_sync::AccessType;
+pub use vk_sync_fork as vk_sync;
 
 pub struct GfxPlugin {
     pub config: GfxConfig,

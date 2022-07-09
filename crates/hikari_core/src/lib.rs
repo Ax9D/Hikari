@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 pub use ecs::*;
 pub use game::*;
-use hikari_asset::{AssetStorage, AssetManager};
+use hikari_asset::{AssetManager, AssetStorage};
 pub use plugin::*;
-use rayon::{ThreadPoolBuilder};
+use rayon::ThreadPoolBuilder;
 
 pub const FIRST: &'static str = "First";
 pub const UPDATE: &'static str = "Update";
@@ -27,9 +27,9 @@ impl crate::Plugin for CorePlugin {
         game.add_state(World::new());
 
         let threadpool = ThreadPoolBuilder::new()
-        //.num_threads(2)
-        .build()
-        .expect("Failed to create threadpool");
+            //.num_threads(2)
+            .build()
+            .expect("Failed to create threadpool");
         let threadpool = Arc::new(threadpool);
 
         game.add_state(threadpool.clone());

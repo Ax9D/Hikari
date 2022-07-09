@@ -130,14 +130,16 @@ impl Plugin for EditorPlugin {
                     }
                     let result = graph.execute(());
                     match result {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(err) => {
                             if err == vk::Result::ERROR_DEVICE_LOST {
                                 log::error!("Device Lost");
-                                gfx.device().wait_for_aftermath_dump().expect("Failed to collect aftermath dump");
+                                gfx.device()
+                                    .wait_for_aftermath_dump()
+                                    .expect("Failed to collect aftermath dump");
                                 panic!();
                             }
-                        },
+                        }
                     }
                 },
             )

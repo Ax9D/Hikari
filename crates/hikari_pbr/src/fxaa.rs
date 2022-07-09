@@ -58,25 +58,21 @@ pub fn build_pass(
     let output = graph
         .create_image("FXAAOutput", ImageConfig::color2d(), ImageSize::default())
         .expect("Failed to create fxaa output");
-    
+
     graph.add_renderpass(
-        Renderpass::<Args>::new(
-            "FXAA",
-            ImageSize::default(),
-            move |cmd, (_, config, _)| {
-                cmd.set_shader(&shader);
+        Renderpass::<Args>::new("FXAA", ImageSize::default(), move |cmd, (_, config, _)| {
+            cmd.set_shader(&shader);
 
-                cmd.push_constants(
-                    &PushConstants {
-                        res: hikari_math::vec2(config.width as f32, config.height as f32),
-                        enabled: config.settings.fxaa as _,
-                    },
-                    0,
-                );
+            cmd.push_constants(
+                &PushConstants {
+                    res: hikari_math::vec2(config.width as f32, config.height as f32),
+                    enabled: config.settings.fxaa as _,
+                },
+                0,
+            );
 
-                cmd.draw(0..6, 0..1);
-            },
-        )
+            cmd.draw(0..6, 0..1);
+        })
         .draw_image(&output, AttachmentConfig::color_default(0))
         .sample_image(
             &pbr_output,

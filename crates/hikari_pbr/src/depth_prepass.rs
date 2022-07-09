@@ -100,13 +100,15 @@ pub fn build_pass(
 
                                     for submesh in &mesh.sub_meshes {
                                         {
-                                            hikari_dev::profile_scope!("Set vertex and index buffers");
+                                            hikari_dev::profile_scope!(
+                                                "Set vertex and index buffers"
+                                            );
                                             cmd.set_vertex_buffer(&submesh.vertices, 0);
                                             cmd.set_index_buffer(&submesh.indices);
                                         }
-            
+
                                         cmd.push_constants(&PushConstants { transform }, 0);
-            
+
                                         // println!(
                                         //     "{:?} {:?} {:?} {:?}",
                                         //     albedo.raw().image(),
@@ -114,11 +116,11 @@ pub fn build_pass(
                                         //     metallic.raw().image(),
                                         //     normal.raw().image()
                                         // );
-            
+
                                         cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
                                     }
                                 }
-                            },
+                            }
                             MeshSource::None => {}
                         }
                     }

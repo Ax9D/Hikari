@@ -8,7 +8,7 @@ use self::{
 };
 use crate::{imgui, EngineState};
 use clipboard::ClipboardProvider;
-use hikari::{core::Game, asset::AssetManager};
+use hikari::{asset::AssetManager, core::Game};
 pub mod logging;
 
 //mod utils;
@@ -147,14 +147,15 @@ impl Editor {
             rename_state: RenameState::Idle,
         };
         {
-        //let _sponza = game.get::<AssetManager>().load::<hikari::g3d::Scene>(std::path::Path::new("assets/models/sponza/sponza.glb")).unwrap();
-        let mut world = game.get_mut::<hikari::core::World>();
-        let entity = editor.outliner.add_entity(&mut world, "Camera");
-        world.add_component(entity, hikari::g3d::Camera::default()).expect("Failed to add camera");
+            //let _sponza = game.get::<AssetManager>().load::<hikari::g3d::Scene>(std::path::Path::new("assets/models/sponza/sponza.glb")).unwrap();
+            let mut world = game.get_mut::<hikari::core::World>();
+            let entity = editor.outliner.add_entity(&mut world, "Camera");
+            world
+                .add_component(entity, hikari::g3d::Camera::default())
+                .expect("Failed to add camera");
         }
         game.add_state(editor);
         game.add_state(components);
-
     }
     pub fn run(&mut self, ui: &imgui::Ui, state: EngineState) {
         ui.window("Main")

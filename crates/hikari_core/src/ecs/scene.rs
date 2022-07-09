@@ -1,9 +1,12 @@
-use crate::{Component};
+use crate::Component;
 
 pub type Entity = hecs::Entity;
 
-use hecs::{DynamicBundle};
-pub use hecs::{Ref, RefMut, EntityRef,  Query, QueryMut, QueryOne, QueryBorrow, QueryItem, CommandBuffer, ComponentError, MissingComponent, NoSuchEntity};
+use hecs::DynamicBundle;
+pub use hecs::{
+    CommandBuffer, ComponentError, EntityRef, MissingComponent, NoSuchEntity, Query, QueryBorrow,
+    QueryItem, QueryMut, QueryOne, Ref, RefMut,
+};
 use hikari_math::Transform;
 pub struct World {
     world: hecs::World,
@@ -16,7 +19,7 @@ impl World {
     }
     #[inline]
     pub fn create_entity(&mut self) -> Entity {
-        self.world.spawn((Transform::default(), ))
+        self.world.spawn((Transform::default(),))
     }
     #[inline]
     pub fn create_entity_at(&mut self, handle: Entity, components: impl DynamicBundle) {
@@ -38,7 +41,7 @@ impl World {
     pub fn len(&self) -> usize {
         self.world.len() as usize
     }
-    #[inline] 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.world.is_empty()
     }
@@ -51,10 +54,7 @@ impl World {
         self.world.insert_one(entity, component)
     }
     #[inline]
-    pub fn remove_component<C: Component>(
-        &mut self,
-        entity: Entity,
-    ) -> Result<C, ComponentError> {
+    pub fn remove_component<C: Component>(&mut self, entity: Entity) -> Result<C, ComponentError> {
         self.world.remove_one::<C>(entity)
     }
     #[inline]
@@ -92,7 +92,7 @@ impl World {
         self.world.query_mut::<Q>()
     }
     #[inline]
-    pub fn query_one<Q: Query>(&self, entity: Entity) -> Result<QueryOne<'_, Q>, NoSuchEntity>{
+    pub fn query_one<Q: Query>(&self, entity: Entity) -> Result<QueryOne<'_, Q>, NoSuchEntity> {
         self.world.query_one(entity)
     }
     #[inline]

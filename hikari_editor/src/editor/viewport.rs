@@ -12,7 +12,7 @@ pub struct Viewport {
 }
 pub fn draw(ui: &imgui::Ui, _editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
     let renderer = state.get_mut::<WorldRenderer>().unwrap();
-    
+
     let pbr_output = renderer.get_output_image();
     let pbr_output = ui.get_texture_id(pbr_output);
 

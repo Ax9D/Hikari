@@ -285,8 +285,12 @@ fn parse_texture_data(
             match mime_type {
                 "image/jpeg" | "image/png" => {
                     fake_texture_path.set_extension("png");
-                    asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data.to_owned(), config) 
-                },
+                    asset_manager.load_with_data::<Texture2D>(
+                        &fake_texture_path,
+                        data.to_owned(),
+                        config,
+                    )
+                }
                 _ => Err(anyhow::anyhow!(
                     crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
@@ -318,11 +322,8 @@ fn parse_texture_data(
                 match mime_type {
                     "image/jpeg" | "image/png" => {
                         fake_texture_path.set_extension("png");
-                        asset_manager.load_with_data::<Texture2D>(&fake_texture_path,
-                        data,
-                        config,
-                    )
-                },
+                        asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data, config)
+                    }
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
                             mime_type.split(r"/").last().unwrap().to_string(),
@@ -449,7 +450,9 @@ fn load_material(
 
     println!("Creating material {ix} {:#?}", material_path);
 
-    load_context.asset_manager().load::<crate::Material>(&material_path)
+    load_context
+        .asset_manager()
+        .load::<crate::Material>(&material_path)
 }
 
 fn load_mesh(

@@ -1,11 +1,11 @@
 //mod docking;
-mod ui_func;
-mod storage;
 pub mod gizmo;
+mod storage;
+mod ui_func;
 
 //pub use docking::*;
-pub use ui_func::*;
 pub use storage::*;
+pub use ui_func::*;
 
 pub use imgui::*;
 

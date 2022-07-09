@@ -88,7 +88,7 @@ mod noop {
     pub fn profiling_init() {}
 }
 
-#[cfg(feature = "profiling_enabled")]
-pub use tracy::*;
 #[cfg(not(feature = "profiling_enabled"))]
 pub use noop::*;
+#[cfg(feature = "profiling_enabled")]
+pub use tracy::*;

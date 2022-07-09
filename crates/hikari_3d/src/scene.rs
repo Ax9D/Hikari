@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use hikari_asset::{Asset, Loader, LoadContext};
+use hikari_asset::{Asset, LoadContext, Loader};
 
 use crate::{Camera, Mesh, MeshFormat};
 
@@ -37,7 +37,7 @@ mod tests {
     use hikari_asset::*;
     use simple_logger::SimpleLogger;
 
-    use crate::{texture::TextureLoader, MaterialLoader, Scene, Texture2D, Material};
+    use crate::{texture::TextureLoader, Material, MaterialLoader, Scene, Texture2D};
     #[test]
     fn sponza() {
         use std::sync::Arc;
@@ -67,13 +67,11 @@ mod tests {
             }
         });
 
-        let gfx = hikari_render::Gfx::headless(
-            GfxConfig {
-                debug: true,
-                features: hikari_render::Features::default(),
-                vsync: true,
-            },
-        )
+        let gfx = hikari_render::Gfx::headless(GfxConfig {
+            debug: true,
+            features: hikari_render::Features::default(),
+            vsync: true,
+        })
         .unwrap();
 
         let thread_pool = Arc::new(ThreadPoolBuilder::new().build().unwrap());
@@ -84,16 +82,12 @@ mod tests {
         manager.register_asset(&meshes);
         manager.register_asset(&textures);
         manager.register_asset(&materials);
-        manager.add_loader::<Scene, GLTFLoader>(
-            GLTFLoader {
-                device: gfx.device().clone(),
-            },
-        );
-        manager.add_loader::<Texture2D, TextureLoader>(
-            TextureLoader {
-                device: gfx.device().clone(),
-            }
-        );
+        manager.add_loader::<Scene, GLTFLoader>(GLTFLoader {
+            device: gfx.device().clone(),
+        });
+        manager.add_loader::<Texture2D, TextureLoader>(TextureLoader {
+            device: gfx.device().clone(),
+        });
         manager.add_loader::<Material, MaterialLoader>(MaterialLoader);
 
         hikari_asset::serde::init(manager.clone());
@@ -117,7 +111,6 @@ mod tests {
 
         // For race condition in hikari_render related to Textures
         std::thread::sleep(std::time::Duration::from_millis(500));
-        
     }
 }
 impl Asset for Scene {

@@ -166,10 +166,7 @@ impl Asset for Texture2D {
     type Settings = TextureConfig;
 }
 impl Loader for TextureLoader {
-    fn load(
-        &self, 
-        context: &mut LoadContext,
-    ) -> anyhow::Result<()> {
+    fn load(&self, context: &mut LoadContext) -> anyhow::Result<()> {
         let image = match context.source() {
             hikari_asset::Source::FileSystem(path) => image::open(path)?,
             hikari_asset::Source::Data(_, data) => image::load_from_memory(data)?,
@@ -179,7 +176,13 @@ impl Loader for TextureLoader {
         let width = image.width();
         let height = image.height();
 
-        let texture = Texture2D::new(&self.device, data, width, height, *context.settings::<Texture2D>())?;
+        let texture = Texture2D::new(
+            &self.device,
+            data,
+            width,
+            height,
+            *context.settings::<Texture2D>(),
+        )?;
         context.set_asset(texture);
 
         Ok(())
@@ -190,11 +193,10 @@ impl Loader for TextureLoader {
     }
 }
 
-
 #[test]
 fn parallel_load() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::*;
     use crate::image::*;
+    use crate::*;
     use rayon::prelude::*;
 
     let gfx = Gfx::headless(GfxConfig {
@@ -206,8 +208,18 @@ fn parallel_load() -> Result<(), Box<dyn std::error::Error>> {
     let path = "../../assets/models/sponza/14930275953430797156.png";
     let (image, width, height) = image::open_rgba8(path).unwrap();
 
-    let textures: Vec<_> = (0..1000).into_par_iter().map(|_| {
-        Texture2D::new(gfx.device(), &image, width, height, TextureConfig::default()).unwrap()
-    }).collect();
+    let textures: Vec<_> = (0..1000)
+        .into_par_iter()
+        .map(|_| {
+            Texture2D::new(
+                gfx.device(),
+                &image,
+                width,
+                height,
+                TextureConfig::default(),
+            )
+            .unwrap()
+        })
+        .collect();
     Ok(())
 }

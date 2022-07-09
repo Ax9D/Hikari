@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use once_cell::sync::OnceCell;
+use std::collections::HashMap;
 
 use std::{ptr::NonNull, sync::Arc};
 
@@ -11,8 +11,8 @@ use imgui::imgui_rs_vulkan_renderer::{self, Options};
 use parking_lot::Mutex;
 use winit::{event::Event, window::Window};
 
+use crate::descriptor::{DescriptorSetAllocator, DescriptorSetLayout, DescriptorSetState};
 use crate::SampledImage;
-use crate::descriptor::{ DescriptorSetLayout, DescriptorSetAllocator, DescriptorSetState};
 
 unsafe impl Send for SharedDrawData {}
 unsafe impl Sync for SharedDrawData {}
@@ -128,7 +128,7 @@ pub struct Renderer {
     device: Arc<crate::Device>,
     renderer: imgui_rs_vulkan_renderer::Renderer,
     compatible_renderpass: vk::RenderPass,
-    textures: TextureMap
+    textures: TextureMap,
 }
 
 impl Renderer {
@@ -231,7 +231,7 @@ impl Renderer {
             device: device.clone(),
             renderer,
             compatible_renderpass,
-            textures: TextureMap::new(&device)?
+            textures: TextureMap::new(&device)?,
         })
     }
     /// Assumes that a compatible renderpass has been started
@@ -294,9 +294,11 @@ impl TextureExt for imgui::Ui {
     }
     fn get_texture_id(&self, image: &SampledImage) -> imgui::TextureId {
         hikari_dev::profile_function!();
-        IMGUI_RENDERER.get().expect("Renderer has not been initialized")
-        .lock()
-        .get_texture_id(image)
+        IMGUI_RENDERER
+            .get()
+            .expect("Renderer has not been initialized")
+            .lock()
+            .get_texture_id(image)
     }
 }
 
@@ -311,7 +313,12 @@ struct TextureMap {
 impl TextureMap {
     pub fn new(device: &Arc<crate::Device>) -> Result<Self, Box<dyn std::error::Error>> {
         let mut set_layout = DescriptorSetLayout::builder();
-        set_layout.with_binding(0, vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 1, vk::ShaderStageFlags::FRAGMENT);
+        set_layout.with_binding(
+            0,
+            vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            1,
+            vk::ShaderStageFlags::FRAGMENT,
+        );
 
         let set_layout = device.set_layout_cache().get_layout(&set_layout)?;
 
@@ -323,13 +330,12 @@ impl TextureMap {
             set_allocator,
             set_state,
             image_to_set: Default::default(),
-            image_to_id: Default::default()
+            image_to_id: Default::default(),
         })
-
     }
     pub fn register_texture_id(&mut self, image: &SampledImage, id: imgui::TextureId) {
         self.image_to_id.insert(image.image_view(1).unwrap(), id);
-    } 
+    }
     pub fn get_texture_id(&self, image: &SampledImage) -> Option<imgui::TextureId> {
         self.image_to_id.get(&image.image_view(1).unwrap()).cloned()
     }

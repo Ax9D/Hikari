@@ -141,8 +141,8 @@ impl Gfx {
 
             let layer_names = if debug {
                 vec![
-                CString::new("VK_LAYER_KHRONOS_validation").unwrap(), 
-                //CString::new("VK_LAYER_LUNARG_api_dump").unwrap(),
+                    CString::new("VK_LAYER_KHRONOS_validation").unwrap(),
+                    //CString::new("VK_LAYER_LUNARG_api_dump").unwrap(),
                 ]
             } else {
                 vec![]
@@ -212,8 +212,13 @@ impl Gfx {
                 surface,
                 surface_loader,
             };
-            let device =
-                crate::Device::create(entry, instance, Some(&surface_data), config.features, config.debug)?;
+            let device = crate::Device::create(
+                entry,
+                instance,
+                Some(&surface_data),
+                config.features,
+                config.debug,
+            )?;
 
             let window_size = window.inner_size();
             let swapchain = crate::Swapchain::create(
@@ -227,7 +232,8 @@ impl Gfx {
 
             (device, Some(Arc::new(Mutex::new(swapchain))))
         } else {
-            let device = crate::Device::create(entry, instance, None, config.features, config.debug)?;
+            let device =
+                crate::Device::create(entry, instance, None, config.features, config.debug)?;
             (device, None)
         };
 

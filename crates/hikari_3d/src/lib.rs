@@ -38,7 +38,6 @@ impl MeshFormat {
 
 pub mod old;
 
-
 pub struct Plugin3D;
 
 impl Plugin for Plugin3D {
@@ -50,9 +49,11 @@ impl Plugin for Plugin3D {
         let gfx = game.get::<Gfx>();
         let mut manager = game.get_mut::<AssetManager>();
         manager.add_loader::<Texture2D, TextureLoader>(TextureLoader {
-            device: gfx.device().clone()
+            device: gfx.device().clone(),
         });
         manager.add_loader::<Material, MaterialLoader>(MaterialLoader);
-        manager.add_loader::<Scene, GLTFLoader>(GLTFLoader { device: gfx.device().clone() });
+        manager.add_loader::<Scene, GLTFLoader>(GLTFLoader {
+            device: gfx.device().clone(),
+        });
     }
 }

@@ -1,6 +1,6 @@
-use hikari_asset::{Handle};
+use hikari_asset::Handle;
 use hikari_math::*;
-use hikari_render::{GpuBuffer};
+use hikari_render::GpuBuffer;
 
 use crate::{Material, Scene};
 
@@ -34,5 +34,5 @@ pub enum MeshSource {
 }
 #[derive(Clone)]
 pub struct MeshRender {
-    pub source: MeshSource
+    pub source: MeshSource,
 }

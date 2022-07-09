@@ -1,21 +1,29 @@
+use crate::editor::components::EditorComponent;
 use hikari::{g3d::*, pbr::WorldRenderer};
 use hikari_imgui::*;
-use crate::editor::components::EditorComponent;
 
 impl EditorComponent for Camera {
     fn name() -> &'static str
     where
-        Self: Sized {
+        Self: Sized,
+    {
         "Camera Component"
     }
 
     fn new() -> Self
     where
-        Self: Sized {
+        Self: Sized,
+    {
         Self::default()
     }
 
-    fn draw(&mut self, ui: &hikari_imgui::Ui, _entity: hikari::core::Entity, _editor: &mut crate::editor::Editor, state: crate::EngineState) -> anyhow::Result<()> {
+    fn draw(
+        &mut self,
+        ui: &hikari_imgui::Ui,
+        _entity: hikari::core::Entity,
+        _editor: &mut crate::editor::Editor,
+        state: crate::EngineState,
+    ) -> anyhow::Result<()> {
         Drag::new("near").build(ui, &mut self.near);
         Drag::new("far").build(ui, &mut self.far);
 
@@ -37,7 +45,8 @@ impl EditorComponent for Camera {
 
     fn clone(&self) -> Self
     where
-        Self: Sized {
+        Self: Sized,
+    {
         Clone::clone(&self)
     }
 }

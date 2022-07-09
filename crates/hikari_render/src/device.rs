@@ -313,13 +313,12 @@ impl Device {
 
         let mut sync2 =
             vk::PhysicalDeviceSynchronization2FeaturesKHR::builder().synchronization2(true);
-        
-        let mut diag_config_nv = vk::DeviceDiagnosticsConfigCreateInfoNV::builder()
-            .flags(
-                vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_AUTOMATIC_CHECKPOINTS | 
-                vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_RESOURCE_TRACKING     |
-                vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_SHADER_DEBUG_INFO
-            );
+
+        let mut diag_config_nv = vk::DeviceDiagnosticsConfigCreateInfoNV::builder().flags(
+            vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_AUTOMATIC_CHECKPOINTS
+                | vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_RESOURCE_TRACKING
+                | vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_SHADER_DEBUG_INFO,
+        );
 
         let mut device_create_info = vk::DeviceCreateInfo::builder()
             .enabled_extension_names(required_extensions)
@@ -375,13 +374,11 @@ impl Device {
 
         let aftermath = if debug {
             match Aftermath::initialize() {
-                Ok(ok) => {
-                    Some(ok)
-                },
+                Ok(ok) => Some(ok),
                 Err(err) => {
                     log::error!("TODO: Handle Aftermath initialization error!");
                     None
-                },
+                }
             }
         } else {
             None
@@ -405,7 +402,7 @@ impl Device {
 
             shader_compiler,
             extensions,
-            aftermath
+            aftermath,
         }))
     }
     fn pick_optimal(
@@ -580,7 +577,7 @@ impl Device {
             .command_buffer_count(1);
 
         let cmd = self.raw().allocate_command_buffers(&create_info)?[0];
-        
+
         let begin_info = vk::CommandBufferBeginInfo::builder()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
@@ -597,7 +594,7 @@ impl Device {
 
         let fence = device.create_fence(&vk::FenceCreateInfo::builder(), None)?;
         self.graphics_queue_submit(&[*submit_info], fence)?;
-        
+
         let fences = [fence];
         device.wait_for_fences(&fences, true, 5_000_000_000)?;
         device.reset_fences(&fences)?;

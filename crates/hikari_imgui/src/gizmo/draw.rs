@@ -3,7 +3,7 @@ use std::f32::consts::TAU;
 use hikari_math::{Mat4, Vec3};
 use imgui::ImColor32;
 
-use crate::{gizmo::math::world_to_screen};
+use crate::gizmo::math::world_to_screen;
 
 use super::Viewport;
 
