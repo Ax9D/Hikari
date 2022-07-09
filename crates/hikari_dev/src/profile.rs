@@ -13,9 +13,10 @@ pub fn clean_function_name(name: &str) -> &str {
     }
 }
 
-#[cfg(not(feature = "profiling_disabled"))]
+#[cfg(feature = "profiling_enabled")]
 pub use tracy_client;
-#[cfg(not(feature = "profiling_disabled"))]
+
+#[cfg(feature = "profiling_enabled")]
 mod tracy {
     #[macro_export]
     macro_rules! profile_scope {
@@ -63,7 +64,8 @@ mod tracy {
         tracy_client::Client::start();
     }
 }
-#[cfg(feature = "profiling_disabled")]
+
+#[cfg(not(feature = "profiling_enabled"))]
 mod noop {
     #[macro_export]
     macro_rules! profile_scope {
@@ -86,7 +88,7 @@ mod noop {
     pub fn profiling_init() {}
 }
 
-#[cfg(feature = "profiling_disabled")]
-pub use noop::*;
-#[cfg(not(feature = "profiling_disabled"))]
+#[cfg(feature = "profiling_enabled")]
 pub use tracy::*;
+#[cfg(not(feature = "profiling_enabled"))]
+pub use noop::*;

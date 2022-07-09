@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 tracy-client = {version = "0.13", features = ["ondemand"], optional = true}
-
 [features]
 default = ["tracy-client/ondemand"]
-profiling_disabled = []
+profiling_enabled = []
