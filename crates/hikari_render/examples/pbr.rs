@@ -97,7 +97,7 @@ struct Scene {
     dir_light: Light,
 }
 struct UiState {
-    gizmo: imgui::GizmoContext,
+    gizmo: imgui::gizmo::GizmoContext,
     gizmo_operation: imgui::gizmo::Operation,
     gizmo_mode: imgui::gizmo::Mode,
 
@@ -777,9 +777,9 @@ fn imgui_update(
         transform_controls(ui, &mut scene.objects[1].transform, 1, ui_state);
 
         let operations = [
-            imgui::Operation::Translate,
-            imgui::Operation::Rotate,
-            imgui::Operation::Scale,
+            imgui::gizmo::Operation::Translate,
+            imgui::gizmo::Operation::Rotate,
+            imgui::gizmo::Operation::Scale,
         ];
         let mut index = operations
             .iter()
@@ -1050,7 +1050,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // println!("{:?}", proj_view);
     // panic!();
     let mut ui_state = UiState {
-        gizmo: imgui::GizmoContext::new(),
+        gizmo: imgui::gizmo::GizmoContext::new(),
         gizmo_operation: imgui::gizmo::Operation::Translate,
         gizmo_mode: imgui::gizmo::Mode::World,
 
