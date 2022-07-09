@@ -4,7 +4,8 @@
 Hikari is my personal Game Engine that I'm writing in my free time. 
 The code is very messy and a bit broken in some places.
 
-![dfdf](./demo.png)
+![hikari_render_demo](./demo.png)
+![editor_demo](./editor_demo.png)
 
 ## Vision
 To write a easy to use, modular and performant Game Engine in Rust, and also learn more about writing Game Engines in the process.
@@ -13,14 +14,14 @@ To write a easy to use, modular and performant Game Engine in Rust, and also lea
 * ECS Architecture
 * Powerful Render Graph API powered by Vulkan
 * Physically Based Rendering (a bit barebones atm)
-* WSYIWYG Editor for loading and editing Scenes (WIP)
+* WYSIWYG Editor for loading and editing Scenes (WIP)
 
 ### Current Goals
 - [X] Add minimal CI 
-- [ ] Implement an Asset Management System
+- [X] Implement an Asset Management System
+- [X] Properly integrate the renderer into the Engine (and Editor)
 - [ ] Add IBL support to the PBR Renderer
-- [ ] Properly integrate the renderer into the Engine (and Editor)
-- [ ] Soft Shadows
+- [ ] Shadows
 - [ ] Add scripting functionality (hikari_py)
 - [ ] Animation System
 
@@ -66,3 +67,4 @@ Here is a list of projects that I'd like to thank which have heavily inspired th
 * [kajiya](https://github.com/EmbarkStudios/kajiya) - Experimental real-time global illumination renderer
 * [Granite](https://github.com/Themaister/Granite)
 * [Godot](https://github.com/godotengine/godot) - Multi-platform 2D and 3D game engine
+* [egui-gizmo](https://github.com/urholaukkarinen/egui-gizmo) - 3d transformation gizmo built on top of the egui library

@@ -1011,7 +1011,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut graph = gb.build()?;
 
     //let mut sponza = load_mesh(&device, "../../assets/models/sponza/sponza.glb")?;
-    let mut sponza = load_mesh(&device, "/home/atri/honza.glb")?;
+    let mut sponza = load_mesh(&device, "../../assets/models/sponza/sponza.glb")?;
     let mut helmet = load_mesh(&device, "../../assets/models/cerberus/cerberus.gltf")?;
     //let mut sponza =  load_mesh(&device, "../../assets/models/cube.glb")?;
     let mut scene = Scene {
