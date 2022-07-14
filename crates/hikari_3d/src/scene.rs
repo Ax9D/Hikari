@@ -103,8 +103,10 @@ mod tests {
             manager.update(&mut materials).expect("Failed materials");
 
             if let Some(load_status) = manager.load_status(&sponza) {
-                if matches!(load_status, LoadStatus::Loaded) {
-                    break;
+                match load_status {
+                    LoadStatus::Loaded => break,
+                    LoadStatus::Failed => panic!(),
+                    _=> {}
                 }
             }
         }
