@@ -1,6 +1,6 @@
-pub mod scene;
+pub mod world;
 
-pub use scene::*;
+pub use world::*;
 
 #[cfg(feature = "serde")]
 pub mod serde;
