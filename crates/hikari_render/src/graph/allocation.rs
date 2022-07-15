@@ -65,18 +65,18 @@ impl BarrierStorage {
             },
         ) = sync::get_image_memory_barrier(&barrier);
 
-        log::info!(
-            "old_layout {:?} src_access_mask {:?}",
-            old_layout,
-            src_access_mask
-        );
-        log::info!(
-            "new_layout {:?} dst_access_mask {:?}",
-            new_layout,
-            dst_access_mask
-        );
+        // log::info!(
+        //     "old_layout {:?} src_access_mask {:?}",
+        //     old_layout,
+        //     src_access_mask
+        // );
+        // log::info!(
+        //     "new_layout {:?} dst_access_mask {:?}",
+        //     new_layout,
+        //     dst_access_mask
+        // );
 
-        log::info!("\n");
+        // log::info!("\n");
 
         use crate::barrier;
 

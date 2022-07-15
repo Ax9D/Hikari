@@ -30,21 +30,19 @@ impl Default for Settings {
         Self { fxaa: true }
     }
 }
-pub struct PBRPlugin;
+pub struct PBRPlugin {
+    pub width: u32, 
+    pub height: u32
+}
 
 impl Plugin for PBRPlugin {
     fn build(self, game: &mut hikari_core::Game) {
         let mut gfx = game.get_mut::<Gfx>();
 
-        let swapchain = gfx.swapchain().unwrap().lock();
-        let (width, height) = swapchain.size();
-        drop(swapchain);
-
         let renderer =
-            WorldRenderer::new(&mut gfx, width, height).expect("Failed to create WorldRenderer");
-
-        let device = gfx.device().clone();
+            WorldRenderer::new(&mut gfx, self.width, self.height).expect("Failed to create WorldRenderer");
         drop(gfx);
+        
 
         game.add_state(renderer);
         game.add_task(
