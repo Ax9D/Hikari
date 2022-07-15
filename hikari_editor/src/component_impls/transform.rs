@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use hikari::math::{EulerRot, Quat, Transform, Vec3};
 use imgui::StorageExt;
 
-use crate::{editor::components::EditorComponent, *};
+use crate::{components::EditorComponent, *};
 
 fn rotation_controls(
     ui: &imgui::Ui,

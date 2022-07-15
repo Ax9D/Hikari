@@ -1,9 +1,9 @@
+use crate::components::EditorComponents;
+
 mod camera;
 mod light;
 mod mesh_render;
 mod transform;
-
-use super::components::EditorComponents;
 
 pub fn register_components(components: &mut EditorComponents) {
     components.register::<hikari::math::Transform>();

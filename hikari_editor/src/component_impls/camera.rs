@@ -1,4 +1,4 @@
-use crate::editor::components::EditorComponent;
+use crate::components::EditorComponent;
 use hikari::{g3d::*, pbr::WorldRenderer};
 use hikari_imgui::*;
 

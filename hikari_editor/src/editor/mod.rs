@@ -1,19 +1,16 @@
 use self::{
-    components::EditorComponents,
     content_browser::ContentBrowser,
     logging::{LogListener, Logging},
     outliner::Outliner,
     properties::Properties,
-    tools::Tools,
+    tools::Tools, viewport::Viewport,
 };
-use crate::{imgui, EngineState};
+use crate::{imgui, EngineState, components::EditorComponents, component_impls};
 use clipboard::ClipboardProvider;
-use hikari::{asset::AssetManager, core::Game};
+use hikari::{core::Game};
 pub mod logging;
 
 //mod utils;
-mod component_impls;
-mod components;
 mod content_browser;
 mod outliner;
 mod properties;
@@ -50,6 +47,7 @@ pub enum RenameState {
 pub struct Editor {
     outliner: Outliner,
     properties: Properties,
+    viewport: Viewport,
     content_browser: ContentBrowser,
     logging: Logging,
     tools: Tools,
@@ -144,6 +142,7 @@ impl Editor {
             content_browser: ContentBrowser::new(),
             outliner: Outliner::default(),
             properties: Properties::default(),
+            viewport: Viewport,
             rename_state: RenameState::Idle,
         };
         {

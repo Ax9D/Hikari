@@ -3,7 +3,7 @@ use hikari::{
     g3d::{MeshRender, MeshSource, Scene},
 };
 
-use crate::{editor::components::EditorComponent, *};
+use crate::{components::EditorComponent, *};
 
 impl EditorComponent for MeshRender {
     fn name() -> &'static str

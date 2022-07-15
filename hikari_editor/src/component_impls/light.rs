@@ -1,6 +1,6 @@
 use hikari::g3d::Light;
 
-use crate::{editor::components::EditorComponent, *};
+use crate::{components::EditorComponent, *};
 
 impl EditorComponent for Light {
     fn name() -> &'static str

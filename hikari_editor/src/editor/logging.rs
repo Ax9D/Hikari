@@ -257,7 +257,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
             }
             //println!("{} {}", ui.scroll_y(), ui.scroll_max_y());
 
-            if f32::abs(ui.scroll_y() - ui.scroll_max_y()) <= 10.0 {
+            if f32::abs(ui.scroll_y() - ui.scroll_max_y()) <= 1.0 {
                 ui.set_scroll_here_y_with_ratio(1.0);
             }
         });

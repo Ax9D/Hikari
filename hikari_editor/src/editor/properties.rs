@@ -1,7 +1,7 @@
 use crate::{imgui, EngineState};
 use hikari::core::*;
 
-use super::{components::EditorComponents, Editor};
+use super::{EditorComponents, Editor};
 
 #[derive(Default)]
 pub struct Properties {}
