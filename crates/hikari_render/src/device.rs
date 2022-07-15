@@ -221,6 +221,9 @@ impl From<vk::PhysicalDeviceProperties> for PhysicalDeviceProperties {
         }
     }
 }
+struct Queue {
+
+}
 struct RawDevice {
     inner: ash::Device,
     instance: ash::Instance,
@@ -251,10 +254,8 @@ pub struct Device {
     physical_device: PhysicalDevice,
     device_properties: PhysicalDeviceProperties,
     pub(crate) unified_queue_ix: u32,
-    pub(crate) present_queue_ix: u32,
-    unified_queue: vk::Queue,
-    present_queue: vk::Queue,
-    pub(crate) queue_submit_mutex: Mutex<()>,
+    //pub(crate) present_queue_ix: u32,
+    unified_queue: Mutex<vk::Queue>,
 
     shader_compiler: Mutex<shaderc::Compiler>,
 
@@ -298,7 +299,6 @@ impl Device {
         const QUEUE_PRIORITIES: [f32; 1] = [1.0];
 
         let unified_queue_ix = physical_device.get_unified_queue().unwrap();
-        let present_queue_ix = physical_device.get_unified_queue().unwrap();
 
         let queue_create_infos = [*vk::DeviceQueueCreateInfo::builder()
             .queue_family_index(unified_queue_ix)
@@ -337,7 +337,7 @@ impl Device {
         log::debug!("Created logical device");
 
         let unified_queue = unsafe { ash_device.get_device_queue(unified_queue_ix, 0) };
-        let present_queue = unsafe { ash_device.get_device_queue(present_queue_ix, 0) };
+        //let present_queue = unsafe { ash_device.get_device_queue(present_queue_ix, 0) };
 
         let memory_allocator = std::sync::Mutex::new(Allocator::new(&AllocatorCreateDesc {
             instance: instance.clone(),
@@ -391,10 +391,9 @@ impl Device {
             device_properties: props,
 
             unified_queue_ix,
-            present_queue_ix,
-            unified_queue,
-            present_queue,
-            queue_submit_mutex: Mutex::new(()),
+            //present_queue_ix,
+            unified_queue: Mutex::new(unified_queue),
+            //present_queue,
 
             pipeline_cache,
             memory_allocator,
@@ -538,22 +537,22 @@ impl Device {
         &self.memory_allocator
     }
 
-    pub fn graphics_queue(&self) -> vk::Queue {
-        unsafe { self.unified_queue }
+    pub fn unified_queue(&self) -> MutexGuard<'_, vk::Queue> {
+        self.unified_queue.lock()
     }
-    pub fn present_queue(&self) -> vk::Queue {
-        unsafe { self.present_queue }
-    }
+    // pub fn present_queue(&self) -> vk::Queue {
+    //     self.present_queue
+    // }
     pub(crate) fn graphics_queue_submit(
         &self,
         submits: &[vk::SubmitInfo],
         fence: vk::Fence,
     ) -> VkResult<()> {
-        let guard = self.queue_submit_mutex.lock();
         //log::debug!("vkQueueSubmit");
+        let queue = self.unified_queue();
         unsafe {
             self.raw()
-                .queue_submit(self.graphics_queue(), submits, fence)
+                .queue_submit(*queue, submits, fence)
         }
     }
     pub(crate) unsafe fn submit_commands_immediate(

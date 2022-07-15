@@ -212,7 +212,7 @@ impl Renderer {
         let renderer = imgui_rs_vulkan_renderer::Renderer::with_gpu_allocator(
             device.allocator().clone(),
             device.raw().clone(),
-            device.graphics_queue(),
+            *device.unified_queue(),
             transfer_command_pool,
             compatible_renderpass,
             &mut backend.imgui,
