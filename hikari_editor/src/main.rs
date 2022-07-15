@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use hikari::g3d::Plugin3D;
 use hikari::pbr::PBRPlugin;
-use hikari::pbr::WorldRenderer;
 use hikari::render::imgui_support::Renderer;
 use hikari::render::imgui_support::TextureExt;
 use hikari::systems::global::UnsafeGlobalState;
@@ -24,6 +23,9 @@ use winit::event_loop::ControlFlow;
 use crate::editor::EditorConfig;
 
 mod editor;
+mod components;
+mod component_impls;
+mod world;
 
 const EDITOR_STAGE: &str = "EDITOR_STAGE";
 type EngineState<'a> = Pin<&'a UnsafeGlobalState>;
@@ -199,7 +201,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     game.add_plugin(Plugin3D);
-    game.add_plugin(PBRPlugin);
+    game.add_plugin(PBRPlugin {
+        width: 1920,
+        height: 1080
+    });
 
     game.add_plugin(EditorPlugin { log_listener });
     game.run();
