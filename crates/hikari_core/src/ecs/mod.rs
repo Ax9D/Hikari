@@ -2,8 +2,8 @@ pub mod scene;
 
 pub use scene::*;
 
-#[cfg(feature = "serialize")]
-pub mod serialize;
+#[cfg(feature = "serde")]
+pub mod serde;
 
 pub trait Component: Send + Sync + 'static {}
 

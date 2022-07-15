@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hikari = {path = "../", features = ["editor", "profiling_enabled"]}
+hikari = {path = "../", features = ["editor", "profiling_enabled", "serde"]}
 hikari_imgui = {path = "../crates/hikari_imgui"}
 winit = "0.25.0"
 log = {version = "^0.4"}
