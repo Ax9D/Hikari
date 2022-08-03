@@ -80,7 +80,7 @@ pub fn build_pass(
                     let camera = world.get_component::<Camera>(camera_entity).unwrap();
                     let camera_transform = world.get_component::<Transform>(camera_entity).unwrap();
 
-                    let proj = camera.get_projection_matrix(config.width, config.height);
+                    let proj = camera.get_projection_matrix(config.viewport.0, config.viewport.1);
                     let view = camera_transform.get_matrix().inverse();
                     let view_proj = (proj * view).to_cols_array();
 

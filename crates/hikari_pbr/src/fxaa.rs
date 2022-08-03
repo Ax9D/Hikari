@@ -65,7 +65,7 @@ pub fn build_pass(
 
             cmd.push_constants(
                 &PushConstants {
-                    res: hikari_math::vec2(config.width as f32, config.height as f32),
+                    res: hikari_math::vec2(config.viewport.0 as f32, config.viewport.1 as f32),
                     enabled: config.settings.fxaa as _,
                 },
                 0,

@@ -156,13 +156,13 @@ pub fn build_pass(
         Renderpass::<Args>::new(
             "PBR",
             ImageSize::default(),
-            move |cmd, (world, settings, assets)| {
+            move |cmd, (world, config, assets)| {
                 let camera = get_camera(world);
                 if let Some(camera_entity) = camera {
                     let camera = world.get_component::<Camera>(camera_entity).unwrap();
                     let camera_transform = world.get_component::<Transform>(camera_entity).unwrap();
 
-                    let proj = camera.get_projection_matrix(settings.width, settings.height);
+                    let proj = camera.get_projection_matrix(config.viewport.0, config.viewport.1);
                     let view = camera_transform.get_matrix().inverse();
 
                     let view_proj = (proj * view).to_cols_array();

@@ -9,7 +9,7 @@ use crate::{depth_prepass, fxaa, pbr, Args, Config, Settings};
 
 pub struct WorldRenderer {
     graph: hikari_render::Graph<Args>,
-    settings: Settings,
+    config: Config 
 }
 
 impl WorldRenderer {
@@ -28,11 +28,14 @@ impl WorldRenderer {
 
         Ok(Self {
             graph: graph.build()?,
-            settings: Default::default(),
+            config: Config {
+            settings: Settings::new(),
+            viewport: (width, height)
+            }
         })
     }
     pub fn settings(&mut self) -> &mut Settings {
-        &mut self.settings
+        &mut self.config.settings
     }
     pub fn get_output_image(&self) -> &SampledImage {
         self.graph
@@ -42,13 +45,7 @@ impl WorldRenderer {
     }
     pub fn render(&mut self, world: &World, asset_storage: &AssetStorage) -> anyhow::Result<()> {
         hikari_dev::profile_function!();
-        let (width, height) = self.graph.size();
-        let config = Config {
-            width,
-            height,
-            settings: self.settings.clone(),
-        };
-        self.graph.execute((world, &config, asset_storage))?;
+        self.graph.execute((world, &self.config, asset_storage))?;
 
         Ok(())
     }
@@ -58,19 +55,23 @@ impl WorldRenderer {
         asset_storage: &AssetStorage,
     ) -> anyhow::Result<&SampledImage> {
         hikari_dev::profile_function!();
-        let (width, height) = self.graph.size();
-        let config = Config {
-            width,
-            height,
-            settings: self.settings.clone(),
-        };
-        self.graph.execute_sync((world, &config, asset_storage))?;
+        self.graph.execute_sync((world, &self.config, asset_storage))?;
 
         Ok(self.get_output_image())
+    }
+    pub fn set_viewport(&mut self, width: u32, height: u32) {
+        self.config.viewport = (width, height);
+    }
+    pub fn viewport(&self) -> (u32, u32) {
+        self.config.viewport
     }
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
         self.graph.resize(width, height)
     }
+    pub fn resize_and_set_viewport(&mut self, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
+        self.set_viewport(width, height);
+        self.resize(width, height)
+    }   
     pub fn size(&self) -> (u32, u32) {
         self.graph.size()
     }

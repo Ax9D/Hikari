@@ -16,8 +16,7 @@ type Args = (World, Config, AssetStorage);
 
 pub struct Config {
     settings: Settings,
-    width: u32,
-    height: u32,
+    viewport: (u32, u32)
 }
 
 #[derive(Clone)]
@@ -25,8 +24,8 @@ pub struct Settings {
     pub fxaa: bool,
 }
 
-impl Default for Settings {
-    fn default() -> Self {
+impl Settings {
+    fn new() -> Self {
         Self { fxaa: true }
     }
 }
