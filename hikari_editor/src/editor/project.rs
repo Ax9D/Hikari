@@ -94,7 +94,10 @@ impl ProjectManager {
         let file_clone = file.as_ref().to_owned();
 
         let proj_dir = file_clone.parent().unwrap();
-        state.get_mut::<AssetManager>().unwrap().set_asset_dir(proj_dir);
+        state
+            .get_mut::<AssetManager>()
+            .unwrap()
+            .set_asset_dir(proj_dir);
 
         match Project::open(file) {
             Ok(project) => {
@@ -105,7 +108,6 @@ impl ProjectManager {
                     .unwrap()
                     .set_title(&new_title);
 
-                
                 self.current = Some((file_clone.clone(), project));
 
                 // let folder = file_clone.parent().expect("Failed to find parent folder");
@@ -136,7 +138,6 @@ impl ProjectManager {
 
         std::mem::swap::<World>(&mut world, &mut new_world);
         self.current_scene = Some(handle.clone());
-        
 
         Ok(())
     }
@@ -170,7 +171,7 @@ impl ProjectManager {
 }
 pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
     let project_manager = &mut editor.project_manager;
-    
+
     let mut new_scene_sure = false;
     {
         let mut storage = state.get_mut::<AssetStorage>().unwrap();

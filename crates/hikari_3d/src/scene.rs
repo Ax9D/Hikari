@@ -1,4 +1,4 @@
-use std::{sync::Arc, io::Read};
+use std::{io::Read, sync::Arc};
 
 use hikari_asset::{Asset, LoadContext, Loader};
 
@@ -101,7 +101,7 @@ mod tests {
                 match load_status {
                     LoadStatus::Loaded => break,
                     LoadStatus::Failed => panic!(),
-                    _=> {}
+                    _ => {}
                 }
             }
         }

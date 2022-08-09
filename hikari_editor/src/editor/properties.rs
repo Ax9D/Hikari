@@ -4,14 +4,14 @@ use crate::{editor::meta::EditorInfo, imgui};
 use hikari::core::*;
 use hikari_editor::*;
 
-use super::{Editor, EditorComponents, meta::EditorOnly};
+use super::{meta::EditorOnly, Editor, EditorComponents};
 
 #[derive(Default)]
 pub struct Properties;
 
 pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
     let filtered_types = [TypeId::of::<EditorInfo>(), TypeId::of::<EditorOnly>()];
-    
+
     let result = ui
         .window("Properties")
         .size([300.0, 400.0], imgui::Condition::Once)

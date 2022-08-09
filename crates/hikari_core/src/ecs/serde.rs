@@ -2,8 +2,9 @@ use std::{any::TypeId, collections::HashMap};
 
 use hecs::EntityRef;
 use serde::{
-    de::{MapAccess, Visitor, DeserializeSeed},
-    Deserialize, Serialize, Serializer, ser::SerializeMap, Deserializer,
+    de::{DeserializeSeed, MapAccess, Visitor},
+    ser::SerializeMap,
+    Deserialize, Deserializer, Serialize, Serializer,
 };
 use type_uuid::TypeUuid;
 use uuid::Uuid;
@@ -47,7 +48,11 @@ impl<'r, 'e> Serialize for ComponentSerialize<'r, 'e> {
 #[derive(Clone)]
 struct SerializeFns {
     serialize_fn: fn(EntityRef<'_>, &mut dyn FnMut(&dyn erased_serde::Serialize)),
-    deserialize_fn: fn(Entity, &mut World, &mut dyn erased_serde::Deserializer) -> Result<(), erased_serde::Error>
+    deserialize_fn: fn(
+        Entity,
+        &mut World,
+        &mut dyn erased_serde::Deserializer,
+    ) -> Result<(), erased_serde::Error>,
 }
 #[derive(Default, Clone)]
 pub struct Registry {
@@ -59,9 +64,7 @@ impl Registry {
     pub fn new() -> Self {
         Default::default()
     }
-    pub fn register_component<C: SerializeComponent>(
-        &mut self,
-    ) {
+    pub fn register_component<C: SerializeComponent>(&mut self) {
         let serialize_fns = SerializeFns {
             serialize_fn: |entity_ref, serialize_fn| {
                 let component = entity_ref.get::<C>().unwrap();
@@ -103,28 +106,32 @@ impl Registry {
 
         result.unwrap()
     }
-    pub fn deserialize_component<'de, D: Deserializer<'de>>(&self, component_id: &Uuid, entity: Entity, world: &mut World, deserializer: D) -> Result<(), D::Error>{
+    pub fn deserialize_component<'de, D: Deserializer<'de>>(
+        &self,
+        component_id: &Uuid,
+        entity: Entity,
+        world: &mut World,
+        deserializer: D,
+    ) -> Result<(), D::Error> {
         if let Some(serialize_fns) = self.serialize_fns.get(component_id) {
             let mut deserializer = <dyn erased_serde::Deserializer>::erase(deserializer);
-            (serialize_fns.deserialize_fn)(entity, world, &mut deserializer).map_err(serde::de::Error::custom)?;
+            (serialize_fns.deserialize_fn)(entity, world, &mut deserializer)
+                .map_err(serde::de::Error::custom)?;
         } else {
             log::warn!("Skipping deserializing uuid: {}", component_id);
         }
         Ok(())
-    } 
+    }
 }
 
 pub struct SerializableWorld<'w, 'r> {
     world: &'w World,
-    registry: &'r Registry
+    registry: &'r Registry,
 }
 
 impl<'w, 'r> SerializableWorld<'w, 'r> {
     pub(crate) fn new(world: &'w World, registry: &'r Registry) -> Self {
-        Self {
-            world,
-            registry
-        }
+        Self { world, registry }
     }
 }
 
@@ -137,10 +144,14 @@ impl World {
 impl<'w, 'r> Serialize for SerializableWorld<'w, 'r> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer {
+        S: Serializer,
+    {
         let mut map = serializer.serialize_map(Some(self.world.len()))?;
         for entity_ref in self.world.entities() {
-            map.serialize_entry(&entity_ref.entity(), &ComponentsSerialize(&self.registry, entity_ref))?;
+            map.serialize_entry(
+                &entity_ref.entity(),
+                &ComponentsSerialize(&self.registry, entity_ref),
+            )?;
         }
 
         map.end()
@@ -148,36 +159,41 @@ impl<'w, 'r> Serialize for SerializableWorld<'w, 'r> {
 }
 
 impl World {
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D, registry: &Registry) -> Result<Self, D::Error> {
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+        registry: &Registry,
+    ) -> Result<Self, D::Error> {
         let mut world = Self::new();
         WorldDeserializer {
             world: &mut world,
-            registry
-        }.deserialize(deserializer)?;
+            registry,
+        }
+        .deserialize(deserializer)?;
 
         Ok(world)
     }
 }
 pub struct WorldDeserializer<'w, 'r> {
     pub world: &'w mut World,
-    pub registry: &'r Registry
+    pub registry: &'r Registry,
 }
 impl<'w, 'r, 'de> DeserializeSeed<'de> for WorldDeserializer<'w, 'r> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: Deserializer<'de> {
+        D: Deserializer<'de>,
+    {
         deserializer.deserialize_map(WorldVisitor {
             world: self.world,
-            registry: self.registry
+            registry: self.registry,
         })?;
         Ok(())
     }
 }
 struct WorldVisitor<'w, 'r> {
     world: &'w mut World,
-    registry: &'r Registry
+    registry: &'r Registry,
 }
 impl<'w, 'r, 'de> Visitor<'de> for WorldVisitor<'w, 'r> {
     type Value = ();
@@ -187,11 +203,12 @@ impl<'w, 'r, 'de> Visitor<'de> for WorldVisitor<'w, 'r> {
     }
 
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-        where
-            A: MapAccess<'de>, {
+    where
+        A: MapAccess<'de>,
+    {
         while let Some(entity) = map.next_key::<Entity>()? {
             self.world.create_entity_at(entity, ());
-            
+
             map.next_value_seed(ComponentsDeserializer(entity, self.world, self.registry))?;
         }
         Ok(())
@@ -205,12 +222,13 @@ impl<'w, 'r, 'de> DeserializeSeed<'de> for ComponentsDeserializer<'w, 'r> {
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de> {
+        D: serde::Deserializer<'de>,
+    {
         deserializer.deserialize_map(ComponentsVisitor(self.0, self.1, self.2))?;
         Ok(())
     }
 }
-        
+
 struct ComponentsVisitor<'w, 'r>(Entity, &'w mut World, &'r Registry);
 
 impl<'w, 'r, 'de> Visitor<'de> for ComponentsVisitor<'w, 'r> {
@@ -220,10 +238,13 @@ impl<'w, 'r, 'de> Visitor<'de> for ComponentsVisitor<'w, 'r> {
         formatter.write_str("An entity's components")
     }
     fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-        where
-            A: MapAccess<'de>, {
+    where
+        A: MapAccess<'de>,
+    {
         while let Some(uuid) = map.next_key::<uuid::Uuid>()? {
-            map.next_value_seed::<ComponentDeserializer>(ComponentDeserializer(uuid, self.0, self.1, self.2))?;
+            map.next_value_seed::<ComponentDeserializer>(ComponentDeserializer(
+                uuid, self.0, self.1, self.2,
+            ))?;
         }
 
         Ok(())
@@ -236,8 +257,10 @@ impl<'w, 'r, 'de> DeserializeSeed<'de> for ComponentDeserializer<'w, 'r> {
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
-        D: serde::Deserializer<'de> {
-        self.3.deserialize_component(&self.0, self.1, self.2, deserializer)?;
+        D: serde::Deserializer<'de>,
+    {
+        self.3
+            .deserialize_component(&self.0, self.1, self.2, deserializer)?;
 
         Ok(())
     }
@@ -327,7 +350,7 @@ fn round_trip() {
     let mut registry = Registry::new();
     registry.register_component::<Position>();
     registry.register_component::<Id>();
-    
+
     let world_string = serde_yaml::to_string(&world_in.as_serializable(&registry)).unwrap();
 
     let deserializer = serde_yaml::Deserializer::from_str(&world_string);
@@ -338,17 +361,11 @@ fn round_trip() {
     assert!(position.is_ok());
     let position = position.unwrap();
 
-    assert_eq!(&Position {
-        x: 0.5,
-        y: 0.0
-    }, &*position);
+    assert_eq!(&Position { x: 0.5, y: 0.0 }, &*position);
 
     let id = world_out.get_component::<Id>(entity);
     assert!(id.is_ok());
     let id = id.unwrap();
-    
-    assert_eq!(&Id {
-        name: "Foo".into()
-    }, &*id);
 
+    assert_eq!(&Id { name: "Foo".into() }, &*id);
 }

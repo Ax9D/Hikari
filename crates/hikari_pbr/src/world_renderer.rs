@@ -9,7 +9,7 @@ use crate::{depth_prepass, fxaa, pbr, Args, Config, Settings};
 
 pub struct WorldRenderer {
     graph: hikari_render::Graph<Args>,
-    config: Config 
+    config: Config,
 }
 
 impl WorldRenderer {
@@ -29,9 +29,9 @@ impl WorldRenderer {
         Ok(Self {
             graph: graph.build()?,
             config: Config {
-            settings: Settings::new(),
-            viewport: (width, height)
-            }
+                settings: Settings::new(),
+                viewport: (width, height),
+            },
         })
     }
     pub fn settings(&mut self) -> &mut Settings {
@@ -55,7 +55,8 @@ impl WorldRenderer {
         asset_storage: &AssetStorage,
     ) -> anyhow::Result<&SampledImage> {
         hikari_dev::profile_function!();
-        self.graph.execute_sync((world, &self.config, asset_storage))?;
+        self.graph
+            .execute_sync((world, &self.config, asset_storage))?;
 
         Ok(self.get_output_image())
     }
@@ -68,10 +69,14 @@ impl WorldRenderer {
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
         self.graph.resize(width, height)
     }
-    pub fn resize_and_set_viewport(&mut self, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn resize_and_set_viewport(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.set_viewport(width, height);
         self.resize(width, height)
-    }   
+    }
     pub fn size(&self) -> (u32, u32) {
         self.graph.size()
     }

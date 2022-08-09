@@ -7,7 +7,7 @@ pub struct SaveContext<'a> {
 }
 impl<'a> SaveContext<'a> {
     pub(crate) fn new<T: Asset>(asset: &'a T) -> Self {
-        Self { asset: asset}
+        Self { asset: asset }
     }
     pub fn get_asset<T: Asset>(&self) -> &T {
         self.asset.downcast_ref().expect("Incorrect asset type")

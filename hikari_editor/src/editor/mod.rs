@@ -250,7 +250,7 @@ impl Editor {
         });
 
         open |= ui.io().key_ctrl && ui.io().keys_down[KeyCode::O as usize]; // Ctrl + O
-        
+
         save |= project_open && ui.io().key_ctrl && ui.io().keys_down[KeyCode::S as usize]; // Ctrl + S
 
         if open {

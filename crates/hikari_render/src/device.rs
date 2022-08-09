@@ -221,9 +221,7 @@ impl From<vk::PhysicalDeviceProperties> for PhysicalDeviceProperties {
         }
     }
 }
-struct Queue {
-
-}
+struct Queue {}
 struct RawDevice {
     inner: ash::Device,
     instance: ash::Instance,
@@ -394,7 +392,6 @@ impl Device {
             //present_queue_ix,
             unified_queue: Mutex::new(unified_queue),
             //present_queue,
-
             pipeline_cache,
             memory_allocator,
             descriptor_set_layout_cache,
@@ -550,10 +547,7 @@ impl Device {
     ) -> VkResult<()> {
         //log::debug!("vkQueueSubmit");
         let queue = self.unified_queue();
-        unsafe {
-            self.raw()
-                .queue_submit(*queue, submits, fence)
-        }
+        unsafe { self.raw().queue_submit(*queue, submits, fence) }
     }
     pub(crate) unsafe fn submit_commands_immediate(
         &self,

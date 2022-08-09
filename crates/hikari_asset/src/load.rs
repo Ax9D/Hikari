@@ -1,10 +1,11 @@
 use std::{
     any::Any,
-    path::{PathBuf, Path}, sync::Arc, io::{Read},
+    io::Read,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
-
-use crate::{meta::MetaData, AssetManager, Asset, Handle, HandleAllocator};
+use crate::{meta::MetaData, Asset, AssetManager, Handle, HandleAllocator};
 
 #[derive(Debug, Clone)]
 pub enum Source {
@@ -18,10 +19,10 @@ impl Source {
     }
     pub fn relative_path(&self) -> &Path {
         match self {
-            Source::FileSystem(path) | Source::Data(path, _) => { 
-                assert!(path.is_relative());    
-                path 
-            },
+            Source::FileSystem(path) | Source::Data(path, _) => {
+                assert!(path.is_relative());
+                path
+            }
         }
     }
     pub fn is_filesystem(&self) -> bool {
@@ -64,7 +65,12 @@ pub struct LoadContext {
     ass_man: AssetManager,
 }
 impl LoadContext {
-    pub fn new<T: Asset>(abs_path: PathBuf, reader: Box<dyn Read + Send + Sync + 'static>, settings: T::Settings, ass_man: AssetManager) -> Self {
+    pub fn new<T: Asset>(
+        abs_path: PathBuf,
+        reader: Box<dyn Read + Send + Sync + 'static>,
+        settings: T::Settings,
+        ass_man: AssetManager,
+    ) -> Self {
         Self {
             abs_path,
             reader,

@@ -74,7 +74,7 @@ impl TextureConfig {
     // }
 }
 
-use std::{sync::Arc, io::Read};
+use std::{io::Read, sync::Arc};
 
 use hikari_asset::{Asset, LoadContext, Loader};
 use hikari_render::*;

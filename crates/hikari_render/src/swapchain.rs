@@ -79,19 +79,27 @@ impl Swapchain {
             .clipped(true)
             .old_swapchain(old_swapchain_vk);
 
-        let present_queue_ix = device.physical_device().get_present_queue(device.instance(), &surface_data.surface, &surface_data.surface_loader).unwrap();
+        let present_queue_ix = device
+            .physical_device()
+            .get_present_queue(
+                device.instance(),
+                &surface_data.surface,
+                &surface_data.surface_loader,
+            )
+            .unwrap();
         let queue_family_indices = [device.unified_queue_ix, present_queue_ix];
         let present_queue;
-        
+
         if queue_family_indices[0] != queue_family_indices[1] {
             present_queue = Some(unsafe { device.raw().get_device_queue(present_queue_ix, 0) });
-            
+
             swapchain_create_info = swapchain_create_info
                 .image_sharing_mode(vk::SharingMode::CONCURRENT)
                 .queue_family_indices(&queue_family_indices)
         } else {
             present_queue = None;
-            swapchain_create_info = swapchain_create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE)
+            swapchain_create_info =
+                swapchain_create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE)
         };
 
         let swapchain = unsafe { swapchain_loader.create_swapchain(&swapchain_create_info, None)? };
@@ -378,11 +386,10 @@ impl Swapchain {
 
         unsafe {
             if let Some(present_queue) = self.present_queue {
-                    self.loader
-                        .queue_present(present_queue, &present_info)
+                self.loader.queue_present(present_queue, &present_info)
             } else {
-                    self.loader
-                        .queue_present(*self.device.unified_queue(), &present_info)
+                self.loader
+                    .queue_present(*self.device.unified_queue(), &present_info)
             }
         }
     }

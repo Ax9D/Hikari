@@ -7,15 +7,15 @@ use super::Editor;
 
 #[derive(Default)]
 pub struct Viewport {
-    _gizmo_context: GizmoContext
+    _gizmo_context: GizmoContext,
 }
 pub fn draw(ui: &imgui::Ui, _editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
     //let mut viewport = &mut editor.viewport;
     //let outliner = &mut editor.outliner;
-    
+
     let mut renderer = state.get_mut::<WorldRenderer>().unwrap();
     //let mut world = state.get_mut::<World>().unwrap();
-    
+
     ui.window("Viewport")
         .size([950.0, 200.0], imgui::Condition::Once)
         .resizable(true)

@@ -6,9 +6,7 @@ use std::{
 
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 
-use crate::{
-    handle::{Handle, HandleAllocator, RefOp},
-};
+use crate::handle::{Handle, HandleAllocator, RefOp};
 #[allow(unused)]
 struct RefCounts {
     ref_send: flume::Sender<RefOp>,

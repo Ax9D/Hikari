@@ -56,19 +56,16 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                     outliner.selected = None;
                 }
             }
-            
-            let mut ordered_entities ;
-            {
-            hikari::dev::profile_scope!("Outliner Entity sorting");
-            ordered_entities = Vec::with_capacity(world.len());
-            for (entity, info) in world.query_mut::<Without<&EditorOnly, &EditorInfo>>() {
-                ordered_entities.push((entity, info.index));
-            }
 
-            ordered_entities.sort_by(|(_, a), (_, b)| {
-                a.cmp(b)
-            });
-            
+            let mut ordered_entities;
+            {
+                hikari::dev::profile_scope!("Outliner Entity sorting");
+                ordered_entities = Vec::with_capacity(world.len());
+                for (entity, info) in world.query_mut::<Without<&EditorOnly, &EditorInfo>>() {
+                    ordered_entities.push((entity, info.index));
+                }
+
+                ordered_entities.sort_by(|(_, a), (_, b)| a.cmp(b));
             }
 
             for (entity, _) in ordered_entities {

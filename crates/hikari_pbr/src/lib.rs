@@ -16,7 +16,7 @@ type Args = (World, Config, AssetStorage);
 
 pub struct Config {
     settings: Settings,
-    viewport: (u32, u32)
+    viewport: (u32, u32),
 }
 
 #[derive(Clone)]
@@ -30,18 +30,17 @@ impl Settings {
     }
 }
 pub struct PBRPlugin {
-    pub width: u32, 
-    pub height: u32
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Plugin for PBRPlugin {
     fn build(self, game: &mut hikari_core::Game) {
         let mut gfx = game.get_mut::<Gfx>();
 
-        let renderer =
-            WorldRenderer::new(&mut gfx, self.width, self.height).expect("Failed to create WorldRenderer");
+        let renderer = WorldRenderer::new(&mut gfx, self.width, self.height)
+            .expect("Failed to create WorldRenderer");
         drop(gfx);
-        
 
         game.add_state(renderer);
         game.add_task(

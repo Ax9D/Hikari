@@ -1,4 +1,8 @@
-use crate::{components::EditorComponent, editor::meta::{EditorInfo, EditorOnly}, *};
+use crate::{
+    components::EditorComponent,
+    editor::meta::{EditorInfo, EditorOnly},
+    *,
+};
 use hikari_editor::*;
 
 impl EditorComponent for EditorInfo {
@@ -37,13 +41,15 @@ impl EditorComponent for EditorInfo {
 impl EditorComponent for EditorOnly {
     fn name() -> &'static str
     where
-        Self: Sized {
+        Self: Sized,
+    {
         "Editor Only Tag"
     }
 
     fn new() -> Self
     where
-        Self: Sized {
+        Self: Sized,
+    {
         unimplemented!()
     }
 
@@ -59,7 +65,8 @@ impl EditorComponent for EditorOnly {
 
     fn clone(&self) -> Self
     where
-        Self: Sized {
+        Self: Sized,
+    {
         Clone::clone(&self)
     }
 }

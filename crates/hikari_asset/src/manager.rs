@@ -1,18 +1,22 @@
 use crate::{
-    meta::*,
+    handle::*,
     load::*,
-    save::*, 
-    handle::*, Asset, AssetPool, path::{self}
+    meta::*,
+    path::{self},
+    save::*,
+    Asset, AssetPool,
 };
 
 use anyhow::anyhow;
-use parking_lot::{RwLock};
+use parking_lot::RwLock;
 use rayon::ThreadPool;
 use std::{
     any::{type_name, Any, TypeId},
     collections::HashMap,
+    ffi::OsStr,
+    io::{BufWriter, Cursor, Read},
     path::{Path, PathBuf},
-    sync::Arc, ffi::OsStr, io::{BufWriter, Read, Cursor},
+    sync::Arc,
 };
 use uuid::Uuid;
 
@@ -72,7 +76,7 @@ struct AssetManagerInner {
     savers: HashMap<TypeId, Vec<Arc<dyn Saver>>>,
     //save_states: HashMap<TypeId, Box<dyn Any + Send + Sync + 'static>>
     thread_pool: Arc<ThreadPool>,
-    asset_dir: PathBuf
+    asset_dir: PathBuf,
 }
 impl AssetManagerInner {
     pub fn with_threadpool(thread_pool: Arc<ThreadPool>) -> Self {
@@ -82,8 +86,7 @@ impl AssetManagerInner {
             loaders: Default::default(),
             load_states: Default::default(),
             savers: Default::default(),
-            asset_dir: std::env::current_dir().expect("Failed to get current directory")
-            // save_states: Default::default()
+            asset_dir: std::env::current_dir().expect("Failed to get current directory"), // save_states: Default::default()
         }
     }
     pub fn set_asset_dir(&mut self, path: impl AsRef<Path>) {
@@ -113,10 +116,8 @@ impl AssetManagerInner {
 
         println!("Absolute load path {:#?}", path);
         let reader: Box<dyn Read + Send + Sync + 'static> = match source {
-            Source::FileSystem(_) => {
-                Box::new(std::fs::File::open(&path)?)
-            },
-            Source::Data(_, data) => Box::new(Cursor::new(data))
+            Source::FileSystem(_) => Box::new(std::fs::File::open(&path)?),
+            Source::Data(_, data) => Box::new(Cursor::new(data)),
         };
 
         let mut load_context = LoadContext::new::<T>(path, reader, meta.settings.clone(), ass_man);
@@ -165,12 +166,13 @@ impl AssetManagerInner {
         // }
         println!("{:#?}", source.relative_path());
 
-        let mut meta = MetaData::<T>::for_file(&source.absolute_path(&self.asset_dir)).unwrap_or_else(|| MetaData {
-            source: source.relative_path().to_owned(),
-            is_standalone: source.is_filesystem(),
-            uuid: Uuid::new_v4(),
-            settings: settings.clone().unwrap_or_default(),
-        });
+        let mut meta = MetaData::<T>::for_file(&source.absolute_path(&self.asset_dir))
+            .unwrap_or_else(|| MetaData {
+                source: source.relative_path().to_owned(),
+                is_standalone: source.is_filesystem(),
+                uuid: Uuid::new_v4(),
+                settings: settings.clone().unwrap_or_default(),
+            });
 
         let mut db = self.db.write();
         //If settings are specified override those obtained from the metadata
@@ -188,9 +190,9 @@ impl AssetManagerInner {
             //         }
             //         Some(LoadStatus::Waiting) if !source.is_filesystem() => {
             //             db.set_status(meta.uuid, LoadStatus::Loading);
-    
+
             //             let typed = handle.clone_typed().unwrap();
-    
+
             //             self.load_task(source, meta, &typed, loader.clone(), ass_man)?;
             //             handle
             //         }
@@ -241,7 +243,7 @@ impl AssetManagerInner {
             TypeId::of::<T>(),
             Box::new(LoadState::<T>::new(pool.handle_allocator().clone())),
         );
-        
+
         self.savers.insert(TypeId::of::<T>(), vec![]);
         // self.save_states.insert(
         //     TypeId::of::<T>(),
@@ -299,11 +301,10 @@ impl AssetManagerInner {
         //     uuid: Uuid::new_v4(),
         //     settings: T::Settings::default(),
         // });
-        
+
         log::info!("Trying to load: {}", path.display());
 
-        let handle =
-            self.load_with_loader::<T>(Source::FileSystem(path), None, loader, ass_man)?;
+        let handle = self.load_with_loader::<T>(Source::FileSystem(path), None, loader, ass_man)?;
 
         Ok(handle)
     }
@@ -316,15 +317,11 @@ impl AssetManagerInner {
         let path = self.get_relative_path(path);
 
         let loader = self.get_loader::<T>(&path)?;
-        
+
         log::info!("Trying to load: {}", path.display());
 
-        let handle = self.load_with_loader::<T>(
-            Source::FileSystem(path),
-            Some(settings),
-            loader,
-            ass_man,
-        )?;
+        let handle =
+            self.load_with_loader::<T>(Source::FileSystem(path), Some(settings), loader, ass_man)?;
 
         Ok(handle)
     }
@@ -338,16 +335,14 @@ impl AssetManagerInner {
         let path = self.get_relative_path(path);
 
         let loader = self.get_loader::<T>(&path)?;
-        
-        log::info!("Trying to load data using apparent path: {}", path.display());
 
-        let handle = self.load_with_loader::<T>(
-            Source::Data(path, data),
-            Some(settings),
-            loader,
-            ass_man,
-        )?;
+        log::info!(
+            "Trying to load data using apparent path: {}",
+            path.display()
+        );
 
+        let handle =
+            self.load_with_loader::<T>(Source::Data(path, data), Some(settings), loader, ass_man)?;
 
         Ok(handle)
     }
@@ -398,7 +393,7 @@ impl AssetManagerInner {
             "Failed to find suitable saver for extension: {}",
             file_ext
         ))
-    }    
+    }
     pub fn add_saver<T: Asset, S: Saver>(&mut self, saver: S) {
         let savers = self
             .savers
@@ -406,16 +401,23 @@ impl AssetManagerInner {
             .expect("Asset type not registered");
         savers.push(Arc::new(saver));
     }
-    pub fn create<T: Asset>(&self, save_path: &Path, asset: T, pool: &mut AssetPool<T>) -> anyhow::Result<Handle<T>> {
+    pub fn create<T: Asset>(
+        &self,
+        save_path: &Path,
+        asset: T,
+        pool: &mut AssetPool<T>,
+    ) -> anyhow::Result<Handle<T>> {
         let asset_path = self.get_relative_path(save_path);
         let asset_path_abs = self.asset_dir.join(&asset_path);
 
         if asset_path_abs.exists() {
-            return Err(anyhow::anyhow!("Cannot create asset save path already exists"));
+            return Err(anyhow::anyhow!(
+                "Cannot create asset save path already exists"
+            ));
         }
         let handle = pool.add(asset);
 
-        let meta = MetaData::<T>::for_file(&asset_path_abs).unwrap_or_else(||MetaData::<T> {
+        let meta = MetaData::<T>::for_file(&asset_path_abs).unwrap_or_else(|| MetaData::<T> {
             source: asset_path.to_owned(),
             is_standalone: true,
             uuid: Uuid::new_v4(),
@@ -423,17 +425,31 @@ impl AssetManagerInner {
         });
 
         meta.save(&asset_path_abs)?;
-        self.db.write().create_with_status(meta.uuid, asset_path.to_owned(), handle.clone_erased(), LoadStatus::Loaded);
-        
+        self.db.write().create_with_status(
+            meta.uuid,
+            asset_path.to_owned(),
+            handle.clone_erased(),
+            LoadStatus::Loaded,
+        );
+
         Ok(handle)
     }
-    pub fn save<T: Asset>(&self, handle: &Handle<T>, asset_pool: &AssetPool<T>) -> anyhow::Result<()> {
+    pub fn save<T: Asset>(
+        &self,
+        handle: &Handle<T>,
+        asset_pool: &AssetPool<T>,
+    ) -> anyhow::Result<()> {
         let db = self.db.read();
         let path = db.get_path(&handle.clone_erased());
         let path = self.asset_dir.join(path);
-        let saver = self.get_saver::<T>(path.extension().expect("No extension! Cannot guess file type for saving"))?;
+        let saver = self.get_saver::<T>(
+            path.extension()
+                .expect("No extension! Cannot guess file type for saving"),
+        )?;
 
-        let asset = asset_pool.get(handle).expect("Cannot save! Asset doesn't exist");
+        let asset = asset_pool
+            .get(handle)
+            .expect("Cannot save! Asset doesn't exist");
         let mut context = SaveContext::new(asset);
 
         let temp_file = tempfile::NamedTempFile::new_in(std::env::current_dir()?)?;
@@ -481,7 +497,7 @@ impl AssetManager {
     }
     pub fn add_loader<T: Asset, L: Loader>(&mut self, loader: L) {
         self.inner.write().add_loader::<T, L>(loader)
-    }   
+    }
     pub fn add_saver<T: Asset, S: Saver>(&mut self, saver: S) {
         self.inner.write().add_saver::<T, S>(saver)
     }
@@ -510,7 +526,12 @@ impl AssetManager {
     pub fn save<T: Asset>(&self, handle: &Handle<T>, pool: &AssetPool<T>) -> anyhow::Result<()> {
         self.inner.read().save(handle, pool)
     }
-    pub fn create<T: Asset>(&self, save_path: &Path, asset: T, pool: &mut AssetPool<T>) -> anyhow::Result<Handle<T>> {
+    pub fn create<T: Asset>(
+        &self,
+        save_path: &Path,
+        asset: T,
+        pool: &mut AssetPool<T>,
+    ) -> anyhow::Result<Handle<T>> {
         self.inner.read().create(save_path, asset, pool)
     }
     pub fn update<T: Asset>(&self, pool: &mut AssetPool<T>) -> anyhow::Result<()> {
@@ -559,7 +580,11 @@ fn txt_save_and_load() -> Result<(), Box<dyn std::error::Error>> {
             &["txt"]
         }
 
-        fn save(&self, context: &mut SaveContext, writer: &mut dyn std::io::Write) -> anyhow::Result<()> {
+        fn save(
+            &self,
+            context: &mut SaveContext,
+            writer: &mut dyn std::io::Write,
+        ) -> anyhow::Result<()> {
             writer.write(context.get_asset::<TxtFile>().contents.as_bytes())?;
             Ok(())
         }
@@ -577,15 +602,15 @@ fn txt_save_and_load() -> Result<(), Box<dyn std::error::Error>> {
 
     assert!(ass_man.load_status(&test.clone_erased()) == Some(LoadStatus::Loading));
     assert!(ass_man.load_status(&test1.clone_erased()) == Some(LoadStatus::Loading));
-    
+
     let test_erased = test.clone_erased();
     while ass_man.load_status(&test_erased) != Some(LoadStatus::Loaded) {
         ass_man.update::<TxtFile>(&mut pool)?;
     }
-    
+
     let text = pool.get_mut(&test).unwrap();
     text.contents.push_str("s");
-    
+
     assert!(ass_man.load_status(&test.clone_erased()) == Some(LoadStatus::Loaded));
     assert!(ass_man.load_status(&test1.clone_erased()) == Some(LoadStatus::Failed));
 

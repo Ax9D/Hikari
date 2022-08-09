@@ -3,7 +3,6 @@ use std::{any::TypeId, marker::PhantomData, sync::atomic::AtomicUsize};
 
 use crate::Asset;
 
-
 struct RawHandle {
     index: usize,
     kind: HandleKind,
@@ -18,7 +17,7 @@ pub(crate) enum RefOp {
 pub(crate) enum HandleKind {
     Strong(flume::Sender<RefOp>),
     Weak(flume::Sender<RefOp>),
-    Internal
+    Internal,
 }
 impl PartialEq for RawHandle {
     fn eq(&self, other: &Self) -> bool {
@@ -35,10 +34,16 @@ impl Hash for RawHandle {
 
 impl RawHandle {
     pub fn new(index: usize, ref_send: flume::Sender<RefOp>) -> Self {
-        Self { index, kind: HandleKind::Strong(ref_send) }
+        Self {
+            index,
+            kind: HandleKind::Strong(ref_send),
+        }
     }
     pub fn internal(index: usize) -> Self {
-        Self { index, kind: HandleKind::Internal }
+        Self {
+            index,
+            kind: HandleKind::Internal,
+        }
     }
     pub fn index(&self) -> usize {
         self.index
@@ -118,7 +123,10 @@ impl<T: 'static> Handle<T> {
         self.clone().into()
     }
     pub fn clone_erased_as_internal(&self) -> ErasedHandle {
-        ErasedHandle { raw: RawHandle::internal(self.index()), type_id: TypeId::of::<T>() }
+        ErasedHandle {
+            raw: RawHandle::internal(self.index()),
+            type_id: TypeId::of::<T>(),
+        }
     }
 }
 
@@ -154,7 +162,7 @@ impl HandleAllocator {
         });
 
         Handle::new(index, self.refcount_send.clone())
-    }    
+    }
     pub fn deallocate(&self, index: usize) {
         self.free_list_send
             .send(index)

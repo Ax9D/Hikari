@@ -23,7 +23,11 @@ struct ImportData {
 impl ImportData {
     pub fn new(path: &Path, _data: &[u8]) -> Result<Self, gltf::Error> {
         let (document, buffers, _images) = gltf::import(path)?;
-        let parent_path = path.parent().unwrap_or_else(|| Path::new("./")).canonicalize()?.to_owned();
+        let parent_path = path
+            .parent()
+            .unwrap_or_else(|| Path::new("./"))
+            .canonicalize()?
+            .to_owned();
         Ok(Self {
             path: path.to_owned(),
             parent_path,
@@ -460,7 +464,6 @@ fn load_material(
         std::fs::write(&material_path, material_text)?;
         println!("Creating material {ix} {:#?}", material_path);
     }
-
 
     load_context
         .asset_manager()

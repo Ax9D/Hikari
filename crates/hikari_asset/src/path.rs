@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf, Display}};
+use std::path::{Display, Path, PathBuf};
 
 // #[derive(Clone, Debug)]
 // pub struct AssetPath {
@@ -14,7 +14,7 @@ use std::{path::{Path, PathBuf, Display}};
 //             path.to_owned()
 //         };
 //         Self { asset_dir: asset_dir.to_owned(), absolute_asset_path }
-//     } 
+//     }
 //     pub fn absolute_path(&self) -> &Path {
 //         &&self.absolute_asset_path
 //     }
@@ -25,7 +25,6 @@ use std::{path::{Path, PathBuf, Display}};
 //         self.absolute_asset_path.display()
 //     }
 // }
-
 
 pub fn add_extension(path: &Path, extension: impl AsRef<std::path::Path>) -> PathBuf {
     let mut path = path.to_owned();
@@ -48,7 +47,13 @@ pub fn make_relative(original: &Path, relative_from: &Path) -> Option<PathBuf> {
 }
 #[test]
 fn make_relative_test() {
-    assert_eq!(Some(PathBuf::from("../HikariProjs/Sponza")), make_relative(Path::new("/home/atri/HikariProjs/Sponza"), Path::new("/home/atri/Hikari")));
+    assert_eq!(
+        Some(PathBuf::from("../HikariProjs/Sponza")),
+        make_relative(
+            Path::new("/home/atri/HikariProjs/Sponza"),
+            Path::new("/home/atri/Hikari")
+        )
+    );
 }
 // Copyright 2012-2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at

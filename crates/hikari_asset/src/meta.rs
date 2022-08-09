@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Asset, path};
+use crate::{path, Asset};
 
 pub const METADATA_EXTENSION: &str = "meta";
 

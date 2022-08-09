@@ -13,7 +13,12 @@ impl<'b> RenameInput<'b> {
         Self { id, buffer }
     }
     /// Returns the old contents of the buffer when a rename occurs, otherwise returns `None`
-    pub fn build(mut self, ui: &Ui, rename_state: &mut RenameState, draw_fn: impl FnOnce(&str)) -> Option<String> {
+    pub fn build(
+        mut self,
+        ui: &Ui,
+        rename_state: &mut RenameState,
+        draw_fn: impl FnOnce(&str),
+    ) -> Option<String> {
         let mut old_name = None;
         match rename_state {
             RenameState::Renaming(id, current_name, starting_frame) if *id == self.id => {
@@ -41,7 +46,10 @@ impl<'b> RenameInput<'b> {
                 if cancel_rename {
                     *rename_state = RenameState::Idle;
                 } else if end_rename {
-                    old_name = Some(std::mem::replace::<String>(&mut self.buffer, current_name.clone()));
+                    old_name = Some(std::mem::replace::<String>(
+                        &mut self.buffer,
+                        current_name.clone(),
+                    ));
                     *rename_state = RenameState::Idle;
                 }
             }
