@@ -88,7 +88,7 @@ mod tests {
         hikari_asset::serde::init(manager.clone());
 
         let sponza: Handle<crate::Scene> = manager
-            .load("/home/atri/sponza/sponza.glb".as_ref())
+            .load("../../assets/models/sponza/sponza.glb".as_ref())
             .expect("Failed to load sponza");
 
         let sponza: ErasedHandle = sponza.into();

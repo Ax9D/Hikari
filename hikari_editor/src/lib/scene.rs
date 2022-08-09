@@ -1,4 +1,4 @@
-use std::{sync::Arc, io::BufWriter};
+use std::{sync::Arc};
 
 use hikari::{
     asset::{Asset, Loader, Saver},
