@@ -7,7 +7,7 @@ use serde::{
     Deserialize, Serialize,
 };
 
-use crate::{Asset, AssetManager, Handle};
+use crate::{AssetManager, Handle, Asset};
 
 static ASSET_MANAGER: OnceCell<AssetManager> = OnceCell::new();
 
@@ -90,9 +90,11 @@ impl<'de, T: Asset> Visitor<'de> for HandleVisitor<T> {
 
         let handle = ass_man
             .load(&path)
-            .map_err(|_| de::Error::custom("Failed to load asset"))?;
+            .map_err(|err| de::Error::custom(&format!("Failed to load asset: {}", err)))?;
 
         let loader_uuid = ass_man.get_uuid(&handle);
+        
+        //assert!(uuid == loader_uuid, "{}", path.display());
 
         Ok(handle)
     }

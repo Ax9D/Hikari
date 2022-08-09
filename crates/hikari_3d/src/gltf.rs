@@ -23,7 +23,7 @@ struct ImportData {
 impl ImportData {
     pub fn new(path: &Path, _data: &[u8]) -> Result<Self, gltf::Error> {
         let (document, buffers, _images) = gltf::import(path)?;
-        let parent_path = path.parent().unwrap_or_else(|| Path::new("./")).to_owned();
+        let parent_path = path.parent().unwrap_or_else(|| Path::new("./")).canonicalize()?.to_owned();
         Ok(Self {
             path: path.to_owned(),
             parent_path,
@@ -283,8 +283,16 @@ fn parse_texture_data(
             let data = &parent_buffer[start..end];
 
             match mime_type {
-                "image/jpeg" | "image/png" => {
+                "image/png" => {
                     fake_texture_path.set_extension("png");
+                    asset_manager.load_with_data::<Texture2D>(
+                        &fake_texture_path,
+                        data.to_owned(),
+                        config,
+                    )
+                }
+                "image/jpeg" => {
+                    fake_texture_path.set_extension("jpeg");
                     asset_manager.load_with_data::<Texture2D>(
                         &fake_texture_path,
                         data.to_owned(),
@@ -320,8 +328,12 @@ fn parse_texture_data(
                 };
 
                 match mime_type {
-                    "image/jpeg" | "image/png" => {
+                    "image/png" => {
                         fake_texture_path.set_extension("png");
+                        asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data, config)
+                    }
+                    "image/jpeg" => {
+                        fake_texture_path.set_extension("jpeg");
                         asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data, config)
                     }
                     _ => Err(anyhow::anyhow!(
@@ -446,9 +458,9 @@ fn load_material(
 
         let material_text = serde_yaml::to_string(&material)?;
         std::fs::write(&material_path, material_text)?;
+        println!("Creating material {ix} {:#?}", material_path);
     }
 
-    println!("Creating material {ix} {:#?}", material_path);
 
     load_context
         .asset_manager()

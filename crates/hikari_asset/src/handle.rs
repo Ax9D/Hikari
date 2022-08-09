@@ -3,15 +3,23 @@ use std::{any::TypeId, marker::PhantomData, sync::atomic::AtomicUsize};
 
 use crate::Asset;
 
+
+struct RawHandle {
+    index: usize,
+    kind: HandleKind,
+}
+#[allow(unused)]
 pub(crate) enum RefOp {
     Increment(usize),
     Decrement(usize),
 }
-struct RawHandle {
-    index: usize,
-    ref_send: flume::Sender<RefOp>,
+#[allow(unused)]
+#[derive(Clone)]
+pub(crate) enum HandleKind {
+    Strong(flume::Sender<RefOp>),
+    Weak(flume::Sender<RefOp>),
+    Internal
 }
-
 impl PartialEq for RawHandle {
     fn eq(&self, other: &Self) -> bool {
         self.index == other.index
@@ -27,7 +35,13 @@ impl Hash for RawHandle {
 
 impl RawHandle {
     pub fn new(index: usize, ref_send: flume::Sender<RefOp>) -> Self {
-        Self { index, ref_send }
+        Self { index, kind: HandleKind::Strong(ref_send) }
+    }
+    pub fn internal(index: usize) -> Self {
+        Self { index, kind: HandleKind::Internal }
+    }
+    pub fn index(&self) -> usize {
+        self.index
     }
 }
 
@@ -38,7 +52,7 @@ impl Clone for RawHandle {
         //     .expect("Failed to increment reference count");
         Self {
             index: self.index.clone(),
-            ref_send: self.ref_send.clone(),
+            kind: self.kind.clone(),
         }
     }
 }
@@ -70,11 +84,16 @@ impl ErasedHandle {
         self.clone().into_typed::<T>()
     }
 }
-#[derive(PartialEq, Eq)]
 pub struct Handle<T> {
     raw: RawHandle,
     _phantom: PhantomData<T>,
 }
+impl<T> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.raw == other.raw
+    }
+}
+impl<T> Eq for Handle<T> {}
 
 impl<T> Clone for Handle<T> {
     fn clone(&self) -> Self {
@@ -92,11 +111,14 @@ impl<T: 'static> Handle<T> {
             _phantom: PhantomData,
         }
     }
-    pub(crate) fn index(&self) -> usize {
-        self.raw.index
+    pub fn index(&self) -> usize {
+        self.raw.index()
     }
     pub fn clone_erased(&self) -> ErasedHandle {
         self.clone().into()
+    }
+    pub fn clone_erased_as_internal(&self) -> ErasedHandle {
+        ErasedHandle { raw: RawHandle::internal(self.index()), type_id: TypeId::of::<T>() }
     }
 }
 
@@ -132,7 +154,7 @@ impl HandleAllocator {
         });
 
         Handle::new(index, self.refcount_send.clone())
-    }
+    }    
     pub fn deallocate(&self, index: usize) {
         self.free_list_send
             .send(index)

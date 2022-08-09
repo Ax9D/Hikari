@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{sync::Arc, io::Read};
 
 use hikari_asset::{Asset, LoadContext, Loader};
 
-use crate::{Camera, Mesh, MeshFormat};
+use crate::{Camera, Mesh};
 
 pub struct Scene {
     pub meshes: Vec<Mesh>,
@@ -13,14 +13,9 @@ pub struct GLTFLoader {
 }
 impl Loader for GLTFLoader {
     fn load(&self, context: &mut LoadContext) -> anyhow::Result<()> {
-        let path = match context.source() {
-            hikari_asset::Source::FileSystem(path) => path.as_path(),
-            hikari_asset::Source::Data(_, _) => todo!(),
-        };
-
-        let path = path.to_owned();
-
-        let data = std::fs::read(&path)?;
+        let mut data = vec![];
+        context.reader().read_to_end(&mut data)?;
+        let path = context.path().to_owned();
         let scene = crate::gltf::load_scene(&self.device, &path, &data, context)?;
 
         context.set_asset(scene);

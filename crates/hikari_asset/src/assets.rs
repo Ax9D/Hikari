@@ -7,10 +7,9 @@ use std::{
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 
 use crate::{
-    asset::Asset,
     handle::{Handle, HandleAllocator, RefOp},
 };
-
+#[allow(unused)]
 struct RefCounts {
     ref_send: flume::Sender<RefOp>,
     ref_recv: flume::Receiver<RefOp>,
@@ -21,7 +20,7 @@ impl RefCounts {
         Self { ref_send, ref_recv }
     }
 }
-
+#[allow(unused)]
 pub struct AssetPool<T> {
     pool: Vec<Option<T>>,
     handle_allocator: Arc<HandleAllocator>,
@@ -46,7 +45,7 @@ impl<T: 'static> AssetPool<T> {
     pub(crate) fn handle_allocator(&self) -> &Arc<HandleAllocator> {
         &self.handle_allocator
     }
-    pub(crate) fn insert(&mut self, handle_ix: usize, data: T) {
+    pub fn insert(&mut self, handle_ix: usize, data: T) {
         self.ensure_length(handle_ix);
         self.pool[handle_ix] = Some(data);
     }
@@ -58,7 +57,7 @@ impl<T: 'static> AssetPool<T> {
 
         handle
     }
-    pub(crate) fn remove(&mut self, handle_ix: usize) -> Option<T> {
+    pub fn remove(&mut self, handle_ix: usize) -> Option<T> {
         self.handle_allocator.deallocate(handle_ix);
         self.pool[handle_ix].take()
     }
@@ -116,6 +115,7 @@ impl AssetStorage {
 
 #[test]
 fn add_pool() {
+    use crate::Asset;
     struct Texture;
     impl Asset for Texture {
         type Settings = ();
@@ -125,6 +125,7 @@ fn add_pool() {
 }
 #[test]
 fn get_pool() {
+    use crate::Asset;
     struct Texture;
     impl Asset for Texture {
         type Settings = ();

@@ -31,12 +31,7 @@ impl Loader for MaterialLoader {
     where
         Self: Sized,
     {
-        let material: Material = match context.source() {
-            hikari_asset::Source::FileSystem(path) => {
-                serde_yaml::from_str(&std::fs::read_to_string(path)?)?
-            }
-            hikari_asset::Source::Data(_, data) => serde_yaml::from_slice(data)?,
-        };
+        let material: Material = serde_yaml::from_reader(context.reader())?;
         context.set_asset(material);
         Ok(())
     }

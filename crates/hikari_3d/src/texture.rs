@@ -74,7 +74,7 @@ impl TextureConfig {
     // }
 }
 
-use std::sync::Arc;
+use std::{sync::Arc, io::Read};
 
 use hikari_asset::{Asset, LoadContext, Loader};
 use hikari_render::*;
@@ -167,10 +167,11 @@ impl Asset for Texture2D {
 }
 impl Loader for TextureLoader {
     fn load(&self, context: &mut LoadContext) -> anyhow::Result<()> {
-        let image = match context.source() {
-            hikari_asset::Source::FileSystem(path) => image::open(path)?,
-            hikari_asset::Source::Data(_, data) => image::load_from_memory(data)?,
-        };
+        let mut raw_data = vec![];
+        context.reader().read_to_end(&mut raw_data)?;
+
+        let image = image::load_from_memory(&raw_data)?;
+
         let image = image.to_rgba8();
         let data = image.as_bytes();
         let width = image.width();
@@ -195,7 +196,6 @@ impl Loader for TextureLoader {
 
 #[test]
 fn parallel_load() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::image::*;
     use crate::*;
     use rayon::prelude::*;
 
@@ -208,7 +208,7 @@ fn parallel_load() -> Result<(), Box<dyn std::error::Error>> {
     let path = "../../assets/models/sponza/14930275953430797156.png";
     let (image, width, height) = image::open_rgba8(path).unwrap();
 
-    let textures: Vec<_> = (0..1000)
+    let _textures: Vec<_> = (0..1000)
         .into_par_iter()
         .map(|_| {
             Texture2D::new(
