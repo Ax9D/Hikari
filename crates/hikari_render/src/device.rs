@@ -244,6 +244,7 @@ pub struct VkExtensions {
 unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
 
+#[cfg(feature = "aftermath")]
 use nvidia_aftermath_rs::Aftermath;
 
 /// Represents the GPU device being used
@@ -261,6 +262,7 @@ pub struct Device {
     descriptor_set_layout_cache: Mutex<DescriptorSetLayoutCache>,
     extensions: VkExtensions,
     pipeline_cache: vk::PipelineCache,
+    #[cfg(feature = "aftermath")]
     aftermath: Option<Aftermath>,
 
     raw_device: RawDevice,
@@ -370,6 +372,7 @@ impl Device {
             instance,
         };
 
+        #[cfg(feature = "aftermath")]
         let aftermath = if debug {
             match Aftermath::initialize() {
                 Ok(ok) => Some(ok),
@@ -398,6 +401,7 @@ impl Device {
 
             shader_compiler,
             extensions,
+            #[cfg(feature = "aftermath")]
             aftermath,
         }))
     }
@@ -651,7 +655,7 @@ impl Device {
             .or(linear_tiling)
             .expect("Device doesn't support any depth formats")
     }
-
+    #[cfg(feature = "aftermath")]
     pub fn wait_for_aftermath_dump(&self) -> Result<(), anyhow::Error> {
         match &self.aftermath {
             Some(aftermath) => {

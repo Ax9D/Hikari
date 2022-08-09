@@ -117,6 +117,7 @@ impl Plugin for EditorPlugin {
         };
         game.create_stage(EDITOR_STAGE);
         game.add_task(EDITOR_STAGE, update_task);
+        #[allow(unused_variables)]
         game.add_task(
             EDITOR_STAGE,
             Task::new(
@@ -133,6 +134,7 @@ impl Plugin for EditorPlugin {
                         Err(err) => {
                             if err == vk::Result::ERROR_DEVICE_LOST {
                                 log::error!("Device Lost");
+                                #[cfg(feature = "aftermath")]
                                 gfx.device()
                                     .wait_for_aftermath_dump()
                                     .expect("Failed to collect aftermath dump");

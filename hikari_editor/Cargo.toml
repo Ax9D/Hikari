@@ -26,3 +26,4 @@ type-uuid = "0.1"
 
 [features]
 release_unsafe = ["hikari/release_unsafe"]
+aftermath = ["hikari/aftermath"]

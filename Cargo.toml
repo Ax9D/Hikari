@@ -43,6 +43,7 @@ default = []
 serde = ["hikari_core/serde", "hikari_math/serde", "hikari_3d/serde"]
 release_unsafe = ["hikari_systems/thread_unsafety"]
 profiling_enabled = ["hikari_dev/profiling_enabled"]
+aftermath = ["hikari_render/aftermath"]
 editor = ["hikari_pbr/editor"]
 
 [profile.dist]
