@@ -1,5 +1,6 @@
 use crate::components::EditorComponent;
 use hikari::{g3d::*, pbr::WorldRenderer};
+use hikari_editor::*;
 use hikari_imgui::*;
 
 impl EditorComponent for Camera {
@@ -22,7 +23,7 @@ impl EditorComponent for Camera {
         ui: &hikari_imgui::Ui,
         _entity: hikari::core::Entity,
         _editor: &mut crate::editor::Editor,
-        state: crate::EngineState,
+        state: EngineState,
     ) -> anyhow::Result<()> {
         Drag::new("near").build(ui, &mut self.near);
         Drag::new("far").build(ui, &mut self.far);

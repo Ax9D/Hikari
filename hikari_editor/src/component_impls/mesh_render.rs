@@ -1,9 +1,10 @@
-use hikari::{
-    asset::AssetManager,
-    g3d::{MeshRender, MeshSource, Scene},
-};
 
 use crate::{components::EditorComponent, *};
+use hikari::{
+    asset::{AssetManager},
+    g3d::{MeshRender, MeshSource, Scene},
+};
+use hikari_editor::*;
 
 impl EditorComponent for MeshRender {
     fn name() -> &'static str
@@ -39,13 +40,13 @@ impl EditorComponent for MeshRender {
         ui.input_text("Asset", &mut path).build();
         ui.same_line();
         if ui.button("/") {
-            if let Some(path) = rfd::FileDialog::new().pick_file() {
+            if let Some(path) = rfd::FileDialog::new().add_filter("GLTF",&["gltf", "glb"]).pick_file() {
                 assert!(path.extension().is_some());
                 let scene = ass_man.load::<Scene>(&path)?;
                 self.source = MeshSource::Scene(scene, 0);
             }
         }
-        //rfd::FileDialog::new().pick_file();
+
         Ok(())
     }
 

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use hikari::math::{EulerRot, Quat, Transform, Vec3};
+use hikari_editor::*;
 use imgui::StorageExt;
 
 use crate::{components::EditorComponent, *};
