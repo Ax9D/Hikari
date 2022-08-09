@@ -36,6 +36,8 @@ impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Entry<K, V> {
     }
 }
 
+unsafe impl<K, V, const N: usize> Sync for TemporaryMap<K, V, N> {}
+unsafe impl<K, V, const N: usize> Send for TemporaryMap<K, V, N> {}
 type Map<K, V> = HashMap<K, *mut Node<Entry<K, V>>, crate::util::BuildHasher>;
 pub struct TemporaryMap<K, V, const N: usize> {
     map: Map<K, V>,

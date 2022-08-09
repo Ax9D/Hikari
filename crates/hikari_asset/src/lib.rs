@@ -1,22 +1,19 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unused_unsafe)]
-
-//pub mod texture;
 mod asset;
 mod assets;
 mod handle;
+mod load;
 mod manager;
 mod meta;
-mod serde;
+mod path;
+mod save;
 
-pub use crate::serde::*;
+pub mod serde;
+
 pub use asset::*;
 pub use assets::*;
 pub use handle::*;
+pub use load::*;
 pub use manager::*;
-pub use meta::*;
+pub use save::*;
 
-pub type Error = anyhow::Error;
-//pub use scene::Scene;
-//pub use texture::Texture;
+pub use uuid::*;

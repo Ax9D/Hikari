@@ -1,4 +1,4 @@
-use crate::GizmoContext;
+use super::GizmoContext;
 
 use super::{
     draw::Painter3D,

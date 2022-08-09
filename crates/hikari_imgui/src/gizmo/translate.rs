@@ -1,4 +1,4 @@
-use crate::{gizmo::math::plane_global_origin, GizmoContext};
+use crate::gizmo::math::plane_global_origin;
 
 use super::{
     draw::Painter3D,
@@ -8,6 +8,7 @@ use super::{
     },
     ray::Ray,
     subgizmo::SubGizmo,
+    GizmoContext,
 };
 use hikari_math::*;
 

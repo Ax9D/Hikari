@@ -7,8 +7,11 @@ edition = "2021"
 
 [dependencies]
 glam = { version = "0.20"}
+serde = {version = "1", optional = true}
+type-uuid = {version = "0.1"}
 
 [features]
-serde = ["glam/serde"]
+default = []
+serde = ["dep:serde", "glam/serde"]
 mint = ["glam/mint"]
 fast-math = ["glam/fast-math"]

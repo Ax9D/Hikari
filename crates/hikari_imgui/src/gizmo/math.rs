@@ -1,6 +1,6 @@
 use hikari_math::*;
 
-use crate::Viewport;
+use super::Viewport;
 
 use super::{subgizmo::SubGizmo, Direction};
 

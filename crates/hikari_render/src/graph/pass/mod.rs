@@ -5,7 +5,7 @@ use crate::texture::SampledImage;
 
 use self::graphics::Renderpass;
 
-use super::{storage::ErasedHandle, Handle};
+use super::{storage::ErasedHandle, GpuHandle};
 pub mod compute;
 pub mod graphics;
 
@@ -100,8 +100,8 @@ impl AttachmentConfig {
 
 #[derive(Debug, Clone)]
 pub enum Input {
-    ReadImage(Handle<SampledImage>, AccessType),
-    SampleImage(Handle<SampledImage>, AccessType, u32),
+    ReadImage(GpuHandle<SampledImage>, AccessType),
+    SampleImage(GpuHandle<SampledImage>, AccessType, u32),
 }
 
 impl Input {
@@ -113,8 +113,8 @@ impl Input {
 }
 #[derive(Debug, Clone)]
 pub enum Output {
-    WriteImage(Handle<SampledImage>, AccessType),
-    DrawImage(Handle<SampledImage>, AttachmentConfig),
+    WriteImage(GpuHandle<SampledImage>, AccessType),
+    DrawImage(GpuHandle<SampledImage>, AttachmentConfig),
     StorageBuffer,
 }
 

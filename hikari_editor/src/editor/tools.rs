@@ -1,6 +1,6 @@
-use crate::imgui;
-
 use super::Editor;
+use crate::imgui;
+use hikari_editor::*;
 
 pub struct Tools {}
 impl Tools {
@@ -8,4 +8,6 @@ impl Tools {
         Self {}
     }
 }
-pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {}
+pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+    Ok(())
+}

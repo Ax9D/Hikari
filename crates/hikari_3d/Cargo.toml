@@ -16,7 +16,9 @@ itertools = "0.10"
 serde_yaml = "0.8"
 rayon = "1"
 parking_lot = { version = "0.12", features = ["deadlock_detection"] }
+type-uuid = {version = "0.1"}
 
+hikari_core = {path = "../hikari_core"}
 hikari_asset = {path = "../hikari_asset"}
 hikari_math = {path = "../hikari_math", features = ["serde"] }
 hikari_render = {path = "../hikari_render"}
@@ -24,3 +26,7 @@ hikari_render = {path = "../hikari_render"}
 [dev-dependencies]
 winit = "0.25"
 simple_logger = "2"
+
+[features]
+default = []
+serde = []

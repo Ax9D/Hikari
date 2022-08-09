@@ -19,6 +19,8 @@ pub struct Swapchain {
     device: Arc<crate::device::Device>,
     pub(crate) inner: vk::SwapchainKHR,
     loader: ash::extensions::khr::Swapchain,
+    present_queue: Option<vk::Queue>,
+
     images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
     format: vk::Format,
@@ -77,14 +79,27 @@ impl Swapchain {
             .clipped(true)
             .old_swapchain(old_swapchain_vk);
 
-        let queue_family_indices = [device.unified_queue_ix, device.present_queue_ix];
+        let present_queue_ix = device
+            .physical_device()
+            .get_present_queue(
+                device.instance(),
+                &surface_data.surface,
+                &surface_data.surface_loader,
+            )
+            .unwrap();
+        let queue_family_indices = [device.unified_queue_ix, present_queue_ix];
+        let present_queue;
 
-        swapchain_create_info = if queue_family_indices[0] != queue_family_indices[1] {
-            swapchain_create_info
+        if queue_family_indices[0] != queue_family_indices[1] {
+            present_queue = Some(unsafe { device.raw().get_device_queue(present_queue_ix, 0) });
+
+            swapchain_create_info = swapchain_create_info
                 .image_sharing_mode(vk::SharingMode::CONCURRENT)
                 .queue_family_indices(&queue_family_indices)
         } else {
-            swapchain_create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE)
+            present_queue = None;
+            swapchain_create_info =
+                swapchain_create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE)
         };
 
         let swapchain = unsafe { swapchain_loader.create_swapchain(&swapchain_create_info, None)? };
@@ -129,6 +144,7 @@ impl Swapchain {
             device: device.clone(),
             inner: swapchain,
             loader: swapchain_loader,
+            present_queue,
             images,
             image_views,
             format: surface_format.format,
@@ -367,9 +383,14 @@ impl Swapchain {
             .swapchains(&swapchains)
             .wait_semaphores(&wait_semaphones)
             .image_indices(&image_ixs);
+
         unsafe {
-            self.loader
-                .queue_present(self.device.present_queue(), &present_info)
+            if let Some(present_queue) = self.present_queue {
+                self.loader.queue_present(present_queue, &present_info)
+            } else {
+                self.loader
+                    .queue_present(*self.device.unified_queue(), &present_info)
+            }
         }
     }
     pub fn width(&self) -> u32 {

@@ -19,7 +19,7 @@ members = [
     "crates/hikari_asset",
     "crates/hikari_input",
     "crates/hikari_dev", 
-
+    
     "hikari_editor",
     "hikari_cli"
 ]
@@ -29,17 +29,21 @@ debug = true
 
 [dependencies]
 hikari_core = {path = "crates/hikari_core"}
+hikari_math = {path = "crates/hikari_math"}
 hikari_systems = {path = "crates/hikari_systems"}
 hikari_render = {path = "crates/hikari_render"}
 hikari_3d = {path = "crates/hikari_3d"}
 hikari_asset = {path = "crates/hikari_asset"}
 hikari_dev = {path = "crates/hikari_dev"}
 hikari_input = {path = "crates/hikari_input"}
+hikari_pbr = {path = "crates/hikari_pbr"}
 
 [features]
 default = []
+serde = ["hikari_core/serde", "hikari_math/serde", "hikari_3d/serde"]
 release_unsafe = ["hikari_systems/thread_unsafety"]
-profiling_disabled = ["hikari_dev/profiling_disabled"]
+profiling_enabled = ["hikari_dev/profiling_enabled"]
+editor = ["hikari_pbr/editor"]
 
 [profile.dist]
 inherits = "release"

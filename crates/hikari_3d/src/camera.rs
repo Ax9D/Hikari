@@ -1,4 +1,6 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, type_uuid::TypeUuid)]
+#[uuid = "81dd6242-c4cd-4059-a3a0-ed1d0e44e68b"]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Camera {
     pub near: f32,
     pub far: f32,
@@ -6,7 +8,19 @@ pub struct Camera {
     pub projection: Projection,
 }
 
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            near: 0.1,
+            far: 1000.0,
+            exposure: 1.0,
+            projection: Projection::Perspective(45.0),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Projection {
     Perspective(f32), //fov in degrees
     Orthographic,

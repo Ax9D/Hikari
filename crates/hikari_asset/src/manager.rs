@@ -1,571 +1,631 @@
+use crate::{
+    handle::*,
+    load::*,
+    meta::*,
+    path::{self},
+    save::*,
+    Asset, AssetPool,
+};
+
+use anyhow::anyhow;
+use parking_lot::RwLock;
+use rayon::ThreadPool;
 use std::{
-    any::Any,
+    any::{type_name, Any, TypeId},
     collections::HashMap,
-    ffi::OsString,
+    ffi::OsStr,
+    io::{BufWriter, Cursor, Read},
     path::{Path, PathBuf},
     sync::Arc,
 };
-
-use crate::assets::{Assets, HandleAllocator};
-use crate::handle::{ErasedHandle, Handle, HandleIndex, RefCounter};
-use crate::{
-    asset::Asset,
-    meta::{AssetType, MetaData},
-};
-use ::serde::{Deserialize, Serialize};
-use parking_lot::{Mutex, MutexGuard};
-use rayon::ThreadPool;
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize)]
-pub enum Source {
-    Path(PathBuf),
-    RawData(PathBuf, Vec<u8>),
-}
-impl Source {
-    pub fn path_buf(&self) -> &PathBuf {
-        match self {
-            Source::Path(path_buf) | Source::RawData(path_buf, _) => path_buf,
-        }
-    }
-}
-
-enum LoadStrategy {
-    FromPath,
-    FromData(Vec<u8>),
-}
-pub struct LoadContext {
-    path: PathBuf,
-    dependencies: Vec<PathBuf>,
-    manager: AssetManager,
-}
-impl LoadContext {
-    pub fn load_dependency<T: Asset>(
-        &mut self,
-        dependency: Source,
-        settings: T::LoadSettings,
-    ) -> Result<Handle<T>, anyhow::Error> {
-        //self.manager.load_subasset::<T>(data, todo!(), todo!());
-        let dep_path = dependency.path_buf().clone();
-        self.dependencies.push(dep_path);
-
-        self.manager
-            .load_dependency::<T>(&self.path, dependency, settings)
-    }
-}
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum LoadStatus {
     Loading,
     Loaded,
     Unloaded,
+    Failed,
+    Waiting,
 }
-
-struct LoadResult<T> {
-    handle: Handle<T>,
-    dependencies: Vec<PathBuf>,
-    result: Result<T, anyhow::Error>,
+#[derive(Default)]
+struct AssetDB {
+    uuid_to_handle: HashMap<Uuid, ErasedHandle>,
+    uuid_to_path: HashMap<Uuid, PathBuf>,
+    handle_to_uuid: HashMap<ErasedHandle, Uuid>,
+    uuid_to_statues: HashMap<Uuid, LoadStatus>,
 }
-struct AssetLoader<T: Asset> {
-    handle_allocator: Arc<HandleAllocator>,
-    asset_loader: Arc<T::Loader>,
-
-    progress_recv: flume::Receiver<LoadResult<T>>,
-    progress_send: flume::Sender<LoadResult<T>>,
-    maps: Mutex<MetaMaps<T>>,
-    ref_counter: Mutex<RefCounter>,
+impl AssetDB {
+    pub fn create_with_status(
+        &mut self,
+        uuid: Uuid,
+        path: PathBuf,
+        erased_handle: ErasedHandle,
+        status: LoadStatus,
+    ) {
+        self.uuid_to_handle.insert(uuid, erased_handle.clone());
+        self.handle_to_uuid.insert(erased_handle, uuid);
+        self.uuid_to_path.insert(uuid, path);
+        self.uuid_to_statues.insert(uuid, status);
+    }
+    pub fn set_status(&mut self, uuid: Uuid, status: LoadStatus) {
+        *self
+            .uuid_to_statues
+            .get_mut(&uuid)
+            .expect("Asset was not registered") = status;
+    }
+    pub fn get_status(&self, handle: &ErasedHandle) -> Option<LoadStatus> {
+        let uuid = self.handle_to_uuid.get(&handle)?;
+        let status = self.uuid_to_statues.get(uuid).cloned()?;
+        Some(status)
+    }
+    pub fn get_uuid(&self, handle: &ErasedHandle) -> Uuid {
+        self.handle_to_uuid.get(handle).unwrap().clone()
+    }
+    pub fn get_path(&self, handle: &ErasedHandle) -> PathBuf {
+        self.uuid_to_path
+            .get(&self.get_uuid(handle))
+            .unwrap()
+            .clone()
+    }
 }
-
-impl<T: Asset> AssetLoader<T> {
-    pub fn new(asset_loader: T::Loader, assets: &Assets<T>) -> Self {
-        let (progress_send, progress_recv) = flume::unbounded();
-        let handle_allocator = assets.handle_allocator().clone();
-        let ref_counter = Mutex::new(RefCounter::default());
+struct AssetManagerInner {
+    db: RwLock<AssetDB>,
+    loaders: HashMap<TypeId, Vec<Arc<dyn Loader>>>,
+    load_states: HashMap<TypeId, Box<dyn Any + Send + Sync + 'static>>,
+    savers: HashMap<TypeId, Vec<Arc<dyn Saver>>>,
+    //save_states: HashMap<TypeId, Box<dyn Any + Send + Sync + 'static>>
+    thread_pool: Arc<ThreadPool>,
+    asset_dir: PathBuf,
+}
+impl AssetManagerInner {
+    pub fn with_threadpool(thread_pool: Arc<ThreadPool>) -> Self {
         Self {
-            handle_allocator,
-            asset_loader: Arc::new(asset_loader),
-            progress_recv,
-            progress_send,
-            ref_counter,
-            maps: Mutex::new(MetaMaps::new()),
+            thread_pool,
+            db: Default::default(),
+            loaders: Default::default(),
+            load_states: Default::default(),
+            savers: Default::default(),
+            asset_dir: std::env::current_dir().expect("Failed to get current directory"), // save_states: Default::default()
         }
     }
-    #[must_use]
-    pub fn load_dependency(
+    pub fn set_asset_dir(&mut self, path: impl AsRef<Path>) {
+        assert!(path.as_ref().is_dir());
+        self.asset_dir = path.as_ref().to_owned();
+    }
+    fn load_state<T: Asset>(&self) -> anyhow::Result<&LoadState<T>> {
+        Ok(self
+            .load_states
+            .get(&TypeId::of::<T>())
+            .ok_or_else(|| anyhow::anyhow!("Asset type {} not registered", type_name::<T>()))?
+            .downcast_ref::<LoadState<T>>()
+            .unwrap())
+    }
+    fn load_task<T: Asset>(
         &self,
-        parent_path: &Path,
         source: Source,
-        settings: T::LoadSettings,
+        meta: MetaData<T>,
+        handle: &Handle<T>,
+        loader: Arc<dyn Loader>,
         ass_man: AssetManager,
-    ) -> Result<Handle<T>, anyhow::Error> {
-        let path = source.path_buf();
-        println!("Trying to load dependency {:#?}", path);
-        let mut maps = self.maps.lock();
-        let mut meta = MetaData::from_path_or_with(&path, || {
-            maps.path_to_meta_data(&path).cloned().unwrap_or(MetaData {
-                uuid: Uuid::new_v4(),
-                data_path: path.to_owned(),
-                asset_type: AssetType::Dependent,
-                dependencies: Vec::new(),
-                settings: T::LoadSettings::default(),
-            })
-        })?;
+    ) -> anyhow::Result<()> {
+        let load_state = self.load_state()?;
 
-        meta.settings = settings;
+        let sender = load_state.load_send.clone();
+        let path = source.absolute_path(&self.asset_dir);
 
-        assert!(
-            meta.asset_type == AssetType::Dependent,
-            "{:?}",
-            meta.data_path
-        );
-        let alloc_handle = if let Some(existing_handle) = maps.uuid_to_handle(&meta.uuid) {
-            assert!(existing_handle.is_weak());
-            println!(
-                "Existing handle {} exists... using that",
-                existing_handle.index()
-            );
-            existing_handle.clone_strong()
-        } else {
-            let handle = self.alloc_handle();
-            println!("Allocating handle {}", handle.index());
-            maps.register_handle(handle.clone_weak(), meta.clone());
-            handle
-        };
+        println!("Absolute load path {:#?}", path);
 
-        {
-            let mut load_statuses = ass_man.inner.load_statuses.lock();
-            let weak_handle: ErasedHandle = alloc_handle.clone_weak().into();
-            // let parent_handle = maps.path_to_handle(parent_path).unwrap().clone().into();
-            // load_statuses.set_dependency_loading(parent_handle, weak_handle.clone());
-            load_statuses.set_status(weak_handle, LoadStatus::Loading);
+        let loader = loader.clone();
+        let handle_clone = handle.clone();
+
+        fn thread_load_task<T: Asset>(
+            source: Source,
+            path: PathBuf,
+            meta: &MetaData<T>,
+            loader: Arc<dyn Loader>,
+            ass_man: AssetManager,
+        ) -> anyhow::Result<T> {
+            let reader: Box<dyn Read + Send + Sync + 'static> = match source {
+                Source::FileSystem(_) => Box::new(std::fs::File::open(&path)?),
+                Source::Data(_, data) => Box::new(Cursor::new(data)),
+            };
+            let mut load_context =
+                LoadContext::new::<T>(path, reader, meta.settings.clone(), ass_man);
+
+            loader.load(&mut load_context)?;
+
+            Ok(load_context
+                .take_asset()
+                .expect("Asset needs to be set after loading!"))
         }
-        let strat = match source {
-            Source::Path(_) => LoadStrategy::FromPath,
-            Source::RawData(_, data) => LoadStrategy::FromData(data),
-        };
 
-        self.load_with_handle(&alloc_handle, strat, &meta, &ass_man);
+        self.thread_pool.spawn(move || {
+            let result = thread_load_task::<T>(source, path, &meta, loader, ass_man);
 
-        assert!(!alloc_handle.is_weak());
-        return Ok(alloc_handle);
+            let asset = result.map_err(|err| {
+                anyhow::anyhow!("Failed to load asset {}: {}", meta.source.display(), err)
+            });
+            if sender
+                .send(LoadResult {
+                    asset,
+                    handle: handle_clone,
+                    meta,
+                })
+                .is_err()
+            {
+                log::error!("Failed to enqueue load task");
+            }
+        });
+
+        Ok(())
     }
-    #[must_use]
-    fn load(
+    fn load_with_loader<T: Asset>(
         &self,
-        path: &Path,
-        settings: Option<T::LoadSettings>,
-        ass_man: &AssetManager,
-        force: bool,
-    ) -> Result<Handle<T>, anyhow::Error> {
-        let mut maps = self.maps.lock();
+        source: Source,
+        settings: Option<T::Settings>,
+        loader: &Arc<dyn Loader>,
+        ass_man: AssetManager,
+    ) -> anyhow::Result<Handle<T>> {
+        // let referenceable_path = source.referenceable_path();
 
-        let mut meta = MetaData::from_path_or_with(&path, || {
-            maps.path_to_meta_data(&path).cloned().unwrap_or(MetaData {
+        // if referenceable_path.is_absolute() {
+        //     log::warn!("Trying to load asset from path outside the asset dir, this will cause problems during distribution");
+        // }
+        println!("{:#?}", source.relative_path());
+
+        let mut meta = MetaData::<T>::for_file(&source.absolute_path(&self.asset_dir))
+            .unwrap_or_else(|| MetaData {
+                source: source.relative_path().to_owned(),
+                is_standalone: source.is_filesystem(),
                 uuid: Uuid::new_v4(),
-                data_path: path.to_owned(),
-                asset_type: AssetType::Standalone,
-                dependencies: Vec::new(),
-                settings: T::LoadSettings::default(),
-            })
-        })?;
+                settings: settings.clone().unwrap_or_default(),
+            });
 
-        println!("Trying to load {:#?}", path);
-        //Override settings if provided
+        let mut db = self.db.write();
+        //If settings are specified override those obtained from the metadata
         if let Some(settings) = settings {
             meta.settings = settings;
         }
 
-        if let Some(existing_handle) = maps.uuid_to_handle(&meta.uuid) {
-            assert!(existing_handle.is_weak());
-            let erased = existing_handle.clone().into();
-            println!(
-                "Existing handle {} exists... using that",
-                existing_handle.index()
-            );
-            //If already loaded/loading and a force load is not requested
-            if !force
-                && matches!(
-                    ass_man.inner.load_statuses.lock().get_status(&erased),
-                    Some(LoadStatus::Loaded | LoadStatus::Loading)
-                )
-            {
-                return Ok(existing_handle.clone_strong());
-            } else {
-                // If the current asset is a dependency, skip loading entirely, dependencies are loaded by their parent standalone assets
-                if meta.is_standalone_asset() {
-                    self.load_with_handle(existing_handle, LoadStrategy::FromPath, &meta, ass_man);
+        let erased = db.uuid_to_handle.get(&meta.uuid);
+
+        let handle = match erased.cloned() {
+            // Some(handle) => {
+            //     match db.get_status(&handle) {
+            //         Some(LoadStatus::Loading) => {
+            //             handle.clone()
+            //         }
+            //         Some(LoadStatus::Waiting) if !source.is_filesystem() => {
+            //             db.set_status(meta.uuid, LoadStatus::Loading);
+
+            //             let typed = handle.clone_typed().unwrap();
+
+            //             self.load_task(source, meta, &typed, loader.clone(), ass_man)?;
+            //             handle
+            //         }
+            //         _=> {
+            //             todo!()
+            //         }
+            //     }
+            // }
+            Some(handle) => {
+                if db.get_status(&handle) == Some(LoadStatus::Waiting) && !source.is_filesystem() {
+                    db.set_status(meta.uuid, LoadStatus::Loading);
+
+                    let typed = handle.clone_typed().unwrap();
+
+                    self.load_task(source, meta, &typed, loader.clone(), ass_man)?;
                 }
-                return Ok(existing_handle.clone_strong());
+                handle
             }
+            None => {
+                let load_state = self.load_state::<T>()?;
+                let allocated_handle = load_state.handle_allocator.allocate();
+
+                let erased_handle = allocated_handle.clone_erased();
+
+                let status = if source.is_filesystem() {
+                    LoadStatus::Loading
+                } else {
+                    LoadStatus::Waiting
+                };
+
+                db.create_with_status(
+                    meta.uuid.clone(),
+                    meta.source.clone(),
+                    erased_handle,
+                    status,
+                );
+
+                self.load_task(source, meta, &allocated_handle, loader.clone(), ass_man)?;
+                allocated_handle.clone_erased()
+            }
+        };
+
+        Ok(handle.into_typed().expect("Handle type mismatch"))
+    }
+    pub fn register_asset<T: Asset>(&mut self, pool: &AssetPool<T>) {
+        self.loaders.insert(TypeId::of::<T>(), vec![]);
+        self.load_states.insert(
+            TypeId::of::<T>(),
+            Box::new(LoadState::<T>::new(pool.handle_allocator().clone())),
+        );
+
+        self.savers.insert(TypeId::of::<T>(), vec![]);
+        // self.save_states.insert(
+        //     TypeId::of::<T>(),
+        // Box::new(SaveState::<T>::new())
+        // );
+    }
+    pub fn add_loader<T: Asset, L: Loader>(&mut self, loader: L) {
+        let loaders = self
+            .loaders
+            .get_mut(&TypeId::of::<T>())
+            .expect("Asset type not registered");
+        loaders.push(Arc::new(loader));
+    }
+    fn get_loader<T: Asset>(&self, path: &Path) -> anyhow::Result<&Arc<dyn Loader>> {
+        let file_ext = path
+            .extension()
+            .ok_or_else(|| anyhow!("Couldn't determine file extension: {:#?}", path))?;
+        let file_ext = file_ext.to_str().unwrap();
+        let loaders = self
+            .loaders
+            .get(&TypeId::of::<T>())
+            .ok_or_else(|| anyhow!("Loader for asset: {} not found", type_name::<T>()))?;
+
+        for loader in loaders {
+            for &extension in loader.extensions() {
+                if extension == file_ext {
+                    return Ok(loader);
+                }
+            }
+        }
+
+        Err(anyhow!(
+            "Failed to find suitable loader for extension: {}",
+            file_ext
+        ))
+    }
+
+    fn get_relative_path(&self, path: &Path) -> PathBuf {
+        println!("{}", self.asset_dir.display());
+        if path.is_relative() {
+            path.to_owned()
         } else {
-            let alloc_handle = self.alloc_handle();
-            println!("Allocating handle {}", alloc_handle.index());
-            maps.register_handle(alloc_handle.clone_weak(), meta.clone());
-            ass_man
-                .inner
-                .load_statuses
-                .lock()
-                .set_status(alloc_handle.clone_weak().into(), LoadStatus::Loading);
-
-            self.load_with_handle(&alloc_handle, LoadStrategy::FromPath, &meta, ass_man);
-
-            return Ok(alloc_handle);
+            path::make_relative(path, &self.asset_dir).unwrap()
         }
+        //Err(anyhow::anyhow!("Only paths relative to the cwd({}) are allowed, Please move your asset files to this directory", self.asset_dir.display()))
     }
-    fn load_with_handle(
+    pub fn load<T: Asset>(&self, path: &Path, ass_man: AssetManager) -> anyhow::Result<Handle<T>> {
+        let path = self.get_relative_path(path);
+
+        let loader = self.get_loader::<T>(&path)?;
+
+        // let metadata = MetaData::<T>::for_file(path).unwrap_or(MetaData {
+        //     source_path: path.to_owned(),
+        //     is_standalone: path.exists(),
+        //     uuid: Uuid::new_v4(),
+        //     settings: T::Settings::default(),
+        // });
+
+        log::info!("Trying to load: {}", path.display());
+
+        let handle = self.load_with_loader::<T>(Source::FileSystem(path), None, loader, ass_man)?;
+
+        Ok(handle)
+    }
+    pub fn load_with_settings<T: Asset>(
         &self,
-        handle: &Handle<T>,
-        strat: LoadStrategy,
-        meta: &MetaData<T>,
-        ass_man: &AssetManager,
-    ) {
-        assert!(!handle.is_weak());
+        path: &Path,
+        settings: T::Settings,
+        ass_man: AssetManager,
+    ) -> anyhow::Result<Handle<T>> {
+        let path = self.get_relative_path(path);
 
-        fn load_task<T: Asset>(
-            loader: Arc<T::Loader>,
-            strat: LoadStrategy,
-            meta: &MetaData<T>,
-            context: &mut LoadContext,
-        ) -> Result<T, anyhow::Error> {
-            let data = match strat {
-                LoadStrategy::FromPath => std::fs::read(&context.path)?,
-                LoadStrategy::FromData(data) => data,
-            };
-            let asset = T::load(&loader, &data, meta, context)?;
-            Ok(asset)
-        }
+        let loader = self.get_loader::<T>(&path)?;
 
-        let ass_man_cl = ass_man.clone();
-        let loader = self.asset_loader.clone();
-        let path = meta.data_path.clone();
-        let sender = self.progress_send.clone();
-        let handle = handle.clone();
-        let meta = meta.clone();
-        ass_man.inner.threadpool.spawn(move || {
-            let mut context = LoadContext {
-                path,
-                manager: ass_man_cl,
-                dependencies: Vec::new(),
-            };
+        log::info!("Trying to load: {}", path.display());
 
-            let result = load_task::<T>(loader, strat, &meta, &mut context);
-            sender
-                .send(LoadResult {
-                    handle,
-                    result,
-                    dependencies: context.dependencies,
-                })
-                .expect("Failed to send load result");
-        });
+        let handle =
+            self.load_with_loader::<T>(Source::FileSystem(path), Some(settings), loader, ass_man)?;
+
+        Ok(handle)
     }
-    fn update_refcounts(&self, ass_man: &AssetManager, assets: &mut Assets<T>) {
-        let mut ref_counter = self.ref_counter.lock();
+    pub fn load_with_data<T: Asset>(
+        &self,
+        path: &Path,
+        data: Vec<u8>,
+        settings: T::Settings,
+        ass_man: AssetManager,
+    ) -> anyhow::Result<Handle<T>> {
+        let path = self.get_relative_path(path);
 
-        for op in self.handle_allocator.ref_op_channel().try_iter() {
-            ref_counter.process_op(op);
-        }
+        let loader = self.get_loader::<T>(&path)?;
 
-        let mut load_statuses = ass_man.inner.load_statuses.lock();
-        ref_counter.remove_with(|index| {
-            let load_status = load_statuses
-                .get_status(&ErasedHandle::use_for_hashing::<T>(index))
-                .expect("Load status not updated properly");
+        log::info!(
+            "Trying to load data using apparent path: {}",
+            path.display()
+        );
 
-            assets.remove(index);
-            self.dealloc_handle(index);
-            let meta = ass_man.meta_maps::<T>().unwrap();
-            let meta = meta
-                .handle_to_metadata(
-                    &ErasedHandle::use_for_hashing::<T>(index)
-                        .into_typed()
-                        .unwrap(),
-                )
-                .unwrap();
-            log::error!("removing handle with path {} {:#?}", index, meta.data_path);
-            *load_status = LoadStatus::Unloaded;
-        });
+        let handle =
+            self.load_with_loader::<T>(Source::Data(path, data), Some(settings), loader, ass_man)?;
+
+        Ok(handle)
     }
-    fn update(&self, ass_man: &AssetManager, assets: &mut Assets<T>) {
-        for progress in self.progress_recv.try_iter() {
-            let mut maps = self.maps.lock();
-            match progress.result {
+    fn load_update<T: Asset>(&self, pool: &mut AssetPool<T>) -> anyhow::Result<()> {
+        let load_state = self
+            .load_states
+            .get(&TypeId::of::<T>())
+            .expect("Asset type not registed")
+            .downcast_ref::<LoadState<T>>()
+            .unwrap();
+
+        for result in load_state.load_recv.try_iter() {
+            let meta = result.meta;
+            match result.asset {
                 Ok(asset) => {
-                    let meta = maps
-                        .handle_to_metadata_mut(&progress.handle)
-                        .expect("Handle was never registered");
-                    assets.insert(progress.handle.index(), asset);
+                    log::info!("Loaded {:#?}", meta.source);
+                    self.db.write().set_status(meta.uuid, LoadStatus::Loaded);
+                    pool.insert(result.handle.index(), asset);
 
-                    // Update dependencies
-                    if &meta.dependencies != &progress.dependencies {
-                        meta.dependencies = progress.dependencies;
-                    }
-
-                    {
-                        let mut load_statuses = ass_man.inner.load_statuses.lock();
-                        let erased_handle = progress.handle.into();
-
-                        // load_statuses.set_dependency_loaded(&erased_handle);
-                        let load_status = load_statuses
-                            .get_status(&erased_handle)
-                            .expect("Load status not updated properly");
-                        *load_status = LoadStatus::Loaded;
-                    }
-
-                    log::info!("Loaded {:#?}", meta.data_path);
-                    meta.save().expect("Failed to save metadata to disk");
+                    let save_path = &self.asset_dir.join(&meta.source);
+                    meta.save(save_path)?;
                 }
                 Err(err) => {
-                    let meta = maps
-                        .deregister_handle(&progress.handle)
-                        .expect("Handle was never registered");
-                    ass_man
-                        .inner
-                        .load_statuses
-                        .lock()
-                        .remove(&progress.handle.into());
-                    log::error!("Failed to load asset: {:?}, Error: {}", meta.data_path, err);
+                    log::error!("Failed to load asset {:#?}: {}", meta.source, err);
+                    self.db.write().set_status(meta.uuid, LoadStatus::Failed);
                 }
             }
         }
-        self.update_refcounts(ass_man, assets);
-    }
-    fn alloc_handle(&self) -> Handle<T> {
-        self.handle_allocator.allocate::<T>()
-    }
-    fn dealloc_handle(&self, handle_index: HandleIndex) {
-        self.handle_allocator.deallocate(handle_index);
-    }
-    fn get_uuid(&self, handle: &Handle<T>) -> Option<Uuid> {
-        let maps = self.maps.lock();
-        Some(maps.handle_to_metadata(handle)?.uuid)
-    }
-    fn meta_maps(&self) -> MutexGuard<MetaMaps<T>> {
-        self.maps.lock()
-    }
-}
-pub struct MetaMaps<T: Asset> {
-    uuid_to_handle: HashMap<Uuid, Handle<T>>,
-    handle_to_metadata: HashMap<Handle<T>, MetaData<T>>,
-    path_to_handle: HashMap<PathBuf, Handle<T>>,
-}
 
-impl<T: Asset> MetaMaps<T> {
-    pub fn new() -> Self {
-        MetaMaps {
-            uuid_to_handle: Default::default(),
-            handle_to_metadata: Default::default(),
-            path_to_handle: Default::default(),
-        }
+        Ok(())
     }
-    pub fn uuid_to_handle(&self, uuid: &Uuid) -> Option<&Handle<T>> {
-        self.uuid_to_handle.get(uuid)
-    }
-    pub fn path_to_handle(&self, path: &Path) -> Option<&Handle<T>> {
-        self.path_to_handle.get(path)
-    }
-    pub fn path_to_meta_data(&self, path: &Path) -> Option<&MetaData<T>> {
-        let handle = self.path_to_handle(path)?;
-        self.handle_to_metadata(handle)
-    }
-    pub fn handle_to_uuid(&self, handle: &Handle<T>) -> Option<&Uuid> {
-        self.handle_to_metadata.get(handle).map(|meta| &meta.uuid)
-    }
-    pub fn handle_to_metadata(&self, handle: &Handle<T>) -> Option<&MetaData<T>> {
-        self.handle_to_metadata.get(handle)
-    }
-    pub fn handle_to_metadata_mut(&mut self, handle: &Handle<T>) -> Option<&mut MetaData<T>> {
-        self.handle_to_metadata.get_mut(handle)
-    }
-    pub(crate) fn register_handle(&mut self, handle: Handle<T>, meta: MetaData<T>) {
-        assert!(handle.is_weak());
+    fn get_saver<T: Asset>(&self, extension: &OsStr) -> anyhow::Result<&Arc<dyn Saver>> {
+        let file_ext = extension.to_str().unwrap();
+        let savers = self
+            .savers
+            .get(&TypeId::of::<T>())
+            .ok_or_else(|| anyhow!("Saver for asset: {} not found", type_name::<T>()))?;
 
-        self.path_to_handle
-            .insert(meta.data_path.clone(), handle.clone());
-        self.uuid_to_handle
-            .insert(meta.uuid.clone(), handle.clone());
-        self.handle_to_metadata.insert(handle, meta);
-    }
-    pub(crate) fn deregister_handle(&mut self, handle: &Handle<T>) -> Option<MetaData<T>> {
-        let meta = self.handle_to_metadata.remove(handle)?;
-        log::debug!("Deregistering handle with path {:?}", meta.data_path);
-        self.uuid_to_handle.remove(&meta.uuid);
-        self.path_to_handle.remove(&meta.data_path);
-        Some(meta)
-    }
-}
-struct LoadStatuses {
-    inner: HashMap<ErasedHandle, LoadStatus>,
-    // dep_count: HashMap<ErasedHandle, u32>, // No. of dependencies that are still loading
-    // dep_to_parent: HashMap<ErasedHandle, ErasedHandle>
-}
-impl LoadStatuses {
-    pub fn new() -> Self {
-        Self {
-            inner: Default::default(),
-            // dep_count: Default::default(),
-            // dep_to_parent: Default::default()
-        }
-    }
-    fn set_status(&mut self, handle: ErasedHandle, status: LoadStatus) {
-        assert!(handle.is_weak());
-        self.inner.insert(handle.clone(), status);
-        //self.dep_count.insert(handle, 0);
-    }
-    fn get_status(&mut self, handle: &ErasedHandle) -> Option<&mut LoadStatus> {
-        self.inner.get_mut(handle)
-    }
-    // fn set_dependency_loading(&mut self, parent: ErasedHandle, dependency: ErasedHandle) {
-    //     self.inc_count(&parent);
-    //     //self.dep_to_parent.insert(dependency, parent);
-    // }
-    // fn set_dependency_loaded(&mut self, dependency: &ErasedHandle) {
-    //     let parent = self.dep_to_parent.remove(&dependency).unwrap();
-    //     if self.dec_count(&parent) == 0 {
-    //         self.set_status(parent, LoadStatus::Loaded);
-    //     }
-    // }
-
-    fn remove(&mut self, handle: &ErasedHandle) -> Option<LoadStatus> {
-        //let count = self.dep_count.remove(handle)?;
-        self.inner.remove(handle)
-    }
-    // fn get_dep_count(&mut self, handle: &ErasedHandle) -> Option<&mut u32> {
-    //     self.dep_count.get_mut(handle)
-    // }
-    // fn dec_count(&mut self, handle: &ErasedHandle) -> u32 {
-    //     let dec_count = self.get_dep_count(handle).unwrap();
-    //     *dec_count-=1;
-
-    //     *dec_count
-    // }
-    // fn inc_count(&mut self, handle: &ErasedHandle) -> u32 {
-    //     let dec_count = self.get_dep_count(handle).unwrap();
-    //     *dec_count+=1;
-
-    //     *dec_count
-    // }
-}
-struct AssetManagerInner {
-    loaders: HashMap<&'static str, Box<dyn Any + Send + Sync + 'static>>,
-    extension_to_asset_name: HashMap<OsString, &'static str>,
-    load_statuses: Mutex<LoadStatuses>,
-    threadpool: Arc<ThreadPool>,
-}
-
-impl AssetManagerInner {
-    fn new(threadpool: &Arc<ThreadPool>) -> Self {
-        Self {
-            loaders: HashMap::new(),
-            threadpool: threadpool.clone(),
-            extension_to_asset_name: HashMap::new(),
-            load_statuses: Mutex::new(LoadStatuses::new()),
-        }
-    }
-    fn get_loader<T: Asset>(&self) -> Result<&AssetLoader<T>, anyhow::Error> {
-        Ok(self
-            .loaders
-            .get(T::NAME)
-            .ok_or(anyhow::anyhow!(
-                "Failed to get loader for asset {}",
-                T::NAME
-            ))?
-            .downcast_ref::<AssetLoader<T>>()
-            .expect("Asset Loader is not of expected type"))
-    }
-    fn add_loader<T: Asset>(&mut self, loader: T::Loader, assets: &Assets<T>) {
-        self.register_extensions(T::extensions(), T::NAME);
-
-        let loader = AssetLoader::<T>::new(loader, assets);
-        if self.loaders.insert(T::NAME, Box::new(loader)).is_some() {
-            panic!(
-                "Cannot register loader twice! Loader for {} already exists",
-                T::NAME
-            );
-        }
-    }
-    fn register_extensions(&mut self, extensions: &[&'static str], asset_name: &'static str) {
-        for extension in extensions {
-            let previous = self
-                .extension_to_asset_name
-                .insert(OsString::from(extension), asset_name);
-            if let Some(previous) = previous {
-                panic!(
-                    "Extension {} has already been associated with loader of asset {}",
-                    extension, previous
-                );
+        for loader in savers {
+            for &extension in loader.extensions() {
+                if extension == file_ext {
+                    return Ok(loader);
+                }
             }
         }
+
+        Err(anyhow!(
+            "Failed to find suitable saver for extension: {}",
+            file_ext
+        ))
     }
-    fn get_uuid<T: Asset>(&self, handle: &Handle<T>) -> Option<Uuid> {
-        self.get_loader::<T>().ok()?.get_uuid(handle)
+    pub fn add_saver<T: Asset, S: Saver>(&mut self, saver: S) {
+        let savers = self
+            .savers
+            .get_mut(&TypeId::of::<T>())
+            .expect("Asset type not registered");
+        savers.push(Arc::new(saver));
     }
-    fn meta_maps<T: Asset>(&self) -> Result<MutexGuard<MetaMaps<T>>, anyhow::Error> {
-        Ok(self.get_loader::<T>()?.meta_maps())
+    pub fn create<T: Asset>(
+        &self,
+        save_path: &Path,
+        asset: T,
+        pool: &mut AssetPool<T>,
+    ) -> anyhow::Result<Handle<T>> {
+        let asset_path = self.get_relative_path(save_path);
+        let asset_path_abs = self.asset_dir.join(&asset_path);
+
+        if asset_path_abs.exists() {
+            return Err(anyhow::anyhow!(
+                "Cannot create asset save path already exists"
+            ));
+        }
+        let handle = pool.add(asset);
+
+        let meta = MetaData::<T>::for_file(&asset_path_abs).unwrap_or_else(|| MetaData::<T> {
+            source: asset_path.to_owned(),
+            is_standalone: true,
+            uuid: Uuid::new_v4(),
+            settings: T::Settings::default(),
+        });
+
+        meta.save(&asset_path_abs)?;
+        self.db.write().create_with_status(
+            meta.uuid,
+            asset_path.to_owned(),
+            handle.clone_erased(),
+            LoadStatus::Loaded,
+        );
+
+        Ok(handle)
     }
-    fn get_load_status(&self, handle: &ErasedHandle) -> Option<LoadStatus> {
-        self.load_statuses.lock().get_status(handle).cloned()
+    pub fn save<T: Asset>(
+        &self,
+        handle: &Handle<T>,
+        asset_pool: &AssetPool<T>,
+    ) -> anyhow::Result<()> {
+        let db = self.db.read();
+        let path = db.get_path(&handle.clone_erased());
+        let path = self.asset_dir.join(path);
+        let saver = self.get_saver::<T>(
+            path.extension()
+                .expect("No extension! Cannot guess file type for saving"),
+        )?;
+
+        let asset = asset_pool
+            .get(handle)
+            .expect("Cannot save! Asset doesn't exist");
+        let mut context = SaveContext::new(asset);
+
+        let temp_file = tempfile::NamedTempFile::new_in(std::env::current_dir()?)?;
+        let mut writer = BufWriter::new(temp_file);
+
+        saver.save(&mut context, &mut writer)?;
+
+        writer.into_inner()?.persist(path)?;
+
+        Ok(())
+    }
+    pub fn update<T: Asset>(&self, pool: &mut AssetPool<T>) -> anyhow::Result<()> {
+        self.load_update(pool)?;
+        //self.save_update(pool)?;
+
+        Ok(())
+    }
+    pub fn load_status(&self, handle: &ErasedHandle) -> Option<LoadStatus> {
+        self.db.read().get_status(handle)
+    }
+    pub fn get_uuid<T: Asset>(&self, handle: &Handle<T>) -> Uuid {
+        self.db.read().get_uuid(&handle.clone_erased_as_internal())
+    }
+    pub fn get_path<T: Asset>(&self, handle: &Handle<T>) -> PathBuf {
+        self.db.read().get_path(&handle.clone_erased_as_internal())
     }
 }
 #[derive(Clone)]
 pub struct AssetManager {
-    inner: Arc<AssetManagerInner>,
+    inner: Arc<RwLock<AssetManagerInner>>,
 }
 impl AssetManager {
-    pub fn load<T: Asset>(&self, path: impl AsRef<Path>) -> Result<Handle<T>, anyhow::Error> {
-        let loader = self.inner.get_loader::<T>()?;
-        let handle = loader.load(path.as_ref(), None, self, false)?;
-        Ok(handle)
+    pub fn with_threadpool(threadpool: Arc<ThreadPool>) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(AssetManagerInner::with_threadpool(threadpool))),
+        }
     }
-    pub(crate) fn load_dependency<T: Asset>(
-        &self,
-        parent_path: &Path,
-        dependency: Source,
-        settings: T::LoadSettings,
-    ) -> Result<Handle<T>, anyhow::Error> {
-        let loader = self.inner.get_loader()?;
-        loader.load_dependency(parent_path, dependency, settings, self.clone())
+}
+impl AssetManager {
+    pub fn set_asset_dir(&mut self, path: impl AsRef<Path>) {
+        self.inner.write().set_asset_dir(path)
+    }
+    pub fn register_asset<T: Asset>(&mut self, pool: &AssetPool<T>) {
+        self.inner.write().register_asset(pool)
+    }
+    pub fn add_loader<T: Asset, L: Loader>(&mut self, loader: L) {
+        self.inner.write().add_loader::<T, L>(loader)
+    }
+    pub fn add_saver<T: Asset, S: Saver>(&mut self, saver: S) {
+        self.inner.write().add_saver::<T, S>(saver)
+    }
+    pub fn load<T: Asset>(&self, path: &Path) -> anyhow::Result<Handle<T>> {
+        self.inner.read().load(path, self.clone())
     }
     pub fn load_with_settings<T: Asset>(
         &self,
-        path: impl AsRef<Path>,
-        settings: T::LoadSettings,
-        reload: bool,
-    ) -> Result<Handle<T>, anyhow::Error> {
-        let loader = self.inner.get_loader::<T>()?;
-        let handle = loader.load(path.as_ref(), Some(settings), self, reload)?;
-        Ok(handle)
+        path: &Path,
+        settings: T::Settings,
+    ) -> anyhow::Result<Handle<T>> {
+        self.inner
+            .read()
+            .load_with_settings(path, settings, self.clone())
     }
-    pub fn update<T: Asset>(&self, assets: &mut Assets<T>) {
-        let loader = self.inner.get_loader::<T>().unwrap();
-        loader.update(self, assets);
+    pub fn load_with_data<T: Asset>(
+        &self,
+        name: &Path,
+        data: Vec<u8>,
+        settings: T::Settings,
+    ) -> anyhow::Result<Handle<T>> {
+        self.inner
+            .read()
+            .load_with_data(name, data, settings, self.clone())
     }
-    pub fn get_uuid<T: Asset>(&self, handle: &Handle<T>) -> Option<Uuid> {
-        self.inner.get_uuid(handle)
+    pub fn save<T: Asset>(&self, handle: &Handle<T>, pool: &AssetPool<T>) -> anyhow::Result<()> {
+        self.inner.read().save(handle, pool)
     }
-    pub fn meta_maps<T: Asset>(&self) -> Result<MutexGuard<MetaMaps<T>>, anyhow::Error> {
-        self.inner.meta_maps()
+    pub fn create<T: Asset>(
+        &self,
+        save_path: &Path,
+        asset: T,
+        pool: &mut AssetPool<T>,
+    ) -> anyhow::Result<Handle<T>> {
+        self.inner.read().create(save_path, asset, pool)
     }
-    pub fn get_load_status(&self, handle: &ErasedHandle) -> Option<LoadStatus> {
-        self.inner.get_load_status(handle)
+    pub fn update<T: Asset>(&self, pool: &mut AssetPool<T>) -> anyhow::Result<()> {
+        self.inner.read().update(pool)
+    }
+    pub fn load_status(&self, handle: &ErasedHandle) -> Option<LoadStatus> {
+        self.inner.read().load_status(handle)
+    }
+
+    pub fn get_uuid<T: Asset>(&self, handle: &Handle<T>) -> Uuid {
+        self.inner.read().get_uuid(handle)
+    }
+    pub fn get_path<T: Asset>(&self, handle: &Handle<T>) -> PathBuf {
+        self.inner.read().get_path(handle)
     }
 }
-pub struct AssetManagerBuilder {
-    inner: AssetManagerInner,
-}
-impl AssetManagerBuilder {
-    pub fn new(threadpool: &Arc<ThreadPool>) -> Self {
-        Self {
-            inner: AssetManagerInner::new(threadpool),
+#[test]
+fn txt_save_and_load() -> Result<(), Box<dyn std::error::Error>> {
+    simple_logger::SimpleLogger::new().init().unwrap();
+
+    #[derive(Debug)]
+    struct TxtFile {
+        contents: String,
+    }
+
+    impl Asset for TxtFile {
+        type Settings = ();
+    }
+
+    struct TxtSaverLoader;
+
+    impl Loader for TxtSaverLoader {
+        fn extensions(&self) -> &[&str] {
+            &["txt"]
+        }
+        fn load(&self, ctx: &mut LoadContext) -> anyhow::Result<()> {
+            let mut contents = String::new();
+            ctx.reader().read_to_string(&mut contents)?;
+
+            ctx.set_asset(TxtFile { contents });
+            Ok(())
         }
     }
-    pub fn add_loader<T: Asset>(&mut self, loader: T::Loader, assets: &Assets<T>) {
-        self.inner.add_loader(loader, assets);
-    }
-    pub fn build(self) -> AssetManager {
-        let ass_man = AssetManager {
-            inner: Arc::new(self.inner),
-        };
+    impl Saver for TxtSaverLoader {
+        fn extensions(&self) -> &[&str] {
+            &["txt"]
+        }
 
-        crate::serde::init_serde(ass_man.clone());
-        ass_man
+        fn save(
+            &self,
+            context: &mut SaveContext,
+            writer: &mut dyn std::io::Write,
+        ) -> anyhow::Result<()> {
+            writer.write(context.get_asset::<TxtFile>().contents.as_bytes())?;
+            Ok(())
+        }
     }
+    use rayon::ThreadPoolBuilder;
+    let tp = Arc::new(ThreadPoolBuilder::new().build()?);
+    let mut pool = AssetPool::default();
+    let mut ass_man = AssetManager::with_threadpool(tp);
+    ass_man.register_asset::<TxtFile>(&pool);
+    ass_man.add_loader::<TxtFile, TxtSaverLoader>(TxtSaverLoader);
+    ass_man.add_saver::<TxtFile, TxtSaverLoader>(TxtSaverLoader);
+
+    let test = ass_man.load::<TxtFile>(Path::new("test.txt"))?;
+    let test1 = ass_man.load::<TxtFile>(Path::new("DoesNotExist.txt"))?;
+
+    assert!(ass_man.load_status(&test.clone_erased()) == Some(LoadStatus::Loading));
+    assert!(ass_man.load_status(&test1.clone_erased()) == Some(LoadStatus::Loading));
+
+    let test_erased = test.clone_erased();
+    while ass_man.load_status(&test_erased) != Some(LoadStatus::Loaded) {
+        ass_man.update::<TxtFile>(&mut pool)?;
+    }
+
+    let text = pool.get_mut(&test).unwrap();
+    text.contents.push_str("s");
+
+    assert!(ass_man.load_status(&test.clone_erased()) == Some(LoadStatus::Loaded));
+    assert!(ass_man.load_status(&test1.clone_erased()) == Some(LoadStatus::Failed));
+
+    ass_man.save(&test, &pool)?;
+
+    ass_man.update::<TxtFile>(&mut pool)?;
+
+    log::debug!("{:#?}", pool.get(&test));
+    Ok(())
 }

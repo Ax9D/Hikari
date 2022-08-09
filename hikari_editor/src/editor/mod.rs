@@ -1,17 +1,30 @@
-use crate::imgui;
-use clipboard::ClipboardProvider;
-use hikari::render::*;
-
 use self::{
     content_browser::ContentBrowser,
     logging::{LogListener, Logging},
+    outliner::Outliner,
+    project::ProjectManager,
+    properties::Properties,
     tools::Tools,
+    viewport::Viewport,
 };
+use crate::{component_impls, components::EditorComponents, imgui};
+use clipboard::ClipboardProvider;
+use hikari::{
+    asset::AssetManager,
+    core::{serde::Registry, Game},
+    input::KeyCode,
+};
+use hikari_editor::*;
 pub mod logging;
 
-mod content_browser;
 //mod utils;
+mod content_browser;
+pub mod meta;
+mod outliner;
+mod project;
+mod properties;
 mod tools;
+mod viewport;
 
 struct Clipboard(clipboard::ClipboardContext);
 impl Clipboard {
@@ -34,11 +47,22 @@ pub struct EditorConfig {
     pub log_listener: LogListener,
     pub hidpi_factor: f32,
 }
+
+#[derive(PartialEq, Eq)]
+pub enum RenameState {
+    Idle,
+    Renaming(imgui::Id, String, i32),
+}
 pub struct Editor {
+    outliner: Outliner,
+    properties: Properties,
+    viewport: Viewport,
     content_browser: ContentBrowser,
     logging: Logging,
     tools: Tools,
     show_demo: bool,
+    rename_state: RenameState,
+    project_manager: ProjectManager,
 }
 
 impl Editor {
@@ -95,12 +119,12 @@ impl Editor {
         style.colors[imgui::StyleColor::NavHighlight as usize] = [0.26, 0.59, 0.98, 1.00];
         style.colors[imgui::StyleColor::NavWindowingHighlight as usize] = [1.00, 1.00, 1.00, 0.70];
         style.colors[imgui::StyleColor::NavWindowingDimBg as usize] = [0.80, 0.80, 0.80, 0.20];
-        style.colors[imgui::StyleColor::ModalWindowDimBg as usize] = [0.80, 0.0, 0.8, 0.35];
+        style.colors[imgui::StyleColor::ModalWindowDimBg as usize] = [0.675, 0.675, 0.675, 0.350];
         style.colors[imgui::StyleColor::CheckMark as usize] = [0.71, 0.71, 0.71, 1.00];
         style.colors[imgui::StyleColor::SliderGrab as usize] = [0.71, 0.71, 0.71, 1.00];
         style.colors[imgui::StyleColor::DockingPreview as usize] = [0.36, 0.37, 0.38, 0.70];
     }
-    pub fn new(ctx: &mut imgui::Context, config: EditorConfig) -> Self {
+    pub fn init(game: &mut Game, ctx: &mut imgui::Context, config: EditorConfig) {
         ctx.style_mut().tab_rounding = 0.0;
         ctx.style_mut().frame_rounding = 2.0;
         ctx.io_mut().config_flags = imgui::ConfigFlags::DOCKING_ENABLE;
@@ -117,14 +141,45 @@ impl Editor {
             log::error!("Failed to init clipboard");
         }
         Self::set_dark_theme(ctx);
-        Self {
+
+        let mut editor_components = EditorComponents::default();
+        let mut registry = Registry::new();
+
+        component_impls::register_components(&mut editor_components, &mut registry);
+
+        let registry = std::sync::Arc::new(registry);
+
+        {
+            game.create_asset::<Scene>();
+            let mut ass_man = game.get_mut::<AssetManager>();
+            let loader = SceneLoader { registry };
+            ass_man.add_loader::<Scene, SceneLoader>(loader.clone());
+            ass_man.add_saver::<Scene, SceneLoader>(loader);
+        }
+
+        let mut editor = Self {
             logging: Logging::new(config.log_listener),
             tools: Tools::new(),
             show_demo: false,
             content_browser: ContentBrowser::new(),
+            outliner: Outliner::default(),
+            properties: Properties::default(),
+            viewport: Viewport::default(),
+            rename_state: RenameState::Idle,
+            project_manager: ProjectManager::default(),
+        };
+        {
+            //let _sponza = game.get::<AssetManager>().load::<hikari::g3d::Scene>(std::path::Path::new("assets/models/sponza/sponza.glb")).unwrap();
+            let mut world = game.get_mut::<hikari::core::World>();
+            let entity = editor.outliner.add_entity(&mut world, "Camera");
+            world
+                .add_component(entity, hikari::g3d::Camera::default())
+                .expect("Failed to add camera");
         }
+        game.add_state(editor);
+        game.add_state(editor_components);
     }
-    pub fn run(&mut self, ui: &imgui::Ui) {
+    pub fn run(&mut self, ui: &imgui::Ui, state: EngineState) {
         ui.window("Main")
             .flags(
                 imgui::WindowFlags::NO_DECORATION
@@ -140,17 +195,8 @@ impl Editor {
                 ui.dockspace("Dockspace");
 
                 ui.menu_bar(|| {
-                    ui.menu("File", || {
-                        ui.menu_item_config("Open")
-                            .enabled(false)
-                            .shortcut("Ctrl + O")
-                            .build();
-                        ui.menu_item_config("Save")
-                            .enabled(false)
-                            .shortcut("Ctrl + S")
-                            .build();
-                        ui.menu_item_config("Save As").enabled(false).build();
-                    });
+                    //project::draw(ui, self, state).unwrap();
+                    self.file_menu(ui, state).unwrap();
 
                     ui.menu("Edit", || {
                         ui.menu_item_config("Preferences").enabled(false).build();
@@ -158,6 +204,7 @@ impl Editor {
                     ui.menu("Tools", || {
                         if ui.menu_item("Start Tracy") {
                             let path = std::path::Path::new("./tools/");
+
                             #[cfg(target_os = "windows")]
                             let tracy_exe = "Tracy.exe";
                             #[cfg(target_os = "linux")]
@@ -176,36 +223,51 @@ impl Editor {
                 });
             });
 
-        self.outliner(ui);
-        self.properties(ui);
-        content_browser::draw(ui, self);
-        self.viewport(ui);
+        content_browser::draw(ui, self, state).unwrap();
+        viewport::draw(ui, self, state).unwrap();
+        outliner::draw(ui, self, state).unwrap();
+        project::draw(ui, self, state).unwrap();
+        properties::draw(ui, self, state).unwrap();
         logging::draw(ui, self);
 
         if self.show_demo {
             ui.show_demo_window(&mut self.show_demo);
         }
     }
+    pub fn file_menu(&mut self, ui: &imgui::Ui, state: EngineState) -> anyhow::Result<()> {
+        let mut open = false;
+        let mut save = false;
+        let project_open = self.project_manager.current.is_some();
 
-    fn outliner(&mut self, ui: &imgui::Ui) {
-        ui.window("Outliner")
-            .size([300.0, 400.0], imgui::Condition::Once)
-            .resizable(true)
-            .build(|| {});
-    }
-    fn properties(&mut self, ui: &imgui::Ui) {
-        ui.window("Properties")
-            .size([300.0, 400.0], imgui::Condition::Once)
-            .resizable(true)
-            .build(|| {});
-    }
-    fn viewport(&mut self, ui: &imgui::Ui) {
-        ui.window("Viewport")
-            .size([950.0, 200.0], imgui::Condition::Once)
-            .resizable(true)
-            .build(|| {});
-    }
+        ui.menu("File", || {
+            open |= ui.menu_item_config("Open").shortcut("Ctrl + O").build();
 
+            save |= ui
+                .menu_item_config("Save All")
+                .shortcut("Ctrl + S")
+                .enabled(project_open)
+                .build();
+        });
+
+        open |= ui.io().key_ctrl && ui.io().keys_down[KeyCode::O as usize]; // Ctrl + O
+
+        save |= project_open && ui.io().key_ctrl && ui.io().keys_down[KeyCode::S as usize]; // Ctrl + S
+
+        if open {
+            if let Some(project_file) = rfd::FileDialog::new()
+                .add_filter("Hikari Project", &["hikari"])
+                .pick_file()
+            {
+                self.project_manager.open(project_file, state);
+            }
+        }
+
+        if save {
+            self.project_manager.save_all(state)?;
+        }
+
+        Ok(())
+    }
     pub fn handle_exit(&mut self) {
         log::info!("Editor Exiting");
     }

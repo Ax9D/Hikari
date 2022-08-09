@@ -23,7 +23,11 @@ struct ImportData {
 impl ImportData {
     pub fn new(path: &Path, _data: &[u8]) -> Result<Self, gltf::Error> {
         let (document, buffers, _images) = gltf::import(path)?;
-        let parent_path = path.parent().unwrap_or_else(|| Path::new("./")).to_owned();
+        let parent_path = path
+            .parent()
+            .unwrap_or_else(|| Path::new("./"))
+            .canonicalize()?
+            .to_owned();
         Ok(Self {
             path: path.to_owned(),
             parent_path,
@@ -273,6 +277,7 @@ fn parse_texture_data(
     let mut fake_texture_path = base_path.to_owned();
     fake_texture_path.push(texture_name);
 
+    let asset_manager = load_context.asset_manager();
     match texture.source().source() {
         gltf::image::Source::View { view, mime_type } => {
             let start = view.offset();
@@ -280,13 +285,24 @@ fn parse_texture_data(
 
             let parent_buffer = &gltf.buffers()[view.buffer().index()].0;
             let data = &parent_buffer[start..end];
-            let owned_data = data.to_owned();
 
             match mime_type {
-                "image/jpeg" | "image/png" => load_context.load_dependency::<Texture2D>(
-                    hikari_asset::Source::RawData(fake_texture_path, owned_data),
-                    config,
-                ),
+                "image/png" => {
+                    fake_texture_path.set_extension("png");
+                    asset_manager.load_with_data::<Texture2D>(
+                        &fake_texture_path,
+                        data.to_owned(),
+                        config,
+                    )
+                }
+                "image/jpeg" => {
+                    fake_texture_path.set_extension("jpeg");
+                    asset_manager.load_with_data::<Texture2D>(
+                        &fake_texture_path,
+                        data.to_owned(),
+                        config,
+                    )
+                }
                 _ => Err(anyhow::anyhow!(
                     crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
@@ -316,10 +332,14 @@ fn parse_texture_data(
                 };
 
                 match mime_type {
-                    "image/jpeg" | "image/png" => load_context.load_dependency::<Texture2D>(
-                        hikari_asset::Source::RawData(fake_texture_path, data),
-                        config,
-                    ),
+                    "image/png" => {
+                        fake_texture_path.set_extension("png");
+                        asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data, config)
+                    }
+                    "image/jpeg" => {
+                        fake_texture_path.set_extension("jpeg");
+                        asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data, config)
+                    }
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
                             mime_type.split(r"/").last().unwrap().to_string(),
@@ -331,8 +351,7 @@ fn parse_texture_data(
                 let path = gltf.parent_path().join(uri);
 
                 match mime_type {
-                    "image/jpeg" | "image/png" => load_context
-                        .load_dependency::<Texture2D>(hikari_asset::Source::Path(path), config),
+                    "image/jpeg" | "image/png" => asset_manager.load_with_settings(&path, config),
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
                             mime_type.split(r"/").last().unwrap().to_string(),
@@ -343,7 +362,7 @@ fn parse_texture_data(
             } else {
                 let path = gltf.parent_path().join(uri);
 
-                load_context.load_dependency::<Texture2D>(hikari_asset::Source::Path(path), config)
+                asset_manager.load_with_settings(&path, config)
             }
         }
     }
@@ -369,14 +388,15 @@ fn load_material(
     material: &gltf::Material,
     load_context: &mut LoadContext,
 ) -> Result<Handle<crate::Material>, anyhow::Error> {
-    let file_name = material
+    let mut file_name = material
         .name()
         .unwrap_or(&format!(
-            "{}_material_{}.hmat",
+            "{}_material_{}",
             import_data.filename(),
             material.index().unwrap_or(ix)
         ))
         .to_owned();
+    file_name.push_str(".hmat");
 
     let material_path = import_data.parent_path().join(file_name);
     if !material_path.exists() {
@@ -442,11 +462,12 @@ fn load_material(
 
         let material_text = serde_yaml::to_string(&material)?;
         std::fs::write(&material_path, material_text)?;
+        println!("Creating material {ix} {:#?}", material_path);
     }
 
-    println!("Creating material {ix} {:#?}", material_path);
-
-    load_context.load_dependency::<crate::Material>(hikari_asset::Source::Path(material_path), ())
+    load_context
+        .asset_manager()
+        .load::<crate::Material>(&material_path)
 }
 
 fn load_mesh(

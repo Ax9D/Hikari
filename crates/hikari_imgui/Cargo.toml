@@ -11,6 +11,9 @@ imgui-rs-vulkan-renderer = { git = "https://github.com/Ax9D/imgui-rs-vulkan-rend
 imgui-winit-support = { git = "https://github.com/Ax9D/imgui-docking-rs", optional=true }
 arrayvec = "0.7.2"
 nohash-hasher = "0.2.0"
+once_cell = "1"
+parking_lot = "0.12"
+fxhash = "0.2"
 
 hikari_math = {path = "../hikari_math", features = ["mint"]}
 hikari_dev = {path = "../hikari_dev"}

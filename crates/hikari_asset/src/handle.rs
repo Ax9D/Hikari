@@ -1,304 +1,171 @@
-use std::marker::PhantomData;
+use std::hash::Hash;
+use std::{any::TypeId, marker::PhantomData, sync::atomic::AtomicUsize};
 
-pub type HandleIndex = usize;
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum RefOp {
-    Increment(HandleIndex),
-    Decrement(HandleIndex),
+use crate::Asset;
+
+struct RawHandle {
+    index: usize,
+    kind: HandleKind,
 }
-#[derive(Debug, Clone)]
-pub(crate) enum RefType {
+#[allow(unused)]
+pub(crate) enum RefOp {
+    Increment(usize),
+    Decrement(usize),
+}
+#[allow(unused)]
+#[derive(Clone)]
+pub(crate) enum HandleKind {
     Strong(flume::Sender<RefOp>),
     Weak(flume::Sender<RefOp>),
     Internal,
 }
-#[derive(Default)]
-pub(crate) struct RefCounter {
-    state: Vec<Option<usize>>,
-}
-
-impl RefCounter {
-    fn ensure_length(&mut self, ix: usize) {
-        if ix >= self.state.len() {
-            self.state.resize_with(ix + 1, || None);
-        }
-    }
-    pub fn process_op(&mut self, op: RefOp) {
-        match op {
-            RefOp::Increment(index) => {
-                self.ensure_length(index);
-                if let Some(count) = &mut self.state[index] {
-                    *count += 1;
-                } else {
-                    self.state[index] = Some(1);
-                }
-            }
-            RefOp::Decrement(index) => {
-                self.ensure_length(index);
-
-                if let Some(count) = &mut self.state[index] {
-                    assert!(*count > 0);
-                    *count -= 1;
-                } else {
-                    panic!("Cannot dec_ref on handle index which doesn't exist");
-                }
-            }
-        }
-    }
-    /// Removes all handles with refcount equal to 0 with the provided closure, passing the handle index(which will be removed) as an argument
-    pub fn remove_with(&mut self, mut fun: impl FnMut(HandleIndex)) {
-        self.state
-            .iter_mut()
-            .enumerate()
-            .filter(|(_, ref_count)| ref_count.is_some())
-            .for_each(|(index, maybe_ref_count)| {
-                let mut remove = false;
-                if let Some(ref_count) = maybe_ref_count {
-                    if *ref_count == 0 {
-                        remove = true;
-                        (fun)(index);
-                    }
-                }
-
-                if remove {
-                    *maybe_ref_count = None;
-                }
-            });
-    }
-}
-
-#[derive(Debug)]
-pub struct HandleInner {
-    index: HandleIndex,
-    ref_type: RefType,
-}
-impl HandleInner {
-    pub(crate) fn new(index: HandleIndex, ref_type: RefType) -> Self {
-        match &ref_type {
-            RefType::Strong(sender) => sender
-                .send(RefOp::Increment(index))
-                .expect("Failed to increment refcount"),
-            _ => {}
-        }
-        Self { index, ref_type }
-    }
-    pub fn is_weak(&self) -> bool {
-        matches!(self.ref_type, RefType::Weak(_))
-    }
-    pub fn clone_weak(&self) -> HandleInner {
-        let ref_type = match &self.ref_type {
-            RefType::Strong(channel) => RefType::Weak(channel.clone()),
-            RefType::Weak(_) => panic!("Handle is already weak"),
-            _ => panic!(),
-        };
-
-        HandleInner::new(self.index, ref_type)
-    }
-    pub fn clone_strong(&self) -> HandleInner {
-        let ref_type = match &self.ref_type {
-            RefType::Strong(_) => panic!("Handle is already strong"),
-            RefType::Weak(channel) => RefType::Strong(channel.clone()),
-            RefType::Internal => panic!(),
-        };
-
-        HandleInner::new(self.index, ref_type)
-    }
-}
-
-impl Clone for HandleInner {
-    fn clone(&self) -> Self {
-        match &self.ref_type {
-            RefType::Strong(sender) => {
-                sender
-                    .send(RefOp::Increment(self.index))
-                    .expect("Failed to increment refcount");
-                println!("Incref {}", self.index);
-            }
-            _ => {}
-        }
-        Self {
-            index: self.index,
-            ref_type: self.ref_type.clone(),
-        }
-    }
-}
-impl PartialEq for HandleInner {
+impl PartialEq for RawHandle {
     fn eq(&self, other: &Self) -> bool {
         self.index == other.index
     }
 }
-impl Eq for HandleInner {}
+impl Eq for RawHandle {}
 
-impl std::hash::Hash for HandleInner {
+impl Hash for RawHandle {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.index.hash(state);
     }
 }
 
-impl Drop for HandleInner {
-    fn drop(&mut self) {
-        println!("Decref {}", self.index);
-        match &self.ref_type {
-            RefType::Strong(sender) => sender
-                .send(RefOp::Decrement(self.index))
-                .expect("Failed to decrement refcount"),
-            _ => {}
+impl RawHandle {
+    pub fn new(index: usize, ref_send: flume::Sender<RefOp>) -> Self {
+        Self {
+            index,
+            kind: HandleKind::Strong(ref_send),
         }
+    }
+    pub fn internal(index: usize) -> Self {
+        Self {
+            index,
+            kind: HandleKind::Internal,
+        }
+    }
+    pub fn index(&self) -> usize {
+        self.index
     }
 }
 
-pub struct Handle<T> {
-    inner: HandleInner,
-    _phantom: PhantomData<T>,
-}
-
-impl<T> Handle<T> {
-    #[inline]
-    pub(crate) fn new(index: HandleIndex, channel: flume::Sender<RefOp>) -> Self {
-        let inner = HandleInner::new(index, RefType::Strong(channel));
-        Self::from_inner(inner)
-    }
-    fn from_inner(inner: HandleInner) -> Handle<T> {
-        Self {
-            inner: inner,
-            _phantom: Default::default(),
-        }
-    }
-    #[inline(always)]
-    pub fn index(&self) -> HandleIndex {
-        self.inner.index
-    }
-    pub fn is_weak(&self) -> bool {
-        self.inner.is_weak()
-    }
-    pub fn clone_weak(&self) -> Handle<T> {
-        Self {
-            inner: self.inner.clone_weak(),
-            _phantom: Default::default(),
-        }
-    }
-    pub fn clone_strong(&self) -> Handle<T> {
-        Self {
-            inner: self.inner.clone_strong(),
-            _phantom: Default::default(),
-        }
-    }
-}
-
-impl<T> Clone for Handle<T> {
-    #[inline]
+impl Clone for RawHandle {
     fn clone(&self) -> Self {
+        // self.ref_send
+        //     .send(RefOp::Increment(self.index))
+        //     .expect("Failed to increment reference count");
         Self {
-            inner: self.inner.clone(),
-            _phantom: self._phantom,
+            index: self.index.clone(),
+            kind: self.kind.clone(),
         }
     }
 }
-impl<T> PartialEq for Handle<T> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner
+impl Drop for RawHandle {
+    fn drop(&mut self) {
+        // self.ref_send
+        //     .send(RefOp::Decrement(self.index))
+        //     .expect("Failed to decrement reference count");
     }
 }
-impl<T> Eq for Handle<T> {}
-
-impl<T> std::hash::Hash for Handle<T> {
-    #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.inner.hash(state);
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ErasedHandle {
-    inner: HandleInner,
-    ty: std::any::TypeId,
+    raw: RawHandle,
+    type_id: TypeId,
 }
 
 impl ErasedHandle {
-    #[inline(always)]
-    pub fn index(&self) -> HandleIndex {
-        self.inner.index
-    }
-    pub fn into_typed<T: 'static>(self) -> Option<Handle<T>> {
-        if self.ty == std::any::TypeId::of::<T>() {
+    pub fn into_typed<T: Asset>(self) -> Option<Handle<T>> {
+        if TypeId::of::<T>() == self.type_id {
             Some(Handle {
-                inner: self.inner,
-                _phantom: Default::default(),
+                raw: self.raw,
+                _phantom: PhantomData,
             })
         } else {
             None
         }
     }
-    pub fn is_weak(&self) -> bool {
-        self.inner.is_weak()
+    pub fn clone_typed<T: Asset>(&self) -> Option<Handle<T>> {
+        self.clone().into_typed::<T>()
     }
-    pub fn clone_weak(&self) -> ErasedHandle {
-        Self {
-            inner: self.inner.clone_weak(),
-            ty: self.ty,
-        }
+}
+pub struct Handle<T> {
+    raw: RawHandle,
+    _phantom: PhantomData<T>,
+}
+impl<T> PartialEq for Handle<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.raw == other.raw
     }
+}
+impl<T> Eq for Handle<T> {}
 
-    pub(crate) fn use_for_hashing<T: 'static>(index: HandleIndex) -> ErasedHandle {
+impl<T> Clone for Handle<T> {
+    fn clone(&self) -> Self {
         Self {
-            inner: HandleInner {
-                index,
-                ref_type: RefType::Internal,
-            },
-            ty: std::any::TypeId::of::<T>(),
+            raw: self.raw.clone(),
+            _phantom: self._phantom.clone(),
         }
     }
 }
 
-impl<T: 'static> From<Handle<T>> for ErasedHandle {
-    fn from(handle: Handle<T>) -> Self {
+impl<T: 'static> Handle<T> {
+    pub(crate) fn new(index: usize, ref_send: flume::Sender<RefOp>) -> Self {
+        Self {
+            raw: RawHandle::new(index, ref_send),
+            _phantom: PhantomData,
+        }
+    }
+    pub fn index(&self) -> usize {
+        self.raw.index()
+    }
+    pub fn clone_erased(&self) -> ErasedHandle {
+        self.clone().into()
+    }
+    pub fn clone_erased_as_internal(&self) -> ErasedHandle {
         ErasedHandle {
-            inner: handle.inner,
-            ty: std::any::TypeId::of::<T>(),
+            raw: RawHandle::internal(self.index()),
+            type_id: TypeId::of::<T>(),
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::*;
-    fn collect_garbage(
-        assets: &mut Assets<u32>,
-        recv: &flume::Receiver<RefOp>,
-        refcounter: &mut RefCounter,
-    ) {
-        for op in recv.try_iter() {
-            refcounter.process_op(op);
+impl<T: 'static> Into<ErasedHandle> for Handle<T> {
+    fn into(self) -> ErasedHandle {
+        ErasedHandle {
+            raw: self.raw,
+            type_id: TypeId::of::<T>(),
         }
-        refcounter.remove_with(|index| {
-            println!("Removing  {index}");
-            assets.remove(index);
-        });
     }
-    #[test]
-    fn handle_lifetimes() {
-        let mut assets = Assets::new();
-        let mut refcounter = RefCounter::default();
-        let handle_allocator = assets.handle_allocator().clone();
-        let recv = handle_allocator.ref_op_channel();
+}
 
-        {
-            // let handle = handle_allocator.allocate::<u32>();
-            // let other_handle = handle.clone();
-            // let other_handle = handle.make_weak();
-            // assets.insert(handle.index(), 0);
-
-            let handle = handle_allocator.allocate::<u32>();
-            let other_handle = handle.clone();
-            let other_handle = handle.clone_weak();
-            let _ = other_handle.clone_strong();
-
-            assets.insert(handle.index(), 1);
+pub(crate) struct HandleAllocator {
+    handle_count: AtomicUsize,
+    free_list_recv: flume::Receiver<usize>,
+    free_list_send: flume::Sender<usize>,
+    refcount_send: flume::Sender<RefOp>,
+}
+impl HandleAllocator {
+    pub fn new(refcount_send: flume::Sender<RefOp>) -> Self {
+        let (free_list_send, free_list_recv) = flume::unbounded();
+        Self {
+            handle_count: AtomicUsize::new(0),
+            free_list_recv,
+            free_list_send,
+            refcount_send,
         }
+    }
+    pub fn allocate<T: 'static>(&self) -> Handle<T> {
+        let index = self.free_list_recv.try_recv().unwrap_or_else(|_| {
+            self.handle_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        });
 
-        for _ in 0..100 {
-            collect_garbage(&mut assets, recv, &mut refcounter);
-        }
+        Handle::new(index, self.refcount_send.clone())
+    }
+    pub fn deallocate(&self, index: usize) {
+        self.free_list_send
+            .send(index)
+            .expect("Failed to update free list");
     }
 }

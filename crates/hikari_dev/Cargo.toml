@@ -6,8 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tracy-client = {version = "0.13", features = ["ondemand"], optional = true}
-
+tracy-client = {version = "0.13", optional = true}
 [features]
-default = ["tracy-client/ondemand"]
-profiling_disabled = []
+default = []
+profiling_enabled = ["tracy-client/ondemand"]

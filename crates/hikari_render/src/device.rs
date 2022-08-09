@@ -221,6 +221,7 @@ impl From<vk::PhysicalDeviceProperties> for PhysicalDeviceProperties {
         }
     }
 }
+struct Queue {}
 struct RawDevice {
     inner: ash::Device,
     instance: ash::Instance,
@@ -243,14 +244,16 @@ pub struct VkExtensions {
 unsafe impl Send for Device {}
 unsafe impl Sync for Device {}
 
+use nvidia_aftermath_rs::Aftermath;
+
 /// Represents the GPU device being used
 /// Is used to allocate resources on the GPU
 pub struct Device {
     physical_device: PhysicalDevice,
     device_properties: PhysicalDeviceProperties,
     pub(crate) unified_queue_ix: u32,
-    pub(crate) present_queue_ix: u32,
-    pub(crate) queue_submit_mutex: Mutex<()>,
+    //pub(crate) present_queue_ix: u32,
+    unified_queue: Mutex<vk::Queue>,
 
     shader_compiler: Mutex<shaderc::Compiler>,
 
@@ -258,6 +261,7 @@ pub struct Device {
     descriptor_set_layout_cache: Mutex<DescriptorSetLayoutCache>,
     extensions: VkExtensions,
     pipeline_cache: vk::PipelineCache,
+    aftermath: Option<Aftermath>,
 
     raw_device: RawDevice,
     entry: ash::Entry,
@@ -269,8 +273,13 @@ impl Device {
         instance: ash::Instance,
         surface_data: Option<&SurfaceData>,
         enable_features: Features,
+        debug: bool,
     ) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
-        let required_extensions = [Swapchain::name(), vk::KhrSynchronization2Fn::name()];
+        let mut required_extensions = vec![vk::KhrSynchronization2Fn::name()];
+
+        if surface_data.is_some() {
+            required_extensions.push(Swapchain::name());
+        }
 
         let physical_device = Self::pick_optimal(
             &entry,
@@ -288,7 +297,6 @@ impl Device {
         const QUEUE_PRIORITIES: [f32; 1] = [1.0];
 
         let unified_queue_ix = physical_device.get_unified_queue().unwrap();
-        let present_queue_ix = physical_device.get_unified_queue().unwrap();
 
         let queue_create_infos = [*vk::DeviceQueueCreateInfo::builder()
             .queue_family_index(unified_queue_ix)
@@ -303,20 +311,31 @@ impl Device {
 
         let mut sync2 =
             vk::PhysicalDeviceSynchronization2FeaturesKHR::builder().synchronization2(true);
-        let device_create_info = vk::DeviceCreateInfo::builder()
+
+        let mut diag_config_nv = vk::DeviceDiagnosticsConfigCreateInfoNV::builder().flags(
+            vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_AUTOMATIC_CHECKPOINTS
+                | vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_RESOURCE_TRACKING
+                | vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_SHADER_DEBUG_INFO,
+        );
+
+        let mut device_create_info = vk::DeviceCreateInfo::builder()
             .enabled_extension_names(required_extensions)
             .queue_create_infos(&queue_create_infos)
             .enabled_features(&enabled_features)
             //VK_KHR_synchronization2
-            .push_next(&mut sync2)
-            .build();
+            .push_next(&mut sync2);
 
-        let device =
+        if debug {
+            device_create_info = device_create_info.push_next(&mut diag_config_nv);
+        }
+
+        let ash_device =
             unsafe { instance.create_device(physical_device.raw, &device_create_info, None) }?;
 
         log::debug!("Created logical device");
 
-        let ash_device = device;
+        let unified_queue = unsafe { ash_device.get_device_queue(unified_queue_ix, 0) };
+        //let present_queue = unsafe { ash_device.get_device_queue(present_queue_ix, 0) };
 
         let memory_allocator = std::sync::Mutex::new(Allocator::new(&AllocatorCreateDesc {
             instance: instance.clone(),
@@ -341,11 +360,6 @@ impl Device {
                 .ok_or_else(|| "Failed to initialize shaderc compiler".to_owned())?,
         );
 
-        //let frame_res = FrameResources::new(device.inner.clone(), &physical_device)?;
-
-        // let command_pool_create_info = vk::CommandPoolCreateInfo::builder()
-        // .queue_family_index(queue_family_index)
-
         let extensions = Self::setup_extension(&instance, &ash_device);
 
         let pipeline_cache = Self::create_pipeline_cache(&ash_device)?;
@@ -356,7 +370,18 @@ impl Device {
             instance,
         };
 
-        //let device = RawDevice { inner: ash_device.clone() };
+        let aftermath = if debug {
+            match Aftermath::initialize() {
+                Ok(ok) => Some(ok),
+                Err(err) => {
+                    log::error!("TODO: Handle Aftermath initialization error!");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Ok(Arc::new(Self {
             entry,
             raw_device,
@@ -364,15 +389,16 @@ impl Device {
             device_properties: props,
 
             unified_queue_ix,
-            present_queue_ix,
-            queue_submit_mutex: Mutex::new(()),
-
+            //present_queue_ix,
+            unified_queue: Mutex::new(unified_queue),
+            //present_queue,
             pipeline_cache,
             memory_allocator,
             descriptor_set_layout_cache,
 
             shader_compiler,
             extensions,
+            aftermath,
         }))
     }
     fn pick_optimal(
@@ -508,24 +534,20 @@ impl Device {
         &self.memory_allocator
     }
 
-    pub fn graphics_queue(&self) -> vk::Queue {
-        unsafe { self.raw().get_device_queue(self.unified_queue_ix, 0) }
+    pub fn unified_queue(&self) -> MutexGuard<'_, vk::Queue> {
+        self.unified_queue.lock()
     }
-    pub fn present_queue(&self) -> vk::Queue {
-        unsafe { self.raw().get_device_queue(self.present_queue_ix, 0) }
-    }
-    pub(crate) fn queue_submit(
+    // pub fn present_queue(&self) -> vk::Queue {
+    //     self.present_queue
+    // }
+    pub(crate) fn graphics_queue_submit(
         &self,
-        queue: vk::Queue,
         submits: &[vk::SubmitInfo],
         fence: vk::Fence,
     ) -> VkResult<()> {
-        let _guard = self.queue_submit_mutex.lock();
         //log::debug!("vkQueueSubmit");
-        unsafe {
-            self.raw()
-                .queue_submit(self.graphics_queue(), submits, fence)
-        }
+        let queue = self.unified_queue();
+        unsafe { self.raw().queue_submit(*queue, submits, fence) }
     }
     pub(crate) unsafe fn submit_commands_immediate(
         &self,
@@ -533,11 +555,9 @@ impl Device {
     ) -> VkResult<()> {
         let device = self.raw();
 
-        let fence = device.create_fence(&vk::FenceCreateInfo::builder(), None)?;
-
         let create_info = vk::CommandPoolCreateInfo::builder()
             .queue_family_index(self.unified_queue_ix)
-            .flags(vk::CommandPoolCreateFlags::TRANSIENT);
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
 
         let now = std::time::Instant::now();
 
@@ -560,17 +580,20 @@ impl Device {
 
         device.end_command_buffer(cmd)?;
 
-        let cmd = &[cmd];
-        let submit_info = vk::SubmitInfo::builder().command_buffers(cmd);
+        let cmd = [cmd];
+        let submit_info = vk::SubmitInfo::builder().command_buffers(&cmd);
 
         let now = std::time::Instant::now();
 
-        self.queue_submit(self.graphics_queue(), &[*submit_info], fence)?;
+        let fence = device.create_fence(&vk::FenceCreateInfo::builder(), None)?;
+        self.graphics_queue_submit(&[*submit_info], fence)?;
 
-        device.wait_for_fences(&[fence], true, 999999999)?;
-
+        let fences = [fence];
+        device.wait_for_fences(&fences, true, 5_000_000_000)?;
+        device.reset_fences(&fences)?;
         device.destroy_fence(fence, None);
 
+        //device.reset_command_buffer(cmd[0], vk::CommandBufferResetFlags::empty())?;
         device.reset_command_pool(cmd_pool, vk::CommandPoolResetFlags::empty())?;
 
         self.raw().destroy_command_pool(cmd_pool, None);
@@ -628,11 +651,23 @@ impl Device {
             .or(linear_tiling)
             .expect("Device doesn't support any depth formats")
     }
+
+    pub fn wait_for_aftermath_dump(&self) -> Result<(), anyhow::Error> {
+        match &self.aftermath {
+            Some(aftermath) => {
+                aftermath.wait_for_dump();
+                Ok(())
+            },
+            None => {
+                Err(anyhow::anyhow!("Failed to generate aftermath dump. Aftermath not initialized! Was Gfx initialized in debug mode?"))
+            },
+        }
+    }
 }
 impl Drop for Device {
     fn drop(&mut self) {
         self.write_pipeline_cache_to_disk().unwrap();
-
+        unsafe { self.raw().device_wait_idle().unwrap() };
         log::debug!("Dropped Device");
     }
 }

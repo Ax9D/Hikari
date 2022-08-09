@@ -80,6 +80,7 @@ impl<T: Copy> CpuBuffer<T> {
         let create_info = vk::BufferCreateInfo::builder()
             .size((std::mem::size_of::<T>() * len) as u64)
             .usage(usage)
+            .queue_family_indices(&[0])
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let inner;
@@ -187,6 +188,7 @@ impl<T: Copy> GpuBuffer<T> {
         let create_info = vk::BufferCreateInfo::builder()
             .size((std::mem::size_of::<T>() * len) as u64)
             .usage(usage | vk::BufferUsageFlags::TRANSFER_DST)
+            .queue_family_indices(&[0])
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let inner;

@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use crate::imgui;
-
 use super::Editor;
+use crate::imgui;
+use hikari_editor::*;
 
 pub struct ContentBrowser {
     cwd: PathBuf,
@@ -13,12 +13,11 @@ impl ContentBrowser {
     }
 }
 
-pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
+pub fn draw(ui: &imgui::Ui, editor: &mut Editor, _state: EngineState) -> anyhow::Result<()> {
     ui.window("Content Browser")
         .size([950.0, 200.0], imgui::Condition::Once)
         .resizable(true)
         .build(|| {
-            let now = std::time::Instant::now();
             if ui.button("Back") && editor.content_browser.cwd != Path::new(".") {
                 editor.content_browser.cwd.pop();
             }
@@ -35,6 +34,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor) {
                     ui.text(entry.file_name().to_str().unwrap());
                 }
             }
-            ui.text(format!("Time taken {:?}", now.elapsed()));
         });
+
+    Ok(())
 }
