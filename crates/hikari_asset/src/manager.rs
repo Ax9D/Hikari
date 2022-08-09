@@ -115,29 +115,37 @@ impl AssetManagerInner {
         let path = source.absolute_path(&self.asset_dir);
 
         println!("Absolute load path {:#?}", path);
-        let reader: Box<dyn Read + Send + Sync + 'static> = match source {
-            Source::FileSystem(_) => Box::new(std::fs::File::open(&path)?),
-            Source::Data(_, data) => Box::new(Cursor::new(data)),
-        };
-
-        let mut load_context = LoadContext::new::<T>(path, reader, meta.settings.clone(), ass_man);
 
         let loader = loader.clone();
         let handle_clone = handle.clone();
 
-        self.thread_pool.spawn(move || {
-            let result = loader.load(&mut load_context);
-            let asset = if result.is_ok() {
-                Ok(load_context
-                    .take_asset()
-                    .expect("Asset needs to be set after loading!"))
-            } else {
-                Err(anyhow::anyhow!(
-                    "Failed to load asset {}: {}",
-                    meta.source.display(),
-                    result.err().unwrap()
-                ))
+        fn thread_load_task<T: Asset>(
+            source: Source,
+            path: PathBuf,
+            meta: &MetaData<T>,
+            loader: Arc<dyn Loader>,
+            ass_man: AssetManager,
+        ) -> anyhow::Result<T> {
+            let reader: Box<dyn Read + Send + Sync + 'static> = match source {
+                Source::FileSystem(_) => Box::new(std::fs::File::open(&path)?),
+                Source::Data(_, data) => Box::new(Cursor::new(data)),
             };
+            let mut load_context =
+                LoadContext::new::<T>(path, reader, meta.settings.clone(), ass_man);
+
+            loader.load(&mut load_context)?;
+
+            Ok(load_context
+                .take_asset()
+                .expect("Asset needs to be set after loading!"))
+        }
+
+        self.thread_pool.spawn(move || {
+            let result = thread_load_task::<T>(source, path, &meta, loader, ass_man);
+
+            let asset = result.map_err(|err| {
+                anyhow::anyhow!("Failed to load asset {}: {}", meta.source.display(), err)
+            });
             if sender
                 .send(LoadResult {
                     asset,
@@ -569,7 +577,7 @@ fn txt_save_and_load() -> Result<(), Box<dyn std::error::Error>> {
         }
         fn load(&self, ctx: &mut LoadContext) -> anyhow::Result<()> {
             let mut contents = String::new();
-            ctx.reader().read_to_string(&mut contents);
+            ctx.reader().read_to_string(&mut contents)?;
 
             ctx.set_asset(TxtFile { contents });
             Ok(())
