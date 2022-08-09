@@ -9,6 +9,9 @@ use type_uuid::TypeUuid;
 use uuid::Uuid;
 
 use crate::{Component, Entity, World};
+
+pub trait SerializeComponent: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid {}
+impl<T: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid> SerializeComponent for T {}
 struct ComponentsSerialize<'r, 'e>(&'r Registry, EntityRef<'e>);
 
 impl<'r, 'e> Serialize for ComponentsSerialize<'r, 'e> {
@@ -41,11 +44,12 @@ impl<'r, 'e> Serialize for ComponentSerialize<'r, 'e> {
     }
 }
 
+#[derive(Clone)]
 struct SerializeFns {
     serialize_fn: fn(EntityRef<'_>, &mut dyn FnMut(&dyn erased_serde::Serialize)),
     deserialize_fn: fn(Entity, &mut World, &mut dyn erased_serde::Deserializer) -> Result<(), erased_serde::Error>
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Registry {
     type_id_to_uuid: HashMap<TypeId, Uuid>,
     serialize_fns: HashMap<Uuid, SerializeFns>,
@@ -55,7 +59,7 @@ impl Registry {
     pub fn new() -> Self {
         Default::default()
     }
-    pub fn register_component<C: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid>(
+    pub fn register_component<C: SerializeComponent>(
         &mut self,
     ) {
         let serialize_fns = SerializeFns {
@@ -146,19 +150,36 @@ impl<'w, 'r> Serialize for SerializableWorld<'w, 'r> {
 impl World {
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D, registry: &Registry) -> Result<Self, D::Error> {
         let mut world = Self::new();
-        deserializer.deserialize_map(EntitiesDeserializer {
+        WorldDeserializer {
             world: &mut world,
             registry
-        })?;
+        }.deserialize(deserializer)?;
 
         Ok(world)
     }
 }
-struct EntitiesDeserializer<'w, 'r> {
+pub struct WorldDeserializer<'w, 'r> {
+    pub world: &'w mut World,
+    pub registry: &'r Registry
+}
+impl<'w, 'r, 'de> DeserializeSeed<'de> for WorldDeserializer<'w, 'r> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de> {
+        deserializer.deserialize_map(WorldVisitor {
+            world: self.world,
+            registry: self.registry
+        })?;
+        Ok(())
+    }
+}
+struct WorldVisitor<'w, 'r> {
     world: &'w mut World,
     registry: &'r Registry
 }
-impl<'w, 'r, 'de> Visitor<'de> for EntitiesDeserializer<'w, 'r> {
+impl<'w, 'r, 'de> Visitor<'de> for WorldVisitor<'w, 'r> {
     type Value = ();
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

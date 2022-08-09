@@ -7,9 +7,9 @@ use std::{
 use hikari::core::{Component, ComponentError, Entity, NoSuchEntity, World};
 use hikari_imgui::Ui;
 
-use crate::EngineState;
+use crate::Editor;
+use hikari_editor::*;
 
-use super::Editor;
 #[derive(Default)]
 pub struct EditorComponents {
     dispatchers: HashMap<TypeId, ComponentDispatch>,
@@ -31,7 +31,7 @@ pub struct ComponentDispatch {
     add_component: fn(Entity, &mut World) -> Result<(), NoSuchEntity>,
     draw_component: fn(&Ui, Entity, &mut World, &mut Editor, EngineState) -> anyhow::Result<()>,
     remove_component: fn(Entity, &mut World) -> Result<(), ComponentError>,
-    clone_component: fn(Entity, &mut World, &mut World) -> Result<(), ComponentError>,
+    clone_component: fn(Entity, &World, &mut World) -> Result<(), ComponentError>,
 }
 impl ComponentDispatch {
     pub fn new<T: EditorComponent>() -> Self {
@@ -62,7 +62,7 @@ impl ComponentDispatch {
     pub fn clone_component(
         &self,
         entity: Entity,
-        src: &mut World,
+        src: &World,
         dst: &mut World,
     ) -> Result<(), ComponentError>
     where
@@ -118,16 +118,16 @@ pub trait EditorComponent: Component {
 
         Ok(())
     }
-    fn clone_component(
-        entity: Entity,
-        src: &mut World,
-        dst: &mut World,
-    ) -> Result<(), ComponentError>
+    fn clone_component(entity: Entity, src: &World, dst: &mut World) -> Result<(), ComponentError>
     where
         Self: Sized,
     {
         let cloned_component = src.get_component::<Self>(entity)?.clone();
-        dst.create_entity_at(entity, (cloned_component,));
+        if dst.entity(entity).is_ok() {
+            dst.add_component(entity, cloned_component)?;
+        } else {
+            dst.create_entity_at(entity, (cloned_component,));
+        }
         Ok(())
     }
     fn draw_component(

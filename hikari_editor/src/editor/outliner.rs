@@ -1,18 +1,13 @@
 use hikari::core::*;
 use hikari::input::KeyCode;
 use hikari::math::*;
-use imgui::ImguiUiExt;
 
-use crate::{imgui, EngineState};
+use crate::imgui;
+use crate::widgets::RenameInput;
+use hikari_editor::*;
 
+use super::meta::{EditorInfo, EditorOnly};
 use super::Editor;
-use super::RenameState;
-
-#[derive(Clone)]
-struct EditorInfo {
-    name: String,
-    index: usize,
-}
 
 #[derive(Default)]
 pub struct Outliner {
@@ -37,6 +32,9 @@ impl Outliner {
     pub fn remove_entity(&mut self, world: &mut World, entity: Entity) -> Result<(), NoSuchEntity> {
         world.remove_entity(entity)
     }
+    pub fn reset(&mut self) {
+        self.selected = None;
+    }
 }
 pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
     let mut world = state.get_mut::<World>().unwrap();
@@ -58,76 +56,40 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                     outliner.selected = None;
                 }
             }
+            
+            let mut ordered_entities ;
+            {
+            hikari::dev::profile_scope!("Outliner Entity sorting");
+            ordered_entities = Vec::with_capacity(world.len());
+            for (entity, info) in world.query_mut::<Without<&EditorOnly, &EditorInfo>>() {
+                ordered_entities.push((entity, info.index));
+            }
 
-            let mut ordered_entities = vec![Entity::DANGLING; world.len()];
-
-            world.entities().for_each(|entity_ref| {
-                let order = entity_ref.get::<EditorInfo>().unwrap().index;
-                ordered_entities[order] = entity_ref.entity();
+            ordered_entities.sort_by(|(_, a), (_, b)| {
+                a.cmp(b)
             });
-        
-            for entity in ordered_entities {
+            
+            }
+
+            for (entity, _) in ordered_entities {
                 let mut editor_info = world.get_component_mut::<EditorInfo>(entity).unwrap();
                 let entity_id = imgui::Id::Int(entity.id() as i32, ui);
                 let _id = ui.push_id_int(entity.id() as i32);
 
-                match rename_state {
-                    RenameState::Renaming(id, current_name, starting_frame) if *id == entity_id => {
-                        let _frame = ui.push_style_var(imgui::StyleVar::FramePadding([0.0, 0.0]));
-
-                        let input_text_ended = ui
-                        .input_text("###rename", current_name)
-                        .enter_returns_true(true)
-                        .build();
-
-                        let end_rename = input_text_ended
-                            // If lost focus
-                            || !ui.is_window_focused()
-                            // If the mouse is clicked on anything but the input text
-                            || (ui.is_mouse_clicked(imgui::MouseButton::Left) && !ui.is_item_clicked());
-
-                        //If the rename was started last frame
-                        if ui.frame_count() == *starting_frame + 1 {
-                            ui.set_keyboard_focus_here();
-                        }
-
-                        //If escape was pressed cancel the rename
-                        let cancel_rename = ui.io().keys_down[KeyCode::Escape as usize];
-
-                        if cancel_rename {
-                            *rename_state = RenameState::Idle;
-                        } else if end_rename {
-                            editor_info.name = current_name.clone();
-                            *rename_state = RenameState::Idle;
-                        }
-                    }
-                    _ => {
+                RenameInput::new(entity_id, &mut editor_info.name).build(
+                    ui,
+                    rename_state,
+                    |current| {
                         let clicked = ui
-                            .selectable_config(&editor_info.name)
+                            .selectable_config(&current)
                             .selected(outliner.selected == Some(entity))
                             .build();
 
                         if clicked {
                             outliner.selected = Some(entity);
                         }
-                    }
-                };
-
-                if ui.is_item_focused()
-                    && (ui.io().keys_down[KeyCode::F2 as usize]
-                        || ui.is_double_click(imgui::MouseButton::Left))
-                {
-                    match rename_state {
-                        RenameState::Idle => {
-                            *rename_state = RenameState::Renaming(
-                                entity_id,
-                                editor_info.name.clone(),
-                                ui.frame_count(),
-                            );
-                        }
-                        _ => {}
-                    }
-                }
+                    },
+                );
             }
         });
 

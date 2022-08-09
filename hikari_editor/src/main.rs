@@ -1,11 +1,9 @@
-use std::pin::Pin;
 use std::sync::Arc;
 
 use hikari::g3d::Plugin3D;
 use hikari::pbr::PBRPlugin;
 use hikari::render::imgui_support::Renderer;
 use hikari::render::imgui_support::TextureExt;
-use hikari::systems::global::UnsafeGlobalState;
 pub use hikari_imgui as imgui;
 
 use editor::Editor;
@@ -22,13 +20,12 @@ use winit::event_loop::ControlFlow;
 
 use crate::editor::EditorConfig;
 
-mod editor;
-mod components;
 mod component_impls;
-mod world;
+mod components;
+mod editor;
+mod widgets;
 
 const EDITOR_STAGE: &str = "EDITOR_STAGE";
-type EngineState<'a> = Pin<&'a UnsafeGlobalState>;
 struct EditorPlugin {
     log_listener: editor::logging::LogListener,
 }
@@ -203,7 +200,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     game.add_plugin(Plugin3D);
     game.add_plugin(PBRPlugin {
         width: 1920,
-        height: 1080
+        height: 1080,
     });
 
     game.add_plugin(EditorPlugin { log_listener });

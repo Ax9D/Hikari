@@ -1,12 +1,17 @@
-use crate::{imgui, EngineState};
-use hikari::core::*;
+use std::any::TypeId;
 
-use super::{EditorComponents, Editor};
+use crate::{editor::meta::EditorInfo, imgui};
+use hikari::core::*;
+use hikari_editor::*;
+
+use super::{Editor, EditorComponents, meta::EditorOnly};
 
 #[derive(Default)]
-pub struct Properties {}
+pub struct Properties;
 
 pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+    let filtered_types = [TypeId::of::<EditorInfo>(), TypeId::of::<EditorOnly>()];
+    
     let result = ui
         .window("Properties")
         .size([300.0, 400.0], imgui::Condition::Once)
@@ -17,11 +22,11 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
 
             if let Some(entity) = outliner.selected {
                 let mut world = state.get_mut::<World>().unwrap();
-                let entity_ref = world.entity(entity).unwrap();
-                let type_ids = entity_ref.component_types().collect::<Vec<_>>();
-
                 ui.popup("component_selection", || {
-                    for (_, component) in components.iter() {
+                    for (_, component) in components
+                        .iter()
+                        .filter(|(type_id, _)| !filtered_types.contains(*type_id))
+                    {
                         if ui.selectable(component.name()) {
                             component.add_component(entity, &mut world).unwrap();
                         }
@@ -35,6 +40,13 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                 {
                     hikari::dev::profile_scope!("Draw Components");
                     let _id = ui.push_id_int(entity.id() as i32);
+                    let entity_ref = world.entity(entity).unwrap();
+
+                    let type_ids = entity_ref
+                        .component_types()
+                        .filter(|type_id| !filtered_types.contains(type_id))
+                        .collect::<Vec<_>>();
+
                     for ty in type_ids {
                         if let Some(dispatch) = components.get(ty) {
                             let _token = ui

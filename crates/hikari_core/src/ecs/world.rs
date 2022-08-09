@@ -5,7 +5,7 @@ pub type Entity = hecs::Entity;
 use hecs::DynamicBundle;
 pub use hecs::{
     CommandBuffer, ComponentError, EntityRef, MissingComponent, NoSuchEntity, Query, QueryBorrow,
-    QueryItem, QueryMut, QueryOne, Ref, RefMut,
+    QueryItem, QueryMut, QueryOne, Ref, RefMut, With, Without
 };
 use hikari_math::Transform;
 pub struct World {
@@ -48,6 +48,10 @@ impl World {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.world.is_empty()
+    }
+    #[inline]
+    pub fn clear(&mut self) {
+        self.world.clear()
     }
     #[inline]
     pub fn add_component(

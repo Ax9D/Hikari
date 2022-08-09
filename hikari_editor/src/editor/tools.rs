@@ -1,6 +1,6 @@
-use crate::{imgui, EngineState};
-
 use super::Editor;
+use crate::imgui;
+use hikari_editor::*;
 
 pub struct Tools {}
 impl Tools {
