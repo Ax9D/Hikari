@@ -92,12 +92,16 @@ pub fn build_pass(
                     for (_, (transform, mesh_comp)) in
                         &mut world.query::<(&Transform, &MeshRender)>()
                     {
-                        let transform = transform.get_matrix();
+                        let mut transform = transform.get_matrix();
                         match &mesh_comp.source {
                             MeshSource::Scene(handle, mesh_ix) => {
                                 if let Some(scene) = scenes.get(handle) {
                                     let mesh = &scene.meshes[*mesh_ix];
-
+                                    
+                                    transform *= mesh.transform.get_matrix();
+                                    
+                                    cmd.push_constants(&PushConstants { transform }, 0);
+                                    
                                     for submesh in &mesh.sub_meshes {
                                         {
                                             hikari_dev::profile_scope!(
@@ -107,7 +111,6 @@ pub fn build_pass(
                                             cmd.set_index_buffer(&submesh.indices);
                                         }
 
-                                        cmd.push_constants(&PushConstants { transform }, 0);
 
                                         // println!(
                                         //     "{:?} {:?} {:?} {:?}",

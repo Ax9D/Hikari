@@ -5,7 +5,7 @@ use std::{
 };
 
 use hikari_asset::{Handle, LoadContext};
-use hikari_math::{Vec2, Vec3, Vec4};
+use hikari_math::{Vec2, Vec3, Vec4, Quat};
 
 use crate::{
     material::Material,
@@ -481,6 +481,20 @@ fn load_mesh(
         .name()
         .unwrap_or(&format!("{}_mesh_{}", import_data.filename(), mesh.index()))
         .to_owned();
+    
+    let node = import_data.document().nodes().find(|node| node.mesh().map(|mesh| mesh.index()) == Some(mesh.index()));
+    
+    let transform = node.map(|node| node.transform()).unwrap_or(gltf::scene::Transform::Decomposed { 
+        translation: [0.0, 0.0, 0.0], rotation: Quat::IDENTITY.to_array(), scale: [1.0, 1.0, 1.0] 
+    });
+
+    let (position, rotation, scale) = transform.decomposed();
+    let transform = hikari_math::Transform {
+        position: Vec3::from(position),
+        rotation: Quat::from_array(rotation),
+        scale: Vec3::from(scale)
+    };
+
     //println!("Loading model {}", name);
     for primitive in mesh.primitives() {
         let reader = primitive.reader(|buffer| Some(&import_data.buffers()[buffer.index()]));
@@ -541,7 +555,7 @@ fn load_mesh(
         sub_meshes.push(submesh);
     }
 
-    Ok(crate::Mesh { sub_meshes })
+    Ok(crate::Mesh { sub_meshes, transform })
 }
 fn pack_for_gpu(
     positions: Vec<Vec3>,

@@ -220,11 +220,14 @@ pub fn build_pass(
                         for (_, (transform, mesh_comp)) in
                             &mut world.query::<(&Transform, &MeshRender)>()
                         {
-                            let transform = transform.get_matrix();
+                            let mut transform = transform.get_matrix();
                             match &mesh_comp.source {
                                 MeshSource::Scene(handle, mesh_ix) => {
                                     if let Some(scene) = scenes.get(handle) {
                                         let mesh = &scene.meshes[*mesh_ix];
+                                        
+                                        transform *= mesh.transform.get_matrix();
+
                                         for submesh in &mesh.sub_meshes {
                                             {
                                                 hikari_dev::profile_scope!(
