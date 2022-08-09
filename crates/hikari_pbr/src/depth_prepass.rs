@@ -77,8 +77,8 @@ pub fn build_pass(
                 let camera = get_camera(world);
 
                 if let Some(camera_entity) = camera {
-                    let camera = world.get_component::<Camera>(camera_entity).unwrap();
-                    let camera_transform = world.get_component::<Transform>(camera_entity).unwrap();
+                    let camera = world.get_component::<&Camera>(camera_entity).unwrap();
+                    let camera_transform = world.get_component::<&Transform>(camera_entity).unwrap();
 
                     let proj = camera.get_projection_matrix(config.viewport.0, config.viewport.1);
                     let view = camera_transform.get_matrix().inverse();

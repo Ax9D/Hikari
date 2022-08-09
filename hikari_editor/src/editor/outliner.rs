@@ -61,7 +61,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
             {
                 hikari::dev::profile_scope!("Outliner Entity sorting");
                 ordered_entities = Vec::with_capacity(world.len());
-                for (entity, info) in world.query_mut::<Without<&EditorOnly, &EditorInfo>>() {
+                for (entity, info) in world.query_mut::<Without<&EditorInfo, &EditorOnly>>() {
                     ordered_entities.push((entity, info.index));
                 }
 
@@ -69,7 +69,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
             }
 
             for (entity, _) in ordered_entities {
-                let mut editor_info = world.get_component_mut::<EditorInfo>(entity).unwrap();
+                let mut editor_info = world.get_component::<&mut EditorInfo>(entity).unwrap();
                 let entity_id = imgui::Id::Int(entity.id() as i32, ui);
                 let _id = ui.push_id_int(entity.id() as i32);
 

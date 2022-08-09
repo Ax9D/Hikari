@@ -122,7 +122,7 @@ pub trait EditorComponent: Component {
     where
         Self: Sized,
     {
-        let cloned_component = src.get_component::<Self>(entity)?.clone();
+        let cloned_component = src.get_component::<&Self>(entity)?.clone();
         if dst.entity(entity).is_ok() {
             dst.add_component(entity, cloned_component)?;
         } else {
@@ -140,7 +140,7 @@ pub trait EditorComponent: Component {
     where
         Self: Sized,
     {
-        let mut component = world.get_component_mut::<Self>(entity).unwrap();
+        let mut component = world.get_component::<&mut Self>(entity).unwrap();
         component.draw(ui, entity, editor, state)
     }
 }

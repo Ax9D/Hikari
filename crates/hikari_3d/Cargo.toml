@@ -13,7 +13,7 @@ serde = "1"
 base64 = "0.13"
 image = "0.24"
 itertools = "0.10"
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 rayon = "1"
 parking_lot = { version = "0.12", features = ["deadlock_detection"] }
 type-uuid = {version = "0.1"}

@@ -130,7 +130,7 @@ impl Saver for SceneLoader {
 
         let mut ser = serde_yaml::Serializer::new(Vec::new());
         scene.serialize(&mut ser, &self.registry)?;
-        println!("{}", String::from_utf8(ser.into_inner()).unwrap());
+        println!("{}", String::from_utf8(ser.into_inner().unwrap()).unwrap());
 
         Ok(())
     }

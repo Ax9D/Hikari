@@ -159,8 +159,8 @@ pub fn build_pass(
             move |cmd, (world, config, assets)| {
                 let camera = get_camera(world);
                 if let Some(camera_entity) = camera {
-                    let camera = world.get_component::<Camera>(camera_entity).unwrap();
-                    let camera_transform = world.get_component::<Transform>(camera_entity).unwrap();
+                    let camera = world.get_component::<&Camera>(camera_entity).unwrap();
+                    let camera_transform = world.get_component::<&Transform>(camera_entity).unwrap();
 
                     let proj = camera.get_projection_matrix(config.viewport.0, config.viewport.1);
                     let view = camera_transform.get_matrix().inverse();
@@ -169,14 +169,14 @@ pub fn build_pass(
 
                     let dir_light_entity = get_directional_light(world);
                     let dir_light_transform = dir_light_entity
-                        .map(|entity| *world.get_component::<Transform>(entity).unwrap())
+                        .map(|entity| *world.get_component::<&Transform>(entity).unwrap())
                         .unwrap_or_default();
 
                     let direction = dir_light_transform.rotation * -Vec3::Y;
 
                     let dir_light = dir_light_entity
                         .map(|entity| {
-                            let light = world.get_component::<Light>(entity).unwrap();
+                            let light = world.get_component::<&Light>(entity).unwrap();
                             DirLight {
                                 color: light.color.into(),
                                 direction: direction.into(),

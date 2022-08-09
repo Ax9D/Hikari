@@ -10,7 +10,7 @@ clap = { version = "3", features = ["derive"] }
 which = "4.2.5"
 fs_extra = "1"
 anyhow = "1"
-simple_logger = "1"
+simple_logger = "2"
 log = "0.4"
 
 hikari_editor = {path = "../hikari_editor"}

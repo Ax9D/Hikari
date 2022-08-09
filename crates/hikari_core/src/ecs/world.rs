@@ -2,9 +2,9 @@ use crate::Component;
 
 pub type Entity = hecs::Entity;
 
-use hecs::DynamicBundle;
+use hecs::{DynamicBundle};
 pub use hecs::{
-    CommandBuffer, ComponentError, EntityRef, MissingComponent, NoSuchEntity, Query, QueryBorrow,
+    CommandBuffer, ComponentError, ComponentRef, EntityRef, MissingComponent, NoSuchEntity, Query, QueryBorrow,
     QueryItem, QueryMut, QueryOne, Ref, RefMut, With, Without,
 };
 use hikari_math::Transform;
@@ -66,19 +66,19 @@ impl World {
         self.world.remove_one::<C>(entity)
     }
     #[inline]
-    pub fn get_component<C: Component>(
-        &self,
+    pub fn get_component<'a, C: ComponentRef<'a>>(
+        &'a self,
         entity: Entity,
-    ) -> Result<Ref<'_, C>, ComponentError> {
-        self.world.get(entity)
+    ) -> Result<C::Ref, ComponentError> {
+        self.world.get::<C>(entity)
     }
-    #[inline]
-    pub fn get_component_mut<C: Component>(
-        &self,
-        entity: Entity,
-    ) -> Result<RefMut<'_, C>, ComponentError> {
-        self.world.get_mut(entity)
-    }
+    // #[inline]
+    // pub fn get_component_mut<C: ComponentRef>(
+    //     &self,
+    //     entity: Entity,
+    // ) -> Result<C::Ref, ComponentError> {
+    //     self.world.get(entity)
+    // }
     #[inline]
     pub fn run_query<Q: Query>(&self, mut f: impl FnMut(Entity, QueryItem<Q>)) {
         for (entity, item) in self.query::<Q>().iter() {

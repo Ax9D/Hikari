@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 winit = "0.25"
 log = "0.4"
-hecs = "0.7"
+hecs = "0.9"
 rayon = "1"
 
 serde = {version = "1", features = ["derive"], optional = true}
@@ -26,4 +26,4 @@ default = []
 serde = ["hecs/row-serialize", "dep:serde", "erased-serde", "uuid", "type-uuid"]
 
 [dev-dependencies]
-serde_yaml = "0.8"
+serde_yaml = "0.9"

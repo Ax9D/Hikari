@@ -67,7 +67,7 @@ impl Registry {
     pub fn register_component<C: SerializeComponent>(&mut self) {
         let serialize_fns = SerializeFns {
             serialize_fn: |entity_ref, serialize_fn| {
-                let component = entity_ref.get::<C>().unwrap();
+                let component = entity_ref.get::<&C>().unwrap();
                 (serialize_fn)(&*component)
             },
             deserialize_fn: |entity, world, deserializer| -> Result<(), erased_serde::Error> {
@@ -308,7 +308,7 @@ fn serialize_component() {
             .serialize_component(component, world.entity(entity).unwrap(), &mut yaml_ser)
             .expect("Failed to serialize");
 
-        let string_buffer = yaml_ser.into_inner();
+        let string_buffer = yaml_ser.into_inner().unwrap();
 
         String::from_utf8(string_buffer.into_inner().unwrap()).unwrap()
     }
@@ -357,13 +357,13 @@ fn round_trip() {
     let world_out = World::deserialize(deserializer, &registry).unwrap();
 
     assert!(world_out.contains(entity));
-    let position = world_out.get_component::<Position>(entity);
+    let position = world_out.get_component::<&Position>(entity);
     assert!(position.is_ok());
     let position = position.unwrap();
 
     assert_eq!(&Position { x: 0.5, y: 0.0 }, &*position);
 
-    let id = world_out.get_component::<Id>(entity);
+    let id = world_out.get_component::<&Id>(entity);
     assert!(id.is_ok());
     let id = id.unwrap();
 
