@@ -90,7 +90,7 @@ pub(crate) fn update_vector(
     let state = context.scale_state(subgizmo.id);
 
     let current_state = *state;
-    println!("{:#?}", state);
+    //println!("{:#?}", state);
 
     let mut delta = distance_from_origin_2d(subgizmo)?;
     delta /= current_state.start_delta;
@@ -199,6 +199,6 @@ pub(crate) fn scale_plane_global_origin(subgizmo: &SubGizmo) -> Vec3 {
 fn distance_from_origin_2d(subgizmo: &SubGizmo) -> Option<f32> {
     let viewport = subgizmo.state.viewport;
     let gizmo_pos = world_to_screen(subgizmo.state.mvp, viewport, Vec3::new(0.0, 0.0, 0.0))?;
-    println!("Delta {}", subgizmo.state.cursor_pos.distance(gizmo_pos));
+    //println!("Delta {}", subgizmo.state.cursor_pos.distance(gizmo_pos));
     Some(subgizmo.state.cursor_pos.distance(gizmo_pos))
 }

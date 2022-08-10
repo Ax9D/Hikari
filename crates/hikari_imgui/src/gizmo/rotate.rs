@@ -55,7 +55,7 @@ pub(crate) fn pick(subgizmo: &SubGizmo, context: &mut GizmoContext, ray: &Ray) -
         current_delta: 0.0,
     };
 
-    println!("arc_angle {}", arc_angle(subgizmo).to_degrees());
+    //println!("arc_angle {}", arc_angle(subgizmo).to_degrees());
     if dist_from_gizmo_edge <= state.focus_distance && angle.abs() < arc_angle(subgizmo) {
         Some(t)
     } else {
@@ -158,13 +158,13 @@ pub(crate) fn draw(subgizmo: &SubGizmo, context: &mut GizmoContext, ui: &imgui::
         drop(painter);
         let delta_angles = subgizmo.local_normal() * state.current_delta;
         let delta_string = format!(
-            "dx: {}° dy: {}° dz: {}°",
+            "dx: {:.1}° dy: {:.1}° dz: {:.1}°",
             delta_angles.x.to_degrees(),
             delta_angles.y.to_degrees(),
             delta_angles.z.to_degrees()
         );
         ui.get_window_draw_list().add_text(
-            subgizmo.state.viewport.max - Vec2::new(150.0, 75.0),
+            subgizmo.state.viewport.max - Vec2::new(250.0, 75.0),
             ImColor32::WHITE,
             &delta_string,
         );

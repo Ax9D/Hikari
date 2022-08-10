@@ -164,7 +164,7 @@ impl Viewport {
         self.max.y - self.min.y
     }
     pub fn center(&self) -> Vec2 {
-        (self.max - self.min) / 2.0
+        (self.max + self.min) / 2.0
     }
 }
 
@@ -304,10 +304,10 @@ impl<'a, 'ui> Gizmo<'a, 'ui> {
     //     self
     // }
 
-    pub fn viewport(mut self, x: f32, y: f32, width: f32, height: f32) -> Self {
+    pub fn viewport(mut self, min: Vec2, max: Vec2) -> Self {
         self.state.viewport = Viewport {
-            min: Vec2::new(x, y),
-            max: Vec2::new(width, height),
+            min,
+            max,
         };
         self
     }
