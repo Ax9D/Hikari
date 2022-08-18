@@ -2,18 +2,23 @@ mod ecs;
 mod game;
 mod plugin;
 mod window;
+mod time;
 
-use std::sync::Arc;
+use std::{sync::Arc};
 
 pub use ecs::*;
 pub use game::*;
+pub use time::*;
+
 use hikari_asset::{AssetManager, AssetStorage};
+use hikari_systems::Task;
 pub use plugin::*;
 use rayon::ThreadPoolBuilder;
 
 pub const FIRST: &'static str = "First";
 pub const UPDATE: &'static str = "Update";
 pub const RENDER: &'static str = "Render";
+pub const POST_RENDER: &'static str = "PostRender";
 pub const LAST: &'static str = "Last";
 pub struct CorePlugin;
 
@@ -22,7 +27,15 @@ impl crate::Plugin for CorePlugin {
         game.create_stage(FIRST);
         game.create_stage(UPDATE);
         game.create_stage(RENDER);
+        game.create_stage(POST_RENDER);
         game.create_stage(LAST);
+
+
+        game.add_state(Time::new());
+
+        game.add_task(FIRST, Task::new("Update Delta Time", |time: &mut Time| {
+            time.update();
+        }));
 
         game.add_state(World::new());
 
