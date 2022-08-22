@@ -323,7 +323,7 @@ impl GraphExecutor {
                 )
             };
 
-            let (width, height) = pass.render_area.get_physical_size(size);
+            let (width, height) = pass.render_area.get_physical_size_2d(size);
             let area = vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: vk::Extent2D { width, height },
@@ -341,10 +341,10 @@ impl GraphExecutor {
             //log::debug!("Binding renderpass resources");
             for input in pass.inputs() {
                 match input {
-                    crate::graph::pass::Input::SampleImage(handle, _, binding) => {
+                    crate::graph::pass::Input::SampleImage(handle, _, binding, index) => {
                         let image = resources.get_image(handle).unwrap();
 
-                        rcmd.set_image(image, 0, *binding);
+                        rcmd.set_image_array(image, 0, *binding, *index);
                     }
                     _ => {}
                 }

@@ -348,7 +348,7 @@ impl AllocationData {
             for input in pass.inputs() {
                 match input {
                     crate::graph::pass::Input::ReadImage(handle, access)
-                    | crate::graph::pass::Input::SampleImage(handle, access, _) => current_accesses
+                    | crate::graph::pass::Input::SampleImage(handle, access, _, _) => current_accesses
                         .entry(handle.clone())
                         .or_default()
                         .push(*access),

@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     gb.add_renderpass(
         rg::Renderpass::<(f32, f32)>::new(
             "Push",
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
             move |cmd: &mut rg::RenderpassCommands, (_, _)| {
                 cmd.set_shader(&pbr);
                 cmd.set_vertex_input_layout(layout);

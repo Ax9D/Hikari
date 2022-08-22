@@ -74,7 +74,7 @@ struct Camera {
     inner: hikari_3d::Camera,
 }
 impl Camera {
-    pub fn get_projection_matrix(&self, width: u32, height: u32) -> hikari_math::Mat4 {
+    pub fn get_projection_matrix(&self, width: f32, height: f32) -> hikari_math::Mat4 {
         self.inner.get_projection_matrix(width, height)
     }
     pub fn get_view_matrix(&self) -> hikari_math::Mat4 {
@@ -255,7 +255,7 @@ fn depth_prepass(
         .create_image(
             "PrepassDepth",
             rg::ImageConfig::depth_only(device),
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
         )
         .expect("Failed to create depth image");
 
@@ -289,7 +289,7 @@ fn depth_prepass(
     gb.add_renderpass(
         rg::Renderpass::<Args>::new(
             "DepthPrepass",
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
             move |cmd, (scene, settings, _)| {
                 cmd.set_shader(&shader);
                 cmd.set_vertex_input_layout(layout);
@@ -303,7 +303,7 @@ fn depth_prepass(
 
                 let proj = scene
                     .camera
-                    .get_projection_matrix(settings.width, settings.height);
+                    .get_projection_matrix(settings.width as f32, settings.height as f32);
                 let view = scene.camera.get_view_matrix();
                 let view_proj = (proj * view).to_cols_array();
 
@@ -465,7 +465,7 @@ fn pbr_pass(
         .create_image(
             "PBRColor",
             rg::ImageConfig::color2d(),
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
         )
         .expect("Failed to create PBR attachments");
     // let depth_output = gb
@@ -478,11 +478,11 @@ fn pbr_pass(
     gb.add_renderpass(
         rg::Renderpass::<Args>::new(
             "PBR",
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
             move |cmd, (scene, settings, _)| {
                 let proj = scene
                     .camera
-                    .get_projection_matrix(settings.width, settings.height);
+                    .get_projection_matrix(settings.width as f32, settings.height as f32);
                 let view = scene.camera.get_view_matrix();
 
                 let view_proj = (proj * view).to_cols_array();
@@ -638,13 +638,13 @@ fn fxaa_pass(
         .create_image(
             "fxaa_output",
             rg::ImageConfig::color2d(),
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
         )
         .expect("Failed to create fxaa output");
     gb.add_renderpass(
         rg::Renderpass::<Args>::new(
             "FXAA",
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
             move |cmd, (_, settings, _)| {
                 cmd.set_shader(&shader);
 
@@ -687,13 +687,13 @@ fn imgui_pass(
         .create_image(
             "imgui_output",
             rg::ImageConfig::color2d(),
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
         )
         .expect("Failed to create imgui image");
     gb.add_renderpass(
         rg::Renderpass::<Args>::new(
             "ImguiRenderer",
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
             move |cmd, (_, _, draw_data)| {
                 renderer
                     .render(cmd.raw(), draw_data)
@@ -838,7 +838,7 @@ fn imgui_update(
                         scene.objects[1].transform.clone(),
                         scene
                             .camera
-                            .get_projection_matrix(settings.width, settings.height),
+                            .get_projection_matrix(settings.width as f32, settings.height as f32),
                         scene.camera.get_view_matrix(),
                     );
 
@@ -931,7 +931,7 @@ fn composite_pass(
     .expect("Failed to create composite shader");
 
     gb.add_renderpass(
-        rg::Renderpass::<Args>::new("CompositePass", rg::ImageSize::default(), move |cmd, _| {
+        rg::Renderpass::<Args>::new("CompositePass", rg::ImageSize::default_xy(), move |cmd, _| {
             cmd.set_shader(&shader);
             // cmd.set_blend_state(rg::BlendState {
             //     enabled: true,
@@ -1034,13 +1034,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 far: 10000.0,
                 exposure: 1.0,
                 projection: hikari_3d::Projection::Perspective(45.0),
+                is_primary: true
             },
         },
         dir_light: Light {
             light: hikari_3d::Light {
                 color: hikari_math::Vec4::ONE,
                 intensity: 1.0,
-                cast_shadows: true,
+                size: 1.0,
+                shadow: None,
                 kind: hikari_3d::LightKind::Directional,
             },
             transform: Transform::default(),

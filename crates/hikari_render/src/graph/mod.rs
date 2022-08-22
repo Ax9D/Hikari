@@ -72,10 +72,9 @@ impl<'a, T: Args> GraphBuilder<'a, T> {
         config: ImageConfig,
         size: ImageSize,
     ) -> Result<GpuHandle<SampledImage>, GraphCreationError> {
-        let (width, height) = size.get_physical_size(self.size);
-        let image = SampledImage::with_dimensions(self.gfx.device(), width, height, config)
+        let (width, height, depth) = size.get_physical_size_3d(self.size);
+        let image = SampledImage::with_dimensions(self.gfx.device(), width, height, depth, config)
             .map_err(|err| GraphCreationError::AllocationFailed(err.to_string()))?;
-
         Ok(self.resources.add_image(name.to_string(), image, size))
     }
     pub fn resources(&self) -> &GraphResources {

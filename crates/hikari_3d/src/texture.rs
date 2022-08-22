@@ -100,6 +100,8 @@ pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageC
         WrapMode::Clamp => vk::SamplerAddressMode::CLAMP_TO_EDGE,
         WrapMode::Repeat => vk::SamplerAddressMode::REPEAT,
     };
+    let wrap_z = vk::SamplerAddressMode::REPEAT;
+
     let mip_filtering = match config.filtering {
         FilterMode::Closest => vk::SamplerMipmapMode::NEAREST,
         FilterMode::Linear => vk::SamplerMipmapMode::LINEAR,
@@ -110,6 +112,7 @@ pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageC
         filtering,
         wrap_x,
         wrap_y,
+        wrap_z,
         aniso_level: config.aniso_level,
         mip_levels: if config.generate_mips {
             TextureConfig::get_mip_count(width, height)
@@ -119,6 +122,7 @@ pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageC
         mip_filtering,
         usage: vk::ImageUsageFlags::SAMPLED,
         image_type: vk::ImageType::TYPE_2D,
+        image_view_type: vk::ImageViewType::TYPE_2D,
         host_readable: false,
     }
 }
@@ -140,6 +144,7 @@ impl Texture2D {
                 data,
                 width,
                 height,
+                1,
                 into_vk_config(&config, width, height),
             )?,
             config,

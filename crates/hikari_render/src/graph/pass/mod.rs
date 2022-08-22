@@ -20,29 +20,52 @@ pub mod graphics;
 /// If however an image is created with `ImageSize::Absolute(800, 600)`, it will always be of a size (800, 600) no matter the
 /// output size of the graph
 #[derive(Debug, Clone, Copy)]
-pub enum ImageSize {
-    Relative(f32, f32), //Ratio
-    Absolute(u32, u32), //Pixel size
+pub struct ImageSize {
+    pub x: SizeMode,
+    pub y: SizeMode,
+    pub z: SizeMode
 }
 
-impl Default for ImageSize {
-    fn default() -> Self {
-        ImageSize::Relative(1.0, 1.0)
+impl ImageSize {
+    pub fn default_xy() -> Self {
+        Self::relative_xy(1.0, 1.0)
+    }
+    pub fn absolute_xy(x: u32, y: u32) -> Self {
+        Self::absolute_xyz(x, y, 1)
+    } 
+    pub fn absolute_xyz(x: u32, y: u32, z: u32) -> Self {
+        ImageSize { x: SizeMode::Absolute(x), y: SizeMode::Absolute(y), z: SizeMode::Absolute(z)}
+    }
+    pub fn relative_xy(x: f32, y: f32) -> Self {
+        ImageSize { x: SizeMode::RelativeX(x), y: SizeMode::RelativeY(y), z: SizeMode::Absolute(1) }
     }
 }
 
 impl ImageSize {
-    pub fn get_physical_size(&self, graph_size: (u32, u32)) -> (u32, u32) {
-        match *self {
-            ImageSize::Relative(fw, fh) => (
-                (fw * graph_size.0 as f32) as u32,
-                (fh * graph_size.1 as f32) as u32,
-            ),
-            ImageSize::Absolute(width, height) => (width, height),
+    pub fn get_physical_size_2d(&self, graph_size: (u32, u32)) -> (u32, u32) {
+        let (x, y, _) = self.get_physical_size_3d(graph_size);
+        (x, y)
+    }
+    pub fn get_physical_size_3d(&self, graph_size: (u32, u32)) -> (u32, u32, u32) {
+        (self.x.get_physical_size(graph_size), self.y.get_physical_size(graph_size), self.z.get_physical_size(graph_size))
+    }
+}
+#[derive(Debug, Clone, Copy)]
+pub enum SizeMode {
+    RelativeX(f32),
+    RelativeY(f32),
+    Absolute(u32),
+}
+
+impl SizeMode {
+    fn get_physical_size(&self, graph_size: (u32, u32)) -> u32 {
+        match self {
+            SizeMode::RelativeX(ratio)  => (ratio * graph_size.0 as f32) as u32,
+            SizeMode::RelativeY(ratio) =>(ratio * graph_size.1 as f32) as u32,
+            SizeMode::Absolute(value) => *value,
         }
     }
 }
-
 /// Defines how the attachment will be used
 /// `AttachmentKind::Color(2)` means it is a color attachment which will be addressed at output location 2 in the fragment shader
 /// `AttachmentKind::DepthStencil` means it is a depth stencil attachment
@@ -101,13 +124,13 @@ impl AttachmentConfig {
 #[derive(Debug, Clone)]
 pub enum Input {
     ReadImage(GpuHandle<SampledImage>, AccessType),
-    SampleImage(GpuHandle<SampledImage>, AccessType, u32),
+    SampleImage(GpuHandle<SampledImage>, AccessType, u32, usize),
 }
 
 impl Input {
     pub fn erased_handle(&self) -> ErasedHandle {
         match self {
-            Input::ReadImage(handle, _) | Input::SampleImage(handle, _, _) => handle.clone().into(),
+            Input::ReadImage(handle, _) | Input::SampleImage(handle, _, _, _) => handle.clone().into(),
         }
     }
 }

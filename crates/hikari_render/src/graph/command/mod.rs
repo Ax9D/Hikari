@@ -244,6 +244,16 @@ impl<'a> CommandBuffer<'a> {
             0,
         );
     }
+    #[inline]
+    pub(crate) fn set_image_array(&mut self, image: &SampledImage, set: u32, binding: u32, index: usize) {
+        self.saved_state.descriptor_state.set_image(
+            image.image_view(1).unwrap(),
+            image.sampler(),
+            set,
+            binding,
+            index
+        );
+    }
     pub(crate) fn set_uniform_buffer<B: Buffer>(
         &mut self,
         buffer: &B,

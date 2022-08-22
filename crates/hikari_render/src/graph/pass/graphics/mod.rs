@@ -42,7 +42,7 @@ impl<T: Args> Renderpass<T> {
         Self {
             name: name.to_string(),
             id: crate::util::quick_hash(name),
-            render_area: ImageSize::default(),
+            render_area: ImageSize::default_xy(),
             inputs: Vec::new(),
             outputs: Vec::new(),
             present_to_swapchain: false,
@@ -63,7 +63,7 @@ impl<T: Args> Renderpass<T> {
     }
     fn read_image_check(&mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) {
         if self.inputs.iter().any(|input| match input {
-            Input::SampleImage(existing_image, _, _) | Input::ReadImage(existing_image, _) => {
+            Input::SampleImage(existing_image, _, _, _) | Input::ReadImage(existing_image, _) => {
                 existing_image == image
             }
         }) {
@@ -102,7 +102,21 @@ impl<T: Args> Renderpass<T> {
         self.read_image_check(image, access_type);
 
         self.inputs
-            .push(Input::SampleImage(image.clone(), access_type, binding));
+            .push(Input::SampleImage(image.clone(), access_type, binding, 0));
+        self
+    }
+
+    pub fn sample_image_array(
+        mut self,
+        image: &GpuHandle<SampledImage>,
+        access_type: AccessType,
+        binding: u32,
+        index: usize
+    ) -> Self {
+        self.read_image_check(image, access_type);
+
+        self.inputs
+            .push(Input::SampleImage(image.clone(), access_type, binding, index));
         self
     }
     // pub fn read_image(mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) -> Self {

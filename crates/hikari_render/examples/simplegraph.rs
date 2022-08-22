@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = true;
 
     let _blue_target =
-        gb.create_image("blue", rg::ImageConfig::color2d(), rg::ImageSize::default())?;
+        gb.create_image("blue", rg::ImageConfig::color2d(), rg::ImageSize::default_xy())?;
 
     // gb.add_renderpass(
     //     rg::Renderpass::new("Blue", rg::ImageSize::default(), move |cmd, _, _, _| {
@@ -92,7 +92,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     gb.add_renderpass(
         rg::Renderpass::<(f32, i32)>::new(
             "Triangle",
-            rg::ImageSize::default(),
+            rg::ImageSize::default_xy(),
             move |cmd, (x, y)| {
                 cmd.set_shader(&shader);
 

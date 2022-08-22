@@ -16,6 +16,7 @@ fn format_size(format: vk::Format) -> u32 {
         vk::Format::R32G32B32A32_SINT
         | vk::Format::R32G32B32A32_SFLOAT
         | vk::Format::R32G32B32A32_UINT => 4 * 4,
+        vk::Format::R32G32_SFLOAT => 2 * 4,
         vk::Format::D16_UNORM => 2,
         vk::Format::D16_UNORM_S8_UINT => 3,
         vk::Format::D24_UNORM_S8_UINT => 4,
@@ -35,6 +36,7 @@ pub struct SampledImage {
     config: ImageConfig,
     width: u32,
     height: u32,
+    depth: u32,
 
     download_buffer: Option<crate::buffer::CpuBuffer<u8>>,
 }
@@ -46,11 +48,13 @@ pub struct ImageConfig {
     pub filtering: vk::Filter,
     pub wrap_x: vk::SamplerAddressMode,
     pub wrap_y: vk::SamplerAddressMode,
+    pub wrap_z: vk::SamplerAddressMode,
     pub aniso_level: f32,
     pub mip_levels: u32,
     pub mip_filtering: vk::SamplerMipmapMode,
     pub usage: vk::ImageUsageFlags,
     pub image_type: vk::ImageType,
+    pub image_view_type: vk::ImageViewType,
     pub host_readable: bool,
 }
 
@@ -64,11 +68,29 @@ impl ImageConfig {
             filtering: vk::Filter::LINEAR,
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
+            wrap_z: vk::SamplerAddressMode::REPEAT,
             aniso_level: 0.0,
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::LINEAR,
             usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             image_type: vk::ImageType::TYPE_2D,
+            image_view_type: vk::ImageViewType::TYPE_2D,
+            host_readable: false,
+        }
+    }
+    pub fn color3d() -> Self {
+        Self {
+            format: vk::Format::R8G8B8A8_UNORM,
+            filtering: vk::Filter::LINEAR,
+            wrap_x: vk::SamplerAddressMode::REPEAT,
+            wrap_y: vk::SamplerAddressMode::REPEAT,
+            wrap_z: vk::SamplerAddressMode::REPEAT,
+            aniso_level: 0.0,
+            mip_levels: 1,
+            mip_filtering: vk::SamplerMipmapMode::LINEAR,
+            usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            image_type: vk::ImageType::TYPE_3D,
+            image_view_type: vk::ImageViewType::TYPE_3D,
             host_readable: false,
         }
     }
@@ -78,14 +100,16 @@ impl ImageConfig {
     pub fn depth_stencil(device: &Arc<crate::Device>) -> Self {
         Self {
             format: device.supported_depth_stencil_format(),
-            filtering: vk::Filter::LINEAR,
+            filtering: vk::Filter::NEAREST,
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
+            wrap_z: vk::SamplerAddressMode::REPEAT,
             aniso_level: 0.0,
             mip_levels: 1,
-            mip_filtering: vk::SamplerMipmapMode::LINEAR,
+            mip_filtering: vk::SamplerMipmapMode::NEAREST,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             image_type: vk::ImageType::TYPE_2D,
+            image_view_type: vk::ImageViewType::TYPE_2D,
             host_readable: false,
         }
     }
@@ -95,14 +119,16 @@ impl ImageConfig {
     pub fn depth_only(device: &Arc<crate::Device>) -> Self {
         Self {
             format: device.supported_depth_only_format(),
-            filtering: vk::Filter::LINEAR,
+            filtering: vk::Filter::NEAREST,
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
+            wrap_z: vk::SamplerAddressMode::REPEAT,
             aniso_level: 0.0,
             mip_levels: 1,
-            mip_filtering: vk::SamplerMipmapMode::LINEAR,
+            mip_filtering: vk::SamplerMipmapMode::NEAREST,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             image_type: vk::ImageType::TYPE_2D,
+            image_view_type: vk::ImageViewType::TYPE_2D,
             host_readable: false,
         }
     }
@@ -133,11 +159,12 @@ impl SampledImage {
             .compare_op(vk::CompareOp::NEVER)
             .min_lod(0.0)
             .max_lod(0.0) // initial value
-            .border_color(vk::BorderColor::INT_OPAQUE_WHITE)
+            .border_color(vk::BorderColor::FLOAT_OPAQUE_WHITE)
             .anisotropy_enable(false) // initial value
             .address_mode_u(vkconfig.wrap_x)
             .address_mode_v(vkconfig.wrap_y)
-            .max_anisotropy(16.0);
+            .address_mode_w(vkconfig.wrap_z)
+            .max_anisotropy(0.0);
 
         if vkconfig.mip_levels > 1 {
             create_info.max_lod = vkconfig.mip_levels as f32;
@@ -163,7 +190,7 @@ impl SampledImage {
             let create_info = vk::ImageViewCreateInfo::builder()
                 .image(image)
                 .format(vkconfig.format)
-                .view_type(vk::ImageViewType::TYPE_2D)
+                .view_type(vkconfig.image_view_type)
                 .subresource_range(
                     *vk::ImageSubresourceRange::builder()
                         .aspect_mask(format_to_aspect_flags(vkconfig.format))
@@ -187,6 +214,7 @@ impl SampledImage {
         device: &Arc<crate::Device>,
         width: u32,
         height: u32,
+        depth: u32,
         vkconfig: &ImageConfig,
     ) -> Result<
         (
@@ -210,7 +238,7 @@ impl SampledImage {
             .extent(vk::Extent3D {
                 width,
                 height,
-                depth: 1,
+                depth,
             })
             .usage(
                 vk::ImageUsageFlags::TRANSFER_DST
@@ -234,15 +262,16 @@ impl SampledImage {
         device: &Arc<crate::Device>,
         width: u32,
         height: u32,
+        depth: u32,
         vkconfig: ImageConfig,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let (image, allocation, sampler, image_views) =
-            Self::create_image_with_sampler_and_views(device, width, height, &vkconfig)?;
+            Self::create_image_with_sampler_and_views(device, width, height, depth, &vkconfig)?;
 
         let download_buffer = if vkconfig.host_readable {
             Some(crate::buffer::CpuBuffer::new(
                 device,
-                (width * height * format_size(vkconfig.format)) as usize,
+                (width * height * depth * format_size(vkconfig.format)) as usize,
                 vk::BufferUsageFlags::TRANSFER_DST,
                 gpu_allocator::MemoryLocation::GpuToCpu,
             )?)
@@ -259,6 +288,7 @@ impl SampledImage {
             config: vkconfig,
             width,
             height,
+            depth,
             download_buffer,
         })
     }
@@ -269,6 +299,7 @@ impl SampledImage {
         data: &[u8],
         width: u32,
         height: u32,
+        depth: u32,
         mut vkconfig: ImageConfig,
     ) -> Result<Self, anyhow::Error> {
         vkconfig.usage |= vk::ImageUsageFlags::TRANSFER_DST;
@@ -278,7 +309,7 @@ impl SampledImage {
         }
 
         let image_buffer_max_size =
-            (width * height) as usize * format_size(vkconfig.format) as usize;
+            (width * height * depth) as usize * format_size(vkconfig.format) as usize;
 
         //FIX ME: This is probably wrong?, Dont assume format sizes
         if data.len() != image_buffer_max_size {
@@ -290,7 +321,7 @@ impl SampledImage {
             ));
         }
         let (image, allocation, sampler, image_views) =
-            Self::create_image_with_sampler_and_views(device, width, height, &vkconfig)?;
+            Self::create_image_with_sampler_and_views(device, width, height, depth, &vkconfig)?;
 
         let subresource_range = *vk::ImageSubresourceRange::builder()
             .aspect_mask(format_to_aspect_flags(vkconfig.format))
@@ -338,7 +369,7 @@ impl SampledImage {
                     .image_extent(vk::Extent3D {
                         width,
                         height,
-                        depth: 1,
+                        depth,
                     })];
 
                 device.cmd_copy_buffer_to_image(
@@ -354,7 +385,7 @@ impl SampledImage {
             device.submit_commands_immediate(|cmd| {
                 if vkconfig.mip_levels > 1 {
                     hikari_dev::profile_scope!("Generate mips");
-                    Self::generate_mips(device.raw(), cmd, image, width, height, &vkconfig);
+                    Self::generate_mips(device.raw(), cmd, image, width, height, depth, &vkconfig);
                 } else {
                     crate::barrier::image_memory_barrier(
                         device.raw(),
@@ -392,6 +423,7 @@ impl SampledImage {
             allocation,
             width,
             height,
+            depth,
             config: vkconfig,
             download_buffer,
         })
@@ -402,6 +434,7 @@ impl SampledImage {
         image: vk::Image,
         width: u32,
         height: u32,
+        depth: u32,
         config: &ImageConfig,
     ) {
         let levels = config.mip_levels;
@@ -427,6 +460,7 @@ impl SampledImage {
         unsafe {
             let mut mip_width = width as i32;
             let mut mip_height = height as i32;
+            let mut mip_depth = depth as i32;
 
             for level in 1..levels {
                 let next_mip_width = if mip_width > 1 {
@@ -438,6 +472,11 @@ impl SampledImage {
                     mip_height / 2
                 } else {
                     mip_height
+                };
+                let next_mip_depth = if mip_depth > 1 {
+                    mip_depth / 2
+                } else {
+                    mip_depth
                 };
 
                 let image_blit = [*vk::ImageBlit::builder()
@@ -453,7 +492,7 @@ impl SampledImage {
                         vk::Offset3D {
                             x: mip_width,
                             y: mip_height,
-                            z: 1,
+                            z: mip_depth,
                         },
                     ])
                     .dst_subresource(
@@ -468,7 +507,7 @@ impl SampledImage {
                         vk::Offset3D {
                             x: next_mip_width,
                             y: next_mip_height,
-                            z: 1,
+                            z: next_mip_depth,
                         },
                     ])];
 
@@ -516,6 +555,7 @@ impl SampledImage {
 
                 mip_width = next_mip_width;
                 mip_height = next_mip_height;
+                mip_depth = next_mip_depth;
             }
 
             crate::barrier::image_memory_barrier(
@@ -597,7 +637,7 @@ impl SampledImage {
                             .image_extent(vk::Extent3D {
                                 width: self.width,
                                 height: self.height,
-                                depth: 1,
+                                depth: self.depth,
                             })];
 
                         device.cmd_copy_image_to_buffer(

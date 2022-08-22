@@ -83,8 +83,8 @@ impl GraphResources {
         for handle in self.img_handles.values() {
             let (image, size) = self.images.get_with_metadata_mut(handle).unwrap();
             let config = *image.config();
-            let (new_width, new_height) = size.get_physical_size((new_width, new_height));
-            let new_image = SampledImage::with_dimensions(device, new_width, new_height, config)?;
+            let (new_width, new_height, new_depth) = size.get_physical_size_3d((new_width, new_height));
+            let new_image = SampledImage::with_dimensions(device, new_width, new_height, new_depth, config)?;
 
             let old_image = std::mem::replace(image, new_image);
         }

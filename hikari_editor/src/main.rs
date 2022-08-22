@@ -40,7 +40,7 @@ fn prepare_graph(
 
     let pass = Renderpass::<()>::new(
         "Imgui",
-        ImageSize::default(),
+        ImageSize::default_xy(),
         move |cmd: &mut RenderpassCommands, ()| {
             renderer
                 .lock()

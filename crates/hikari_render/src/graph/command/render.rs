@@ -112,6 +112,10 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
     pub fn set_image(&mut self, image: &SampledImage, set: u32, binding: u32) {
         self.cmd.set_image(image, set, binding);
     }
+    #[inline]
+    pub fn set_image_array(&mut self, image: &SampledImage, set: u32, binding: u32, index: usize) {
+        self.cmd.set_image_array(image, set, binding, index);
+    }
     pub fn set_uniform_buffer<B: Buffer>(
         &mut self,
         buffer: &B,
