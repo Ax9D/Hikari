@@ -137,11 +137,7 @@ impl ReflectionData {
         let mut combined_image_samplers = HashMap::new();
 
         for binding in shader_module.enumerate_descriptor_bindings(entry_point)? {
-            if binding.name.is_empty() {
-                return Err("Anonymous uniforms are not permitted".into());
-            }
-
-            log::debug!("{:?}", binding.name);
+            //log::debug!("{:?}", binding.name);
 
             if binding.set as usize >= crate::descriptor::MAX_DESCRIPTOR_SETS {
                 return Err(format!(
@@ -187,26 +183,26 @@ impl ReflectionData {
         // let uniforms = Self::reflect_uniforms(program, &uniforms_in_blocks);
 
         inputs.iter().for_each(|(_, x)| {
-            log::debug!("{:?}", x);
+            //log::debug!("{:?}", x);
         });
         outputs.iter().for_each(|(_, x)| {
-            log::debug!("{:?}", x);
+            //log::debug!("{:?}", x);
         });
         uniform_buffers.iter().for_each(|(_, x)| {
-            log::debug!("{:?}", x);
+            //log::debug!("{:?}", x);
         });
 
         match push_constant {
             Some(ref pc) => {
-                log::debug!("{:?}", pc)
+                //log::debug!("{:?}", pc)
             }
             None => {
-                log::debug!("No push constants")
+                //log::debug!("No push constants")
             }
         }
 
         combined_image_samplers.iter().for_each(|(_, x)| {
-            log::debug!("{:?}", x);
+            //log::debug!("{:?}", x);
         });
 
         println!("Done");

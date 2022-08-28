@@ -1,10 +1,12 @@
 pub mod reflect;
+use arrayvec::ArrayVec;
 use ash::{prelude::VkResult, vk};
 pub use reflect::CombinedImageSampler;
 pub use reflect::PushConstantRange;
 pub use reflect::ReflectionData;
 pub use reflect::UniformBuffer;
 
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -98,15 +100,21 @@ pub enum ShaderData {
 pub struct Shader {
     device: Arc<crate::Device>,
     name: String,
-    vertex: CompiledShaderModule,
-    fragment: CompiledShaderModule,
+    modules: Vec<CompiledShaderModule>,
     pipeline_layout: PipelineLayout,
 
     pub(crate) hash: u64,
 }
 impl Shader {
-    pub(crate) fn vk_stages(&self) -> [vk::PipelineShaderStageCreateInfo; 2] {
-        [self.vertex.create_info(), self.fragment.create_info()]
+    pub fn builder(name: &str) -> ShaderProgramBuilder {
+        ShaderProgramBuilder::new(name.to_owned())
+    }
+    pub(crate) fn vk_stages(&self) -> ArrayVec<vk::PipelineShaderStageCreateInfo, 6> {
+        let mut stages = ArrayVec::new();
+        for module in &self.modules {
+            stages.push(module.create_info());
+        }
+        stages
     }
     pub(crate) fn pipeline_layout(&self) -> &PipelineLayout {
         &self.pipeline_layout
@@ -123,7 +131,9 @@ impl std::hash::Hash for Shader {
 }
 impl PartialEq for Shader {
     fn eq(&self, other: &Self) -> bool {
-        self.vertex.spirv == other.vertex.spirv && self.fragment.spirv == other.vertex.spirv
+        self.modules.iter()
+        .zip(other.modules.iter())
+        .all(|(current, other)| current.spirv == other.spirv)
     }
 }
 impl Eq for Shader {}
@@ -131,8 +141,9 @@ impl Eq for Shader {}
 impl Drop for Shader {
     fn drop(&mut self) {
         unsafe {
-            self.vertex.delete(&self.device);
-            self.fragment.delete(&self.device);
+            for module in &self.modules {
+                module.delete(&self.device);
+            }
 
             log::debug!("Dropped shader program");
         }
@@ -162,7 +173,7 @@ impl Eq for PipelineLayout {}
 impl PipelineLayout {
     pub fn new(
         device: &Arc<crate::Device>,
-        stages: &[&CompiledShaderModule],
+        stages: &[CompiledShaderModule],
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let set_layouts = Self::generate_descriptor_set_layouts(device, stages)?;
         let push_constant_ranges = Self::generate_push_constant_ranges(stages);
@@ -221,11 +232,11 @@ impl PipelineLayout {
     }
     fn generate_descriptor_set_layouts(
         device: &Arc<crate::Device>,
-        stages: &[&CompiledShaderModule],
+        stages: &[CompiledShaderModule],
     ) -> Result<[DescriptorSetLayout; MAX_DESCRIPTOR_SETS], Box<dyn std::error::Error>> {
         let mut layout_builders: [DescriptorSetLayoutBuilder; MAX_DESCRIPTOR_SETS] =
             [DescriptorSetLayout::builder(); MAX_DESCRIPTOR_SETS];
-        for &stage in stages {
+        for stage in stages {
             for set in &stage
                 .reflection_data
                 .raw_data()
@@ -236,7 +247,7 @@ impl PipelineLayout {
                 for binding in &set.bindings {
                     let descriptor_type =
                         reflect::spirv_desc_type_to_vk_desc_type(binding.descriptor_type);
-
+                    println!("{} {}", binding.name, binding.count);
                     //println!("{:?}", descriptor_type);
                     layout_builder.with_binding(
                         binding.binding,
@@ -276,7 +287,7 @@ impl PipelineLayout {
         Ok(layouts)
     }
     fn generate_push_constant_ranges(
-        stages: &[&CompiledShaderModule],
+        stages: &[CompiledShaderModule],
     ) -> Vec<vk::PushConstantRange> {
         struct PushConstantRange {
             size: u32,
@@ -343,76 +354,125 @@ impl Drop for PipelineLayout {
         }
     }
 }
-
-pub struct ShaderProgramBuilder<'a, 'entry> {
-    name: String,
-    vertex: &'a ShaderCode<'entry>,
-    fragment: &'a ShaderCode<'entry>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ShaderStage {
+    Vertex,
+    Fragment,
+    Geometry,
+    TessControl,
+    TessEvaluation,
+    Compute
 }
-
-fn shaderc_to_vulkan_stage(kind: shaderc::ShaderKind) -> vk::ShaderStageFlags {
-    match kind {
-        shaderc::ShaderKind::Vertex => vk::ShaderStageFlags::VERTEX,
-        shaderc::ShaderKind::Fragment => vk::ShaderStageFlags::FRAGMENT,
-        shaderc::ShaderKind::Compute => vk::ShaderStageFlags::COMPUTE,
-        shaderc::ShaderKind::Geometry => vk::ShaderStageFlags::GEOMETRY,
-        shaderc::ShaderKind::TessControl => vk::ShaderStageFlags::TESSELLATION_CONTROL,
-        shaderc::ShaderKind::TessEvaluation => vk::ShaderStageFlags::TESSELLATION_EVALUATION,
-        shaderc::ShaderKind::DefaultVertex => vk::ShaderStageFlags::VERTEX,
-        shaderc::ShaderKind::DefaultFragment => vk::ShaderStageFlags::FRAGMENT,
-        shaderc::ShaderKind::DefaultCompute => vk::ShaderStageFlags::COMPUTE,
-        shaderc::ShaderKind::DefaultGeometry => vk::ShaderStageFlags::GEOMETRY,
-        shaderc::ShaderKind::DefaultTessControl => vk::ShaderStageFlags::TESSELLATION_CONTROL,
-        shaderc::ShaderKind::DefaultTessEvaluation => vk::ShaderStageFlags::TESSELLATION_EVALUATION,
-
-        //Raytracing **unsupported**
-        // shaderc::ShaderKind::RayGeneration => vk::ShaderStageFlags::RAYGEN_KHR,
-        // shaderc::ShaderKind::AnyHit => vk::ShaderStageFlags::ANY_HIT_KHR,
-        // shaderc::ShaderKind::ClosestHit => vk::ShaderStageFlags::CLOSEST_HIT_KHR,
-        // shaderc::ShaderKind::Miss =>vk::ShaderStageFlags::MISS_KHR,
-        // shaderc::ShaderKind::Intersection => vk::ShaderStageFlags::INTERSECTION_KHR,
-        // shaderc::ShaderKind::Callable => vk::ShaderStageFlags::CALLABLE_KHR,
-        // shaderc::ShaderKind::DefaultRayGeneration => vk::ShaderStageFlags::RAYGEN_KHR,
-        // shaderc::ShaderKind::DefaultAnyHit => vk::ShaderStageFlags::ANY_HIT_KHR,
-        // shaderc::ShaderKind::DefaultClosestHit => vk::ShaderStageFlags::CLOSEST_HIT_KHR,
-        // shaderc::ShaderKind::DefaultMiss => vk::ShaderStageFlags::MISS_KHR,
-        // shaderc::ShaderKind::DefaultIntersection => vk::ShaderStageFlags::INTERSECTION_KHR,
-        // shaderc::ShaderKind::DefaultCallable => vk::ShaderStageFlags::CALLABLE_KHR,
-
-        //Mesh shading **unsupported**
-        // shaderc::ShaderKind::Task => vk::ShaderStageFlags::TASK_NV,
-        // shaderc::ShaderKind::Mesh => vk::ShaderStageFlags::MESH_NV,
-        // shaderc::ShaderKind::DefaultTask => vk::ShaderStageFlags::TASK_NV,
-        // shaderc::ShaderKind::DefaultMesh => vk::ShaderStageFlags::MESH_NV,
-        _ => panic!("unsupported shader kind"),
+impl std::fmt::Display for ShaderStage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShaderStage::Vertex => write!(f, "Vertex"),
+            ShaderStage::Fragment => write!(f, "Fragment"),
+            ShaderStage::Geometry => write!(f, "Geometry"),
+            ShaderStage::TessControl => write!(f, "TessControl"),
+            ShaderStage::TessEvaluation => write!(f, "TessEvaluation"),
+            ShaderStage::Compute => write!(f, "Compute"),
+        }
     }
 }
-
-impl<'a, 'entry> ShaderProgramBuilder<'a, 'entry> {
-    pub fn vertex_and_fragment(
-        name: &str,
-        vertex: &'a ShaderCode<'entry>,
-        fragment: &'a ShaderCode<'entry>,
-    ) -> Self {
-        Self {
-            name: name.to_owned(),
-            vertex,
-            fragment,
+impl ShaderStage {
+    pub(crate) fn shaderc_kind(self) -> shaderc::ShaderKind {
+        match self {
+            ShaderStage::Vertex => shaderc::ShaderKind::Vertex,
+            ShaderStage::Fragment => shaderc::ShaderKind::Fragment,
+            ShaderStage::Compute => shaderc::ShaderKind::Compute,
+            ShaderStage::Geometry => shaderc::ShaderKind::Geometry,
+            ShaderStage::TessControl => shaderc::ShaderKind::TessControl,
+            ShaderStage::TessEvaluation => shaderc::ShaderKind::TessEvaluation,
         }
+    }
+    pub(crate) fn vulkan_stage(self) -> vk::ShaderStageFlags {
+        match self {
+            ShaderStage::Vertex => vk::ShaderStageFlags::VERTEX,
+            ShaderStage::Fragment => vk::ShaderStageFlags::FRAGMENT,
+            ShaderStage::Compute => vk::ShaderStageFlags::COMPUTE,
+            ShaderStage::Geometry => vk::ShaderStageFlags::GEOMETRY,
+            ShaderStage::TessControl => vk::ShaderStageFlags::TESSELLATION_CONTROL,
+            ShaderStage::TessEvaluation => vk::ShaderStageFlags::TESSELLATION_EVALUATION,
+        }
+    }
+}
+pub struct ShaderProgramBuilder<'entry, 'options> {
+    name: String,
+    stages: HashMap<ShaderStage, ShaderCode<'entry>>,
+    options: Option<shaderc::CompileOptions<'options>>
+}
+
+// fn shaderc_to_vulkan_stage(kind: shaderc::ShaderKind) -> vk::ShaderStageFlags {
+//     match kind {
+//         shaderc::ShaderKind::Vertex => vk::ShaderStageFlags::VERTEX,
+//         shaderc::ShaderKind::Fragment => vk::ShaderStageFlags::FRAGMENT,
+//         shaderc::ShaderKind::Compute => vk::ShaderStageFlags::COMPUTE,
+//         shaderc::ShaderKind::Geometry => vk::ShaderStageFlags::GEOMETRY,
+//         shaderc::ShaderKind::TessControl => vk::ShaderStageFlags::TESSELLATION_CONTROL,
+//         shaderc::ShaderKind::TessEvaluation => vk::ShaderStageFlags::TESSELLATION_EVALUATION,
+//         shaderc::ShaderKind::DefaultVertex => vk::ShaderStageFlags::VERTEX,
+//         shaderc::ShaderKind::DefaultFragment => vk::ShaderStageFlags::FRAGMENT,
+//         shaderc::ShaderKind::DefaultCompute => vk::ShaderStageFlags::COMPUTE,
+//         shaderc::ShaderKind::DefaultGeometry => vk::ShaderStageFlags::GEOMETRY,
+//         shaderc::ShaderKind::DefaultTessControl => vk::ShaderStageFlags::TESSELLATION_CONTROL,
+//         shaderc::ShaderKind::DefaultTessEvaluation => vk::ShaderStageFlags::TESSELLATION_EVALUATION,
+
+//         //Raytracing **unsupported**
+//         // shaderc::ShaderKind::RayGeneration => vk::ShaderStageFlags::RAYGEN_KHR,
+//         // shaderc::ShaderKind::AnyHit => vk::ShaderStageFlags::ANY_HIT_KHR,
+//         // shaderc::ShaderKind::ClosestHit => vk::ShaderStageFlags::CLOSEST_HIT_KHR,
+//         // shaderc::ShaderKind::Miss =>vk::ShaderStageFlags::MISS_KHR,
+//         // shaderc::ShaderKind::Intersection => vk::ShaderStageFlags::INTERSECTION_KHR,
+//         // shaderc::ShaderKind::Callable => vk::ShaderStageFlags::CALLABLE_KHR,
+//         // shaderc::ShaderKind::DefaultRayGeneration => vk::ShaderStageFlags::RAYGEN_KHR,
+//         // shaderc::ShaderKind::DefaultAnyHit => vk::ShaderStageFlags::ANY_HIT_KHR,
+//         // shaderc::ShaderKind::DefaultClosestHit => vk::ShaderStageFlags::CLOSEST_HIT_KHR,
+//         // shaderc::ShaderKind::DefaultMiss => vk::ShaderStageFlags::MISS_KHR,
+//         // shaderc::ShaderKind::DefaultIntersection => vk::ShaderStageFlags::INTERSECTION_KHR,
+//         // shaderc::ShaderKind::DefaultCallable => vk::ShaderStageFlags::CALLABLE_KHR,
+
+//         //Mesh shading **unsupported**
+//         // shaderc::ShaderKind::Task => vk::ShaderStageFlags::TASK_NV,
+//         // shaderc::ShaderKind::Mesh => vk::ShaderStageFlags::MESH_NV,
+//         // shaderc::ShaderKind::DefaultTask => vk::ShaderStageFlags::TASK_NV,
+//         // shaderc::ShaderKind::DefaultMesh => vk::ShaderStageFlags::MESH_NV,
+//         _ => panic!("unsupported shader kind"),
+//     }
+// }
+
+impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
+    fn new(name: String) -> Self {
+        Self { name, stages: HashMap::new(), options: None }
+    } 
+    #[deprecated(note = "Use with_stage(...) as it is more general")]
+    pub fn vertex_and_fragment(name: &str, vertex: &ShaderCode<'entry>, fragment: &ShaderCode<'entry>) -> Self {
+        Self::new(name.to_owned())
+        .with_stage(ShaderStage::Vertex, vertex.clone())
+        .with_stage(ShaderStage::Fragment, fragment.clone())
+    }
+    pub fn with_options(mut self, compile_options: shaderc::CompileOptions<'options>) -> Self {
+        self.options = Some(compile_options);
+
+        self
+    } 
+    pub fn with_stage(mut self, stage: ShaderStage, code: ShaderCode<'entry>) -> Self {
+        self.stages.insert(stage, code);
+
+        self
     }
     fn compile_shader(
         compiler: &mut shaderc::Compiler,
         glsl: &str,
         entry_point: &str,
-        shader_kind: shaderc::ShaderKind,
+        stage: ShaderStage,
         debug_name: &str,
+        options: Option<&shaderc::CompileOptions>
     ) -> Result<Vec<u32>, ShaderCreateError> {
         #[allow(unused_mut)]
-        let mut options = shaderc::CompileOptions::new().unwrap();
-
         //options.set_optimization_level(shaderc::OptimizationLevel::Zero);
         let artifact = compiler
-            .compile_into_spirv(glsl, shader_kind, debug_name, entry_point, Some(&options))
+            .compile_into_spirv(glsl, stage.shaderc_kind(), debug_name, entry_point, options)
             .map_err(|err| {
                 ShaderCreateError::CompilationError(debug_name.to_string(), err.to_string())
             })?;
@@ -438,9 +498,10 @@ impl<'a, 'entry> ShaderProgramBuilder<'a, 'entry> {
 
     fn create_shader_module(
         device: &crate::Device,
-        shader: &'a ShaderCode<'entry>,
+        shader: &ShaderCode<'entry>,
         debug_name: String,
-        kind: shaderc::ShaderKind,
+        stage: ShaderStage,
+        options: Option<&shaderc::CompileOptions>
     ) -> Result<CompiledShaderModule, ShaderCreateError> {
         let data;
         let spirv = match &shader.data {
@@ -455,8 +516,9 @@ impl<'a, 'entry> ShaderProgramBuilder<'a, 'entry> {
                     &mut device.shader_compiler(),
                     glsl,
                     shader.entry_point,
-                    kind,
+                    stage,
                     &debug_name,
+                    options
                 )?;
                 &data
             }
@@ -469,7 +531,7 @@ impl<'a, 'entry> ShaderProgramBuilder<'a, 'entry> {
             ShaderCreateError::CompilationError(debug_name.clone(), error.to_string())
         })?;
 
-        let stage = shaderc_to_vulkan_stage(kind);
+        let stage = stage.vulkan_stage();
 
         Ok(CompiledShaderModule {
             debug_name,
@@ -479,31 +541,25 @@ impl<'a, 'entry> ShaderProgramBuilder<'a, 'entry> {
             reflection_data,
         })
     }
-    pub fn build(self, device: &Arc<crate::Device>) -> Result<Arc<Shader>, ShaderCreateError> {
+    pub fn build(mut self, device: &Arc<crate::Device>) -> Result<Arc<Shader>, ShaderCreateError> {
         log::debug!("Compiling vertex shader");
 
-        let vertex = Self::create_shader_module(
-            device,
-            self.vertex,
-            format!("{:?} {}", self.name, "[VERTEX]"),
-            shaderc::ShaderKind::Vertex,
-        )?;
-        log::debug!("Compiling fragment shader");
-        let fragment = Self::create_shader_module(
-            device,
-            self.fragment,
-            format!("{:?} {}", self.name, "[FRAGMENT]"),
-            shaderc::ShaderKind::Fragment,
-        )?;
+        let mut modules = vec![];
 
-        let pipeline_layout = PipelineLayout::new(device, &[&vertex, &fragment])
+        for (stage, code) in self.stages.drain() {
+            let module = Self::create_shader_module(device, &code, format!("[{}] {}", stage.to_string(), self.name), stage, self.options.as_ref())?;
+            modules.push(module);
+        }
+
+        let pipeline_layout = PipelineLayout::new(device, &modules)
             .map_err(|err| ShaderCreateError::LinkingError(self.name.clone(), err.to_string()))?;
 
         let mut hasher = crate::util::hasher();
 
         let hash = {
-            vertex.hash(&mut hasher);
-            fragment.hash(&mut hasher);
+            for module in &modules {
+                module.hash(&mut hasher);
+            }
 
             hasher.finish()
         };
@@ -511,8 +567,7 @@ impl<'a, 'entry> ShaderProgramBuilder<'a, 'entry> {
         Ok(Arc::new(Shader {
             name: self.name,
             device: device.clone(),
-            vertex,
-            fragment,
+            modules,
             pipeline_layout,
 
             hash,

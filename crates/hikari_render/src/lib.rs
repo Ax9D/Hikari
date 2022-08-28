@@ -23,6 +23,7 @@ pub use gfx::Gfx;
 pub use gfx::GfxConfig;
 
 pub use shader::*;
+pub use shaderc;
 pub use texture::sampled_image::*;
 //pub use texture::Texture2D;
 
