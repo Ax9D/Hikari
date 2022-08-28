@@ -15,6 +15,7 @@ pub fn get_camera(world: &World) -> Option<Entity> {
     world
         .query::<(&Camera, &Transform)>()
         .iter()
+        .filter(|(_, (camera, _))| camera.is_primary)
         .next()
         .map(|(entity, _)| entity)
 }

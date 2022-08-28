@@ -7,6 +7,7 @@ pub mod material;
 pub mod mesh;
 pub mod scene;
 pub mod texture;
+mod shader;
 
 use std::ffi::OsStr;
 
@@ -20,6 +21,7 @@ pub use material::*;
 pub use mesh::*;
 pub use scene::*;
 pub use texture::*;
+pub use shader::*;
 
 pub enum MeshFormat {
     Gltf,
@@ -46,14 +48,17 @@ impl Plugin for Plugin3D {
         game.create_asset::<Material>();
         game.create_asset::<Scene>();
 
-        let gfx = game.get::<Gfx>();
+        let device = game.get::<Gfx>().device().clone();
+        let shader_lib = ShaderLibrary::new(&device, std::env::current_dir().unwrap().join("assets/shaders"));
+        game.add_state(shader_lib);
+
         let mut manager = game.get_mut::<AssetManager>();
         manager.add_loader::<Texture2D, TextureLoader>(TextureLoader {
-            device: gfx.device().clone(),
+            device: device.clone(),
         });
         manager.add_loader::<Material, MaterialLoader>(MaterialLoader);
         manager.add_loader::<Scene, GLTFLoader>(GLTFLoader {
-            device: gfx.device().clone(),
+            device,
         });
     }
 }

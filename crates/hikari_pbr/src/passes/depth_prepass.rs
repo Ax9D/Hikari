@@ -5,13 +5,6 @@ use hikari_3d::*;
 use hikari_math::*;
 use hikari_render::*;
 
-use crate::util::*;
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct UBO {
-    view_proj: [f32; 16],
-}
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct PushConstants {
@@ -21,20 +14,10 @@ struct PushConstants {
 pub fn build_pass(
     device: &Arc<Device>,
     graph: &mut GraphBuilder<Args>,
+    shader_lib: &mut ShaderLibrary,
 ) -> anyhow::Result<GpuHandle<SampledImage>> {
-    let shader = ShaderProgramBuilder::vertex_and_fragment(
-        "DepthPrepass",
-        &ShaderCode {
-            entry_point: "main",
-            data: ShaderData::Glsl(std::fs::read_to_string("assets/shaders/depth_only.vert")?),
-        },
-        &ShaderCode {
-            entry_point: "main",
-            data: ShaderData::Glsl(std::fs::read_to_string("assets/shaders/empty.frag")?),
-        },
-    )
-    .build(device)
-    .expect("Failed to create shader");
+
+    shader_lib.insert("depth_only")?;
 
     let layout = VertexInputLayout::builder()
         .buffer(
@@ -52,20 +35,16 @@ pub fn build_pass(
         .create_image(
             "PrepassDepth",
             ImageConfig::depth_only(device),
-            ImageSize::default(),
+            ImageSize::default_xy(),
         )
         .expect("Failed to create depth image");
-    let mut ubo = PerFrame::new([
-        create_uniform_buffer::<UBO>(device, 1)?,
-        create_uniform_buffer::<UBO>(device, 1)?,
-    ]);
 
     graph.add_renderpass(
         Renderpass::<Args>::new(
             "DepthPrepass",
-            ImageSize::default(),
-            move |cmd, (world, config, assets)| {
-                cmd.set_shader(&shader);
+            ImageSize::default_xy(),
+            move |cmd, (world, res, shader_lib, assets)| {
+                cmd.set_shader(shader_lib.get("depth_only").unwrap());
                 cmd.set_vertex_input_layout(layout);
 
                 cmd.set_depth_stencil_state(DepthStencilState {
@@ -74,19 +53,11 @@ pub fn build_pass(
                     depth_compare_op: CompareOp::Less,
                     ..Default::default()
                 });
-                let camera = get_camera(world);
+                let camera = res.camera;
 
-                if let Some(camera_entity) = camera {
-                    let camera = world.get_component::<&Camera>(camera_entity).unwrap();
-                    let camera_transform = world.get_component::<&Transform>(camera_entity).unwrap();
+                if camera.is_some() {
 
-                    let proj = camera.get_projection_matrix(config.viewport.0, config.viewport.1);
-                    let view = camera_transform.get_matrix().inverse();
-                    let view_proj = (proj * view).to_cols_array();
-
-                    ubo.get_mut().mapped_slice_mut()[0] = UBO { view_proj };
-
-                    cmd.set_uniform_buffer(ubo.get(), 0..1, 0, 0);
+                    cmd.set_uniform_buffer(res.world_ubo.get(), 0..1, 0, 0);
 
                     let scenes = assets.get::<Scene>().expect("Scenes pool not found");
                     for (_, (transform, mesh_comp)) in
@@ -97,11 +68,11 @@ pub fn build_pass(
                             MeshSource::Scene(handle, mesh_ix) => {
                                 if let Some(scene) = scenes.get(handle) {
                                     let mesh = &scene.meshes[*mesh_ix];
-                                    
+
                                     transform *= mesh.transform.get_matrix();
-                                    
+
                                     cmd.push_constants(&PushConstants { transform }, 0);
-                                    
+
                                     for submesh in &mesh.sub_meshes {
                                         {
                                             hikari_dev::profile_scope!(
@@ -110,7 +81,6 @@ pub fn build_pass(
                                             cmd.set_vertex_buffer(&submesh.vertices, 0);
                                             cmd.set_index_buffer(&submesh.indices);
                                         }
-
 
                                         // println!(
                                         //     "{:?} {:?} {:?} {:?}",
@@ -128,7 +98,6 @@ pub fn build_pass(
                         }
                     }
                 }
-                ubo.next_frame();
             },
         )
         .draw_image(&depth_output, AttachmentConfig::depth_only_default()),

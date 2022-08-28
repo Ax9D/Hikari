@@ -605,12 +605,15 @@ pub fn load_scene(
                 far: ortho.zfar(),
                 exposure: 1.0,
                 projection: crate::Projection::Orthographic,
+                is_primary: false
             },
             gltf::camera::Projection::Perspective(persp) => crate::Camera {
                 near: persp.znear(),
                 far: persp.zfar().unwrap_or(1000.0),
                 exposure: 1.0,
                 projection: crate::Projection::Perspective(persp.yfov()),
+                is_primary: false
+                
             },
         })
         .unwrap_or(crate::Camera {
@@ -618,6 +621,7 @@ pub fn load_scene(
             far: 10_000.0,
             exposure: 1.0,
             projection: crate::Projection::Perspective(45.0),
+            is_primary: false
         });
 
     Ok(crate::Scene { meshes, camera })

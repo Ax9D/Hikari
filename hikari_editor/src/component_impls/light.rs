@@ -1,5 +1,5 @@
 use crate::{components::EditorComponent, *};
-use hikari::g3d::Light;
+use hikari::g3d::{Light, ShadowInfo, LightKind};
 use hikari_editor::*;
 
 impl EditorComponent for Light {
@@ -31,7 +31,26 @@ impl EditorComponent for Light {
 
         imgui::Drag::new("intensity").build(ui, &mut self.intensity);
 
-        ui.checkbox("cast shadows", &mut self.cast_shadows);
+        let mut shadows_enabled = self.shadow.is_some();
+
+        let changed = ui.checkbox("cast shadows", &mut shadows_enabled);
+        if changed {
+            if shadows_enabled {
+                self.shadow = Some(ShadowInfo::default());
+            } else {
+                self.shadow = None;
+            }
+        }
+
+        if let Some(shadow_info) = &mut self.shadow {
+            ui.input_float("Constant Bias", &mut shadow_info.constant_bias).build();
+            imgui::Slider::new("Normal Bias", 0.0, 5.0).build(ui, &mut shadow_info.normal_bias);
+            if self.kind == LightKind::Directional {
+                imgui::Slider::new("Cascade Split Lambda", 0.0, 1.0).build(ui, &mut shadow_info.cascade_split_lambda);
+                ui.input_float("Max Shadow Distance", &mut shadow_info.max_shadow_distance).build();
+                imgui::Slider::new("Shadow Fade", 0.0, 1.0).build(ui, &mut shadow_info.fade);
+            }
+        }
         Ok(())
     }
 
