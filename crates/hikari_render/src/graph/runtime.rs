@@ -186,7 +186,7 @@ impl GraphExecutor {
         for (ix, pass) in passes.iter_mut().enumerate() {
             match pass {
                 AnyPass::Render(pass) => {
-                    hikari_dev::profile_scope!("Renderpass", pass.name());
+                    hikari_dev::profile_scope!(pass.name());
 
                     //log::debug!("Executing pass {}", pass.name());
                     Self::execute_renderpass(
@@ -253,7 +253,7 @@ impl GraphExecutor {
         for (ix, pass) in passes.iter_mut().enumerate() {
             match pass {
                 AnyPass::Render(pass) => {
-                    hikari_dev::profile_scope!("Renderpass", pass.name());
+                    hikari_dev::profile_scope!(pass.name());
 
                     //log::debug!("Executing pass {}", pass.name());
                     Self::execute_renderpass(

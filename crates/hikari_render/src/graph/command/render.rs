@@ -339,12 +339,6 @@ impl PipelineContext {
         }
     }
     pub fn set_shader(&mut self, shader: &Arc<Shader>) -> Option<Arc<Shader>> {
-        if let Some(current_shader) = self.psv.shader.as_mut() {
-            let old_shader = std::mem::replace(current_shader, shader.clone());
-
-            return Some(old_shader);
-        }
-
         self.psv.shader.replace(shader.clone())
     }
     pub fn flush(

@@ -40,6 +40,22 @@ impl Default for PolygonMode {
         Self::Fill
     }
 }
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum CullMode {
+    None = 0,
+    Front = 1,
+    Back = 2
+}
+impl CullMode {
+    pub fn into_vk(&self) -> vk::CullModeFlags {
+        vk::CullModeFlags::from_raw(*self as u32)
+    }
+}
+impl Default for CullMode {
+    fn default() -> Self {
+        Self::Back
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CompareOp {
     Never = 0,
@@ -160,7 +176,7 @@ impl DepthStencilState {
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct RasterizerState {
     pub polygon_mode: PolygonMode,
-
+    pub cull_mode: CullMode,
     pub depth_clamp_enable: bool,
     pub rasterizer_discard_enable: bool,
 
@@ -176,7 +192,7 @@ impl RasterizerState {
             .rasterizer_discard_enable(self.rasterizer_discard_enable)
             .polygon_mode(self.polygon_mode.into_vk())
             .line_width(1.0)
-            .cull_mode(vk::CullModeFlags::BACK)
+            .cull_mode(self.cull_mode.into_vk())
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .depth_bias_enable(self.depth_bias_enable)
             .depth_bias_constant_factor(self.depth_bias_constant_factor)
@@ -191,7 +207,7 @@ impl Hash for RasterizerState {
         self.polygon_mode.hash(state);
         self.depth_clamp_enable.hash(state);
         self.rasterizer_discard_enable.hash(state);
-        self.depth_bias_enable.hash(state);
+        self.depth_bias_enable.hash(state); 
 
         bad_float_hash(self.depth_bias_constant_factor, state);
         bad_float_hash(self.depth_bias_clamp, state);

@@ -188,7 +188,7 @@ impl AllocationData {
         for output in pass.outputs() {
             if let super::pass::Output::DrawImage(handle, attachment_config) = output {
                 let image = graph_resources.get_image(handle).unwrap();
-
+                
                 let (final_layout, clear_value) = match attachment_config.kind {
                     AttachmentKind::Color(location) => {
                         color_attachment_refs[location as usize] =
@@ -282,16 +282,16 @@ impl AllocationData {
             .attachments(&attachments)
             .subpasses(&subpass_descs);
 
-        let pass = unsafe { device.raw().create_render_pass(&create_info, None)? };
+        let vk_pass = unsafe { device.raw().create_render_pass(&create_info, None)? };
 
-        log::debug!("Created renderpass");
+        log::debug!("Created renderpass {}", pass.name());
 
         let n_color_attachments = color_attachment_refs.len();
 
         self.renderpasses.insert(
             ix,
             PhysicalRenderpass {
-                pass,
+                pass: vk_pass,
                 n_color_attachments,
                 clear_values,
             },
