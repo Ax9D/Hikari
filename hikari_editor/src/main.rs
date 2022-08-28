@@ -115,11 +115,10 @@ impl Plugin for EditorPlugin {
                 })),
             )
         };
-        game.create_stage(EDITOR_STAGE);
-        game.add_task(EDITOR_STAGE, update_task);
+        game.add_task(POST_RENDER, update_task);
         #[allow(unused_variables)]
         game.add_task(
-            EDITOR_STAGE,
+            POST_RENDER,
             Task::new(
                 "EditorRender",
                 |gfx: &Gfx, graph: &mut EditorGraph, window: &&'static winit::window::Window| {
@@ -193,7 +192,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     game.add_plugin(GfxPlugin {
         config: GfxConfig {
-            debug: true,
+            debug: false,
             features: Features::default(),
             vsync: true,
         },

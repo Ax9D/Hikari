@@ -25,6 +25,10 @@ mod project;
 mod properties;
 mod tools;
 mod viewport;
+mod icons;
+mod render_settings;
+mod camera;
+
 
 struct Clipboard(clipboard::ClipboardContext);
 impl Clipboard {
@@ -133,7 +137,7 @@ impl Editor {
             data: include_bytes!("../../../assets/fonts/Roboto/Roboto-Regular.ttf"),
             size_pixels: 13.0 * config.hidpi_factor * 1.5,
             config: None,
-        }]);
+        }, icons::icon_ttf(config.hidpi_factor)]);
 
         if let Some(clipboard) = Clipboard::new() {
             ctx.set_clipboard_backend(clipboard);
@@ -157,7 +161,7 @@ impl Editor {
             ass_man.add_saver::<Scene, SceneLoader>(loader);
         }
 
-        let mut editor = Self {
+        let editor = Self {
             logging: Logging::new(config.log_listener),
             tools: Tools::new(),
             show_demo: false,
@@ -168,14 +172,7 @@ impl Editor {
             rename_state: RenameState::Idle,
             project_manager: ProjectManager::default(),
         };
-        {
-            //let _sponza = game.get::<AssetManager>().load::<hikari::g3d::Scene>(std::path::Path::new("assets/models/sponza/sponza.glb")).unwrap();
-            let mut world = game.get_mut::<hikari::core::World>();
-            let entity = editor.outliner.add_entity(&mut world, "Camera");
-            world
-                .add_component(entity, hikari::g3d::Camera::default())
-                .expect("Failed to add camera");
-        }
+
         game.add_state(editor);
         game.add_state(editor_components);
     }
@@ -228,6 +225,7 @@ impl Editor {
         outliner::draw(ui, self, state).unwrap();
         project::draw(ui, self, state).unwrap();
         properties::draw(ui, self, state).unwrap();
+        render_settings::draw(ui, self, state).unwrap();
         logging::draw(ui, self);
 
         if self.show_demo {
@@ -249,9 +247,11 @@ impl Editor {
                 .build();
         });
 
-        open |= ui.io().key_ctrl && ui.io().keys_down[KeyCode::O as usize]; // Ctrl + O
+        let input = state.get::<hikari::input::Input>().unwrap();
+        let keyboard = input.keyboard();
+        open |= ui.io().key_ctrl && keyboard.was_just_pressed(KeyCode::O); // Ctrl + O
 
-        save |= project_open && ui.io().key_ctrl && ui.io().keys_down[KeyCode::S as usize]; // Ctrl + S
+        save |= project_open && ui.io().key_ctrl && keyboard.was_just_pressed(KeyCode::S); // Ctrl + S
 
         if open {
             if let Some(project_file) = rfd::FileDialog::new()

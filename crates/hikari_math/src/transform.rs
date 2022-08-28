@@ -25,8 +25,17 @@ impl Transform {
             ..Default::default()
         }
     }
+    pub fn forward(&self) -> Vec3 {
+        self.rotation * (-Vec3::Z)
+    }
+    pub fn up(&self) -> Vec3 {
+        self.rotation * Vec3::Y
+    }
+    pub fn right(&self) -> Vec3 {
+        self.rotation * Vec3::X
+    }
     #[inline]
-    pub fn get_matrix(&self) -> glam::Mat4 {
-        glam::Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
+    pub fn get_matrix(&self) -> Mat4 {
+        Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
     }
 }
