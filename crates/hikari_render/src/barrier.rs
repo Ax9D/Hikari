@@ -143,14 +143,13 @@ pub fn is_hazard(prev_accesses: &[AccessType], next_accesses: &[AccessType]) -> 
     if prev_accesses.is_empty() || next_accesses.is_empty() {
         return false;
     }
-    //WAR, RAW, WAW are hazards
-    let prev_read_only = prev_accesses
-        .iter()
-        .fold(true, |acc, access| acc & is_read(access));
-    let next_read_only = next_accesses
-        .iter()
-        .fold(true, |acc, access| acc & is_read(access));
+    // //WAR, RAW, WAW are hazards
+    // let prev_read_only = prev_accesses
+    //     .iter()
+    //     .fold(true, |acc, access| acc & is_read(access));
+    // let next_read_only = next_accesses
+    //     .iter()
+    //     .fold(true, |acc, access| acc & is_read(access));
 
-    //RARs are Ok
-    !(prev_read_only && next_read_only)
+    prev_accesses != next_accesses
 }

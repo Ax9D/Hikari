@@ -13,6 +13,8 @@ use crate::util::TemporaryMap;
 
 pub const MAX_DESCRIPTOR_SETS: usize = 4;
 pub const MAX_BINDINGS_PER_SET: usize = 16;
+pub const MAX_COUNTS_PER_BINDING: usize = 5;
+
 
 #[derive(Copy, Clone, Default)]
 pub struct DescriptorSetLayout {
@@ -20,7 +22,7 @@ pub struct DescriptorSetLayout {
     combined_image_sampler_mask: u32,
     uniform_buffer_mask: u32,
     stage_flags: [vk::ShaderStageFlags; MAX_BINDINGS_PER_SET],
-    counts: [u32; MAX_BINDINGS_PER_SET],
+    counts: [u32; MAX_COUNTS_PER_BINDING],
 }
 
 impl Hash for DescriptorSetLayout {
@@ -43,7 +45,7 @@ impl DescriptorSetLayout {
         self.vk_layout
     }
     /// Get a reference to the descriptor set layout's count.
-    pub const fn counts(&self) -> &[u32; MAX_BINDINGS_PER_SET] {
+    pub const fn counts(&self) -> &[u32; MAX_COUNTS_PER_BINDING] {
         &self.counts
     }
 
@@ -92,7 +94,7 @@ pub struct DescriptorSetLayoutBuilder {
     combined_image_sampler_mask: u32,
     uniform_buffer_mask: u32,
     stage_flags: [vk::ShaderStageFlags; MAX_BINDINGS_PER_SET],
-    counts: [u32; MAX_BINDINGS_PER_SET],
+    counts: [u32; MAX_COUNTS_PER_BINDING],
 }
 
 impl DescriptorSetLayoutBuilder {
@@ -229,11 +231,9 @@ impl Drop for DescriptorSetLayoutCache {
     }
 }
 
-pub const MAX_IMAGE_COUNT: usize = 5;
-
 #[derive(Debug, Clone, Copy, Eq, Default)]
 struct ImageState {
-    images: [(vk::ImageView, vk::Sampler); MAX_IMAGE_COUNT],
+    images: [(vk::ImageView, vk::Sampler); MAX_COUNTS_PER_BINDING],
     image_update_mask: u32,
 }
 impl Hash for ImageState {
@@ -242,7 +242,7 @@ impl Hash for ImageState {
 
         crate::util::for_each_bit_in_range(
             self.image_update_mask,
-            0..MAX_IMAGE_COUNT,
+            0..MAX_COUNTS_PER_BINDING,
             |image_ix| {
                 self.images[image_ix as usize].hash(state);
             },
@@ -259,7 +259,7 @@ impl PartialEq for ImageState {
 
         crate::util::for_each_bit_in_range(
             self.image_update_mask,
-            0..MAX_IMAGE_COUNT,
+            0..MAX_COUNTS_PER_BINDING,
             |image_ix| {
                 same = self.images[image_ix as usize] == other.images[image_ix as usize];
             },
@@ -443,7 +443,7 @@ impl DescriptorSetAllocator {
     fn update_set(&self, set: vk::DescriptorSet, state: &DescriptorSetState) {
         hikari_dev::profile_function!();
 
-        const MAX_WRITES: usize = MAX_BINDINGS_PER_SET * MAX_IMAGE_COUNT;
+        const MAX_WRITES: usize = MAX_BINDINGS_PER_SET * MAX_COUNTS_PER_BINDING;
 
         //let mut writes = ArrayVec::<vk::WriteDescriptorSet, MAX_WRITES>::new();
 
@@ -471,7 +471,7 @@ impl DescriptorSetAllocator {
 
                 crate::util::for_each_bit_in_range(
                     image_state.image_update_mask,
-                    0..MAX_IMAGE_COUNT,
+                    0..MAX_COUNTS_PER_BINDING,
                     |image_ix| {
                         let (image_view, sampler) = image_state.images[image_ix as usize];
                         let write = [vk::DescriptorImageInfo {
