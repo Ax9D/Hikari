@@ -120,8 +120,8 @@ pub(crate) fn draw(subgizmo: &SubGizmo, context: &mut GizmoContext, ui: &imgui::
         let angle = arc_angle(subgizmo);
         painter.arc(
             radius,
-            FRAC_PI_2 - angle,
-            FRAC_PI_2 + angle,
+            /*PI +*/ FRAC_PI_2 - angle,
+            /*PI +*/ FRAC_PI_2 + angle,
             color,
             subgizmo.style.line_thickness,
         );
@@ -159,9 +159,9 @@ pub(crate) fn draw(subgizmo: &SubGizmo, context: &mut GizmoContext, ui: &imgui::
         let delta_angles = subgizmo.local_normal() * state.current_delta;
         let delta_string = format!(
             "dx: {:.1}° dy: {:.1}° dz: {:.1}°",
-            delta_angles.x.to_degrees(),
-            delta_angles.y.to_degrees(),
-            delta_angles.z.to_degrees()
+            /*-*/delta_angles.x.to_degrees(),
+            /*-*/delta_angles.y.to_degrees(),
+            /*-*/delta_angles.z.to_degrees()
         );
         ui.get_window_draw_list().add_text(
             subgizmo.state.viewport.max - Vec2::new(250.0, 75.0),
