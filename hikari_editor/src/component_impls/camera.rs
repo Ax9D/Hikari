@@ -1,5 +1,5 @@
 use crate::components::EditorComponent;
-use hikari::{g3d::*, pbr::WorldRenderer};
+use hikari::{g3d::*};
 use hikari_editor::*;
 use hikari_imgui::*;
 
@@ -23,7 +23,7 @@ impl EditorComponent for Camera {
         ui: &hikari_imgui::Ui,
         _entity: hikari::core::Entity,
         _editor: &mut crate::editor::Editor,
-        state: EngineState,
+        _state: EngineState,
     ) -> anyhow::Result<()> {
         Drag::new("near").build(ui, &mut self.near);
         Drag::new("far").build(ui, &mut self.far);
@@ -36,11 +36,6 @@ impl EditorComponent for Camera {
         }
 
         Drag::new("exposure").build(ui, &mut self.exposure);
-
-        let mut renderer = state.get_mut::<WorldRenderer>().unwrap();
-        let settings = renderer.settings();
-        //ui.checkbox("vsync", &mut settings.vsync);
-        ui.checkbox("fxaa", &mut settings.fxaa);
         Ok(())
     }
 

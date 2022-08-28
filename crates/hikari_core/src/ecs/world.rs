@@ -22,6 +22,10 @@ impl World {
         self.world.spawn((Transform::default(),))
     }
     #[inline]
+    pub fn create_entity_with(&mut self, components: impl DynamicBundle) -> Entity {
+        self.world.spawn(components)
+    }
+    #[inline]
     pub fn create_entity_at(&mut self, handle: Entity, components: impl DynamicBundle) {
         self.world.spawn_at(handle, components);
     }

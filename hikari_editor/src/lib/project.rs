@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use hikari::asset::{AssetManager, AssetStorage, Handle};
+use hikari::{asset::{AssetManager, AssetStorage, Handle}};
 use serde::{Deserialize, Serialize};
 
 use crate::scene::Scene;
@@ -20,6 +20,7 @@ impl Project {
             name,
             engine_version: env!("CARGO_PKG_VERSION").into(),
             scenes: vec![],
+
         }
     }
     pub fn open(path: impl AsRef<Path>) -> anyhow::Result<Self> {

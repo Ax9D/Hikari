@@ -2,7 +2,7 @@ use std::path::Path;
 
 use hikari::{
     asset::{AssetManager, AssetStorage, Handle, LoadStatus},
-    core::World,
+    core::{World}, g3d::Camera,
 };
 use hikari_editor::{project::Project, Scene, SCENE_EXTENSION};
 use std::path::PathBuf;
@@ -12,7 +12,7 @@ use crate::{components::EditorComponents, imgui};
 use hikari_editor::*;
 use hikari_imgui::*;
 
-use super::Editor;
+use super::{Editor, meta::EditorOnly};
 
 #[derive(Default)]
 pub struct ProjectManager {
@@ -135,7 +135,7 @@ impl ProjectManager {
                 }
             }
         }
-
+        
         std::mem::swap::<World>(&mut world, &mut new_world);
         self.current_scene = Some(handle.clone());
 
@@ -169,6 +169,17 @@ impl ProjectManager {
         Ok(())
     }
 }
+
+fn new_scene() -> Scene {
+    let mut world = World::new();
+    let camera = world.create_entity();
+
+    world.add_component(camera, (EditorOnly, Camera::default())).unwrap();
+
+    Scene {
+        world
+    }
+}
 pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
     let project_manager = &mut editor.project_manager;
 
@@ -191,9 +202,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                     .always_auto_resize(true)
                     .build(ui, || {
                             if let Some(path) = project_manager.scene_creator.draw(ui) {
-                                let scene = Scene {
-                                    world: World::new(),
-                                };
+                                let scene = new_scene();
                                 project_manager.new_scene_scratch = Some(
                                     project
                                         .create_scene(path, scene, &manager, &mut storage)
