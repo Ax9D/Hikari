@@ -1,6 +1,7 @@
 pub mod keyboard;
 mod mouse;
 
+use hikari_systems::Task;
 pub use keyboard::*;
 pub use mouse::*;
 use winit::event::WindowEvent;
@@ -30,6 +31,9 @@ impl Input {
         self.keyboard_state.update(event);
         self.mouse_state.update(event);
     }
+    pub fn new_frame(&mut self) {
+        self.keyboard_state.new_frame()
+    }
 }
 
 pub struct InputPlugin;
@@ -37,10 +41,13 @@ pub struct InputPlugin;
 impl hikari_core::Plugin for InputPlugin {
     fn build(self, game: &mut hikari_core::Game) {
         game.add_state(Input::new());
+        game.add_task(hikari_core::LAST, Task::new("Input New Frame", |input: &mut Input| {
+            input.new_frame();
+        }));
         game.add_platform_event_hook(|state, _window, event, _control| match event {
             winit::event::Event::WindowEvent { event, .. } => {
                 state.get_mut::<Input>().unwrap().update(event);
-            }
+            },
             _ => {}
         });
     }
