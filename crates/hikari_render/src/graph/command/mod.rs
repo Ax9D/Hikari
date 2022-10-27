@@ -74,7 +74,7 @@ impl DescriptorState {
         self.sets[set as usize].set_image(binding, ix, image_view, sampler);
     }
     #[inline]
-    pub fn set_uniform_buffer(
+    pub fn set_buffer(
         &mut self,
         buffer: vk::Buffer,
         start: vk::DeviceSize,
@@ -254,7 +254,7 @@ impl<'a> CommandBuffer<'a> {
             index
         );
     }
-    pub(crate) fn set_uniform_buffer<B: Buffer>(
+    pub(crate) fn set_buffer<B: Buffer>(
         &mut self,
         buffer: &B,
         span: Range<usize>,
@@ -263,7 +263,7 @@ impl<'a> CommandBuffer<'a> {
     ) {
         let offset = buffer.offset(span.start);
         let end = buffer.offset(span.end);
-        self.saved_state.descriptor_state.set_uniform_buffer(
+        self.saved_state.descriptor_state.set_buffer(
             buffer.buffer(),
             offset,
             end - offset,

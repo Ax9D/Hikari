@@ -116,6 +116,7 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
     pub fn set_image_array(&mut self, image: &SampledImage, set: u32, binding: u32, index: usize) {
         self.cmd.set_image_array(image, set, binding, index);
     }
+    #[deprecated(note = "use `set_buffer` instead")]
     pub fn set_uniform_buffer<B: Buffer>(
         &mut self,
         buffer: &B,
@@ -123,7 +124,14 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         set: u32,
         binding: u32,
     ) {
-        self.cmd.set_uniform_buffer(buffer, span, set, binding);
+        self.set_buffer(buffer, span, set, binding)
+    }
+    pub fn set_buffer<B: Buffer>(&mut self,
+        buffer: &B,
+        span: Range<usize>,
+        set: u32,
+        binding: u32) {
+        self.cmd.set_buffer(buffer, span, set, binding);   
     }
     pub fn set_vertex_buffer<B: Buffer>(&mut self, buffer: &B, binding: u32) {
         unsafe {

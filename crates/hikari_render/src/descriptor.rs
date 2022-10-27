@@ -21,6 +21,7 @@ pub struct DescriptorSetLayout {
     vk_layout: vk::DescriptorSetLayout,
     combined_image_sampler_mask: u32,
     uniform_buffer_mask: u32,
+    storage_buffer_mask: u32,
     stage_flags: [vk::ShaderStageFlags; MAX_BINDINGS_PER_SET],
     counts: [u32; MAX_COUNTS_PER_BINDING],
 }
@@ -61,8 +62,11 @@ impl DescriptorSetLayout {
     pub const fn uniform_buffer_mask(&self) -> u32 {
         self.uniform_buffer_mask
     }
+    pub const fn storage_buffer_mask(&self) -> u32 {
+        self.storage_buffer_mask
+    }
     pub const fn all_mask(&self) -> u32 {
-        self.combined_image_sampler_mask() | self.uniform_buffer_mask()
+        self.combined_image_sampler_mask() | self.uniform_buffer_mask() | self.storage_buffer_mask()
     }
 
     pub fn binding(&self, id: u32) -> Option<(vk::DescriptorType, u32, vk::ShaderStageFlags)> {
@@ -86,6 +90,14 @@ impl DescriptorSetLayout {
             ));
         }
 
+        if self.storage_buffer_mask >> id & 1 == 1 {
+            return Some((
+                vk::DescriptorType::STORAGE_BUFFER,
+                self.counts()[id as usize],
+                self.stages()[id as usize],
+            ));
+        }
+
         None
     }
 }
@@ -93,6 +105,7 @@ impl DescriptorSetLayout {
 pub struct DescriptorSetLayoutBuilder {
     combined_image_sampler_mask: u32,
     uniform_buffer_mask: u32,
+    storage_buffer_mask: u32,
     stage_flags: [vk::ShaderStageFlags; MAX_BINDINGS_PER_SET],
     counts: [u32; MAX_COUNTS_PER_BINDING],
 }
@@ -118,9 +131,10 @@ impl DescriptorSetLayoutBuilder {
             vk::DescriptorType::UNIFORM_BUFFER => {
                 self.uniform_buffer_mask |= 1 << id;
             }
-            _ => {
-                todo!()
+            vk::DescriptorType::STORAGE_BUFFER => {
+                self.storage_buffer_mask |= 1 << id;
             }
+            _=> todo!()
         }
         self.stage_flags[id as usize] |= stage_flags;
         self.counts[id as usize] = count;
@@ -141,6 +155,14 @@ impl DescriptorSetLayoutBuilder {
         if (self.uniform_buffer_mask >> id) & 1 == 1 {
             return Some((
                 vk::DescriptorType::UNIFORM_BUFFER,
+                self.counts[id as usize],
+                self.stage_flags[id as usize],
+            ));
+        }
+
+        if (self.storage_buffer_mask >> id) & 1 == 1 {
+            return Some((
+                vk::DescriptorType::STORAGE_BUFFER,
                 self.counts[id as usize],
                 self.stage_flags[id as usize],
             ));
@@ -212,6 +234,7 @@ impl DescriptorSetLayoutCache {
             vk_layout,
             combined_image_sampler_mask: layout_builder.combined_image_sampler_mask,
             uniform_buffer_mask: layout_builder.uniform_buffer_mask,
+            storage_buffer_mask: layout_builder.storage_buffer_mask,
             stage_flags: layout_builder.stage_flags,
             counts: layout_builder.counts,
         })
@@ -445,8 +468,6 @@ impl DescriptorSetAllocator {
 
         const MAX_WRITES: usize = MAX_BINDINGS_PER_SET * MAX_COUNTS_PER_BINDING;
 
-        //let mut writes = ArrayVec::<vk::WriteDescriptorSet, MAX_WRITES>::new();
-
         #[derive(Debug, Copy, Clone)]
         struct ImageWrite {
             binding: u32,
@@ -461,7 +482,8 @@ impl DescriptorSetAllocator {
             buffer_info: vk::DescriptorBufferInfo,
         }
 
-        let mut buffer_writes = ArrayVecCopy::<BufferWrite, MAX_BINDINGS_PER_SET>::new();
+        let mut ubo_writes = ArrayVecCopy::<BufferWrite, MAX_BINDINGS_PER_SET>::new();
+        let mut storage_writes = ArrayVecCopy::<BufferWrite, MAX_BINDINGS_PER_SET>::new();
 
         crate::util::for_each_bit_in_range(
             self.set_layout.combined_image_sampler_mask(),
@@ -479,12 +501,6 @@ impl DescriptorSetAllocator {
                             sampler,
                             image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
                         }];
-                        // let write = *vk::WriteDescriptorSet::builder()
-                        //     .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                        //     .dst_set(set)
-                        //     .dst_binding(binding)
-                        //     .dst_array_element(image_ix)
-                        //     .image_info(&write);
 
                         image_writes.push(ImageWrite {
                             binding,
@@ -494,7 +510,6 @@ impl DescriptorSetAllocator {
                                 .sampler(sampler)
                                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
                         });
-                        //writes.push(write);
                     },
                 );
             },
@@ -507,18 +522,27 @@ impl DescriptorSetAllocator {
                 let buffer_state = &state.bindings[binding as usize].buffer_state;
 
                 if buffer_state.buffer != vk::Buffer::null() {
-                    // let write = *vk::WriteDescriptorSet::builder()
-                    //     .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    //     .dst_set(set)
-                    //     .dst_binding(binding)
-                    //     .dst_array_element(0)
-                    //     .buffer_info(&[vk::DescriptorBufferInfo {
-                    //         buffer: buffer_state.buffer,
-                    //         offset: buffer_state.offset,
-                    //         range: buffer_state.range,
-                    //     }]);
 
-                    buffer_writes.push(BufferWrite {
+                    ubo_writes.push(BufferWrite {
+                        binding,
+                        buffer_info: *vk::DescriptorBufferInfo::builder()
+                            .buffer(buffer_state.buffer)
+                            .offset(buffer_state.offset)
+                            .range(buffer_state.range),
+                    });
+                }
+            },
+        );
+
+        crate::util::for_each_bit_in_range(
+            self.set_layout.storage_buffer_mask(),
+            0..MAX_BINDINGS_PER_SET,
+            |binding| {
+                let buffer_state = &state.bindings[binding as usize].buffer_state;
+
+                if buffer_state.buffer != vk::Buffer::null() {
+
+                    storage_writes.push(BufferWrite {
                         binding,
                         buffer_info: *vk::DescriptorBufferInfo::builder()
                             .buffer(buffer_state.buffer)
@@ -544,7 +568,7 @@ impl DescriptorSetAllocator {
             writes.push(vk_write);
         }
 
-        for write in &buffer_writes {
+        for write in &ubo_writes {
             let mut vk_write = *vk::WriteDescriptorSet::builder()
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .dst_set(set)
@@ -556,6 +580,20 @@ impl DescriptorSetAllocator {
 
             writes.push(vk_write);
         }
+
+        for write in &storage_writes {
+            let mut vk_write = *vk::WriteDescriptorSet::builder()
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .dst_set(set)
+            .dst_binding(write.binding)
+            .dst_array_element(0);
+
+            vk_write.p_buffer_info = &write.buffer_info;
+            vk_write.descriptor_count = 1;
+
+            writes.push(vk_write);
+        }
+
         unsafe {
             hikari_dev::profile_scope!("Update descriptor set");
             //println!("Writes {:#?}", writes);
