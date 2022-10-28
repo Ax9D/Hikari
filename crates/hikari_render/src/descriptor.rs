@@ -20,6 +20,7 @@ pub const MAX_COUNTS_PER_BINDING: usize = 5;
 pub struct DescriptorSetLayout {
     vk_layout: vk::DescriptorSetLayout,
     combined_image_sampler_mask: u32,
+    storage_image_mask: u32,
     uniform_buffer_mask: u32,
     storage_buffer_mask: u32,
     stage_flags: [vk::ShaderStageFlags; MAX_BINDINGS_PER_SET],
@@ -58,15 +59,20 @@ impl DescriptorSetLayout {
     pub const fn combined_image_sampler_mask(&self) -> u32 {
         self.combined_image_sampler_mask
     }
+    /// Get a reference to the descriptor set layout's storage image mask.
+    pub const fn storage_image_mask(&self) -> u32 {
+        self.storage_image_mask
+    }
     /// Get a reference to the descriptor set layout's uniform buffer mask.
     pub const fn uniform_buffer_mask(&self) -> u32 {
         self.uniform_buffer_mask
     }
+    // Get a reference to the descriptor set layout's storage buffer mask.
     pub const fn storage_buffer_mask(&self) -> u32 {
         self.storage_buffer_mask
     }
     pub const fn all_mask(&self) -> u32 {
-        self.combined_image_sampler_mask() | self.uniform_buffer_mask() | self.storage_buffer_mask()
+        self.combined_image_sampler_mask() | self.storage_image_mask() | self.uniform_buffer_mask() | self.storage_buffer_mask()
     }
 
     pub fn binding(&self, id: u32) -> Option<(vk::DescriptorType, u32, vk::ShaderStageFlags)> {
@@ -77,6 +83,14 @@ impl DescriptorSetLayout {
         if self.combined_image_sampler_mask >> id & 1 == 1 {
             return Some((
                 vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                self.counts()[id as usize],
+                self.stages()[id as usize],
+            ));
+        }
+
+        if self.storage_image_mask >> id & 1 == 1 {
+            return Some((
+                vk::DescriptorType::STORAGE_IMAGE,
                 self.counts()[id as usize],
                 self.stages()[id as usize],
             ));
@@ -104,6 +118,7 @@ impl DescriptorSetLayout {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct DescriptorSetLayoutBuilder {
     combined_image_sampler_mask: u32,
+    storage_image_mask: u32,
     uniform_buffer_mask: u32,
     storage_buffer_mask: u32,
     stage_flags: [vk::ShaderStageFlags; MAX_BINDINGS_PER_SET],
@@ -128,6 +143,9 @@ impl DescriptorSetLayoutBuilder {
             vk::DescriptorType::COMBINED_IMAGE_SAMPLER => {
                 self.combined_image_sampler_mask |= 1 << id;
             }
+            vk::DescriptorType::STORAGE_IMAGE => {
+                self.storage_image_mask |= 1 << id;
+            }
             vk::DescriptorType::UNIFORM_BUFFER => {
                 self.uniform_buffer_mask |= 1 << id;
             }
@@ -147,6 +165,14 @@ impl DescriptorSetLayoutBuilder {
         if (self.combined_image_sampler_mask >> id) & 1 == 1 {
             return Some((
                 vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                self.counts[id as usize],
+                self.stage_flags[id as usize],
+            ));
+        }
+
+        if (self.storage_image_mask >> id) & 1 == 1 {
+            return Some((
+                vk::DescriptorType::STORAGE_IMAGE,
                 self.counts[id as usize],
                 self.stage_flags[id as usize],
             ));
@@ -233,6 +259,7 @@ impl DescriptorSetLayoutCache {
         Ok(DescriptorSetLayout {
             vk_layout,
             combined_image_sampler_mask: layout_builder.combined_image_sampler_mask,
+            storage_image_mask: layout_builder.storage_image_mask,
             uniform_buffer_mask: layout_builder.uniform_buffer_mask,
             storage_buffer_mask: layout_builder.storage_buffer_mask,
             stage_flags: layout_builder.stage_flags,
@@ -354,7 +381,7 @@ impl DescriptorSetState {
         let mut state = crate::util::hasher();
 
         crate::util::for_each_bit_in_range(
-            set_layout.combined_image_sampler_mask(),
+            set_layout.combined_image_sampler_mask() | set_layout.storage_image_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
                 self.bindings[binding as usize].image_state.hash(&mut state);
@@ -362,7 +389,7 @@ impl DescriptorSetState {
         );
 
         crate::util::for_each_bit_in_range(
-            set_layout.uniform_buffer_mask(),
+            set_layout.uniform_buffer_mask() | set_layout.storage_buffer_mask(),
             0..MAX_BINDINGS_PER_SET,
             |binding| {
                 self.bindings[binding as usize]
@@ -475,6 +502,7 @@ impl DescriptorSetAllocator {
             image_info: vk::DescriptorImageInfo,
         }
         let mut image_writes = ArrayVecCopy::<ImageWrite, MAX_WRITES>::new();
+        let mut storage_image_writes = ArrayVecCopy::<ImageWrite, MAX_WRITES>::new();
 
         #[derive(Debug, Copy, Clone)]
         struct BufferWrite {
@@ -483,7 +511,7 @@ impl DescriptorSetAllocator {
         }
 
         let mut ubo_writes = ArrayVecCopy::<BufferWrite, MAX_BINDINGS_PER_SET>::new();
-        let mut storage_writes = ArrayVecCopy::<BufferWrite, MAX_BINDINGS_PER_SET>::new();
+        let mut storage_buffer_writes = ArrayVecCopy::<BufferWrite, MAX_BINDINGS_PER_SET>::new();
 
         crate::util::for_each_bit_in_range(
             self.set_layout.combined_image_sampler_mask(),
@@ -496,11 +524,6 @@ impl DescriptorSetAllocator {
                     0..MAX_COUNTS_PER_BINDING,
                     |image_ix| {
                         let (image_view, sampler) = image_state.images[image_ix as usize];
-                        let write = [vk::DescriptorImageInfo {
-                            image_view,
-                            sampler,
-                            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                        }];
 
                         image_writes.push(ImageWrite {
                             binding,
@@ -509,6 +532,31 @@ impl DescriptorSetAllocator {
                                 .image_view(image_view)
                                 .sampler(sampler)
                                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
+                        });
+                    },
+                );
+            },
+        );
+
+        crate::util::for_each_bit_in_range(
+            self.set_layout.storage_image_mask(),
+            0..MAX_BINDINGS_PER_SET,
+            |binding| {
+                let image_state = &state.bindings[binding as usize].image_state;
+
+                crate::util::for_each_bit_in_range(
+                    image_state.image_update_mask,
+                    0..MAX_COUNTS_PER_BINDING,
+                    |image_ix| {
+                        let (image_view, sampler) = image_state.images[image_ix as usize];
+
+                        storage_image_writes.push(ImageWrite {
+                            binding,
+                            ix: image_ix,
+                            image_info: *vk::DescriptorImageInfo::builder()
+                                .image_view(image_view)
+                                .sampler(sampler)
+                                .image_layout(vk::ImageLayout::GENERAL),
                         });
                     },
                 );
@@ -542,7 +590,7 @@ impl DescriptorSetAllocator {
 
                 if buffer_state.buffer != vk::Buffer::null() {
 
-                    storage_writes.push(BufferWrite {
+                    storage_buffer_writes.push(BufferWrite {
                         binding,
                         buffer_info: *vk::DescriptorBufferInfo::builder()
                             .buffer(buffer_state.buffer)
@@ -568,6 +616,19 @@ impl DescriptorSetAllocator {
             writes.push(vk_write);
         }
 
+        for write in &storage_image_writes {
+            let mut vk_write = *vk::WriteDescriptorSet::builder()
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .dst_set(set)
+                .dst_binding(write.binding)
+                .dst_array_element(write.ix);
+
+            vk_write.p_image_info = &write.image_info;
+            vk_write.descriptor_count = 1;
+
+            writes.push(vk_write);
+        }
+
         for write in &ubo_writes {
             let mut vk_write = *vk::WriteDescriptorSet::builder()
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
@@ -581,7 +642,7 @@ impl DescriptorSetAllocator {
             writes.push(vk_write);
         }
 
-        for write in &storage_writes {
+        for write in &storage_buffer_writes {
             let mut vk_write = *vk::WriteDescriptorSet::builder()
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .dst_set(set)
