@@ -1,8 +1,8 @@
-use std::any::TypeId;
+use std::any::{TypeId, Any};
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 /// An opaque handle to resources used by the Graph
-#[derive(Copy)]
 pub struct GpuHandle<T> {
     pub(crate) id: usize,
     _phantom: PhantomData<T>,
@@ -14,6 +14,9 @@ impl<T> Clone for GpuHandle<T> {
             _phantom: self._phantom,
         }
     }
+}
+impl<T> Copy for GpuHandle<T> {
+
 }
 impl<T> std::hash::Hash for GpuHandle<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -40,6 +43,7 @@ impl<T: 'static> Into<ErasedHandle> for GpuHandle<T> {
 
 use std::fmt::Debug;
 
+use crate::Buffer;
 use crate::texture::SampledImage;
 
 use super::ImageSize;
@@ -59,7 +63,7 @@ impl<T> GpuHandle<T> {
     }
 }
 
-#[derive(Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Hash, PartialEq, Eq)]
 pub struct ErasedHandle {
     pub(crate) id: usize,
     pub(crate) type_id: TypeId,
@@ -94,6 +98,9 @@ pub trait Resource: 'static {
 
 impl Resource for SampledImage {
     type Metadata = ImageSize;
+}
+impl<B: Buffer + 'static> Resource for B {
+    type Metadata = ();
 }
 
 pub struct ResourceList<T: Resource> {
@@ -159,7 +166,15 @@ impl<T: Resource> Storage<T> {
         self.inner.get(handle.id).map(|(data, _)| data)
     }
     #[inline]
+    pub fn get_from_erased(&self, handle: &ErasedHandle) -> Option<&T> {
+        self.inner.get(handle.id).map(|(data, _)| data)
+    }
+    #[inline]
     pub fn get_mut(&mut self, handle: &GpuHandle<T>) -> Option<&mut T> {
+        self.inner.get_mut(handle.id).map(|(data, _)| data)
+    }
+    #[inline]
+    pub fn get_from_erased_mut(&mut self, handle: &ErasedHandle) -> Option<&mut T> {
         self.inner.get_mut(handle.id).map(|(data, _)| data)
     }
     #[inline]
@@ -192,5 +207,60 @@ impl<T: Resource> Storage<T> {
         } else {
             None
         }
+    }
+}
+
+type GenericStorage = HashMap<TypeId, Box<dyn Any + Send + Sync + 'static>>;
+pub struct GenericBufferStorage {
+    storages: GenericStorage,
+    untyped_fetchers: HashMap<TypeId, Box<dyn for<'a> Fn(&'a GenericStorage, &ErasedHandle) -> Option<&'a dyn Buffer> + Send + Sync>>
+}
+
+impl GenericBufferStorage {
+    pub fn new() -> Self {
+        Self {
+            storages: Default::default(),
+            untyped_fetchers: Default::default()
+        }
+    }
+    pub fn add<B: Buffer + Send + Sync + 'static>(&mut self, data: B) -> GpuHandle<B> {
+        // let storage = self.storages.entry(TypeId::of::<B>()).or_insert_with(|| Box::new(Storage::<B>::new()));
+        
+        if let Some(storage) = self.storages.get_mut(&TypeId::of::<B>()) {
+            let storage = storage.downcast_mut::<Storage<B>>().unwrap();
+            return storage.add(data, ());
+        }
+
+        let mut storage = Storage::<B>::new();
+        let handle = storage.add(data, ());
+        self.storages.insert(TypeId::of::<B>(), Box::new(storage));  
+
+        self.untyped_fetchers.insert(TypeId::of::<B>(), Box::new(|storage, handle| -> Option<&dyn Buffer> {
+            let storage = storage.get(&handle.type_id).unwrap();
+            let storage = storage.downcast_ref::<Storage<B>>().unwrap();
+
+            storage.get_from_erased(handle).map(|buffer| {
+                let downcasted: &dyn Buffer = buffer;
+
+                downcasted
+            })
+        }));
+        
+        handle
+    }
+    pub fn get<B: Buffer + Send + Sync + 'static>(&self, handle: &GpuHandle<B>) -> Option<&B> {
+        let storage = self.storages.get(&TypeId::of::<B>())?;
+        let storage = storage.downcast_ref::<Storage<B>>().unwrap();
+        storage.get(handle)
+    }
+    pub fn get_mut<B: Buffer + Send + Sync + 'static>(&mut self, handle: &GpuHandle<B>) -> Option<&mut B> {
+        let storage = self.storages.get_mut(&TypeId::of::<B>())?;
+        let storage = storage.downcast_mut::<Storage<B>>().unwrap();
+        storage.get_mut(handle)
+    }
+    pub fn get_dyn_buffer(&self, handle: &ErasedHandle) -> Option<&dyn Buffer> {
+        let fetcher = self.untyped_fetchers.get(&handle.type_id)?;
+
+        (fetcher)(&self.storages, handle)
     }
 }
