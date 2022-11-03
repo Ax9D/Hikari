@@ -535,15 +535,27 @@ fn load_mesh(
         } else {
             (0..positions.len()).map(|x| x as u32).collect::<Vec<_>>()
         };
-        let vertices = pack_for_gpu(positions, normals, texcoord0, texcoord1);
-        let mut vbuffer = hikari_render::create_vertex_buffer(device, vertices.len())?;
-        vbuffer.upload(&vertices, 0)?;
+        //let vertices = pack_for_gpu(positions, normals, texcoord0, texcoord1);
+        let mut positions_buffer = hikari_render::create_vertex_buffer(device, positions.len())?;
+        positions_buffer.upload(&positions, 0)?;
+
+        let mut normals_buffer = hikari_render::create_vertex_buffer(device, normals.len())?;
+        normals_buffer.upload(&normals, 0)?;
+
+        let mut tc0_buffer = hikari_render::create_vertex_buffer(device, texcoord0.len())?;
+        tc0_buffer.upload(&texcoord0, 0)?;
+
+        let mut tc1_buffer = hikari_render::create_vertex_buffer(device, texcoord1.len())?;
+        tc1_buffer.upload(&texcoord1, 0)?;
 
         let mut ibuffer = hikari_render::create_index_buffer(device, indices.len())?;
         ibuffer.upload(&indices, 0)?;
 
         let submesh = SubMesh {
-            vertices: vbuffer,
+            position: positions_buffer,
+            normals: normals_buffer,
+            tc0: tc0_buffer,
+            tc1: tc1_buffer,
             indices: ibuffer,
             material: materials[primitive
                 .material()

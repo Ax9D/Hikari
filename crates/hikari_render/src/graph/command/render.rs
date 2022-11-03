@@ -143,6 +143,19 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
             );
         }
     }
+    pub fn set_vertex_buffers<const N: usize>(&mut self, buffers: &[&dyn Buffer; N], binding: u32) {
+        let vk_buffers = buffers.map(|buffer| buffer.buffer());
+        let offsets = [0; N];
+
+        unsafe {
+            self.cmd.device.raw().cmd_bind_vertex_buffers(
+                self.cmd.raw(),
+                binding,
+                &vk_buffers,
+                &offsets,
+            );
+        }
+    }
     pub fn set_index_buffer<B: Buffer + IndexType>(&mut self, buffer: &B) {
         unsafe {
             self.cmd.device.raw().cmd_bind_index_buffer(

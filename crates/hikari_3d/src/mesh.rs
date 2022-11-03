@@ -13,7 +13,10 @@ pub struct Vertex {
     pub tc1: Vec2,
 }
 pub struct SubMesh {
-    pub vertices: GpuBuffer<Vertex>,
+    pub position: GpuBuffer<Vec3>,
+    pub normals: GpuBuffer<Vec3>,
+    pub tc0: GpuBuffer<Vec2>,
+    pub tc1: GpuBuffer<Vec2>,
     pub indices: GpuBuffer<u32>,
     pub material: Handle<Material>,
 }
