@@ -184,13 +184,6 @@ impl<T: Copy> GpuBuffer<T> {
         len: usize,
         usage: vk::BufferUsageFlags,
     ) -> Result<Self, anyhow::Error> {
-        let upload_buffer = CpuBuffer::<T>::new(
-            device,
-            len,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            gpu_allocator::MemoryLocation::CpuToGpu,
-        )?;
-
         let create_info = vk::BufferCreateInfo::builder()
             .size((std::mem::size_of::<T>() * len) as u64)
             .usage(usage | vk::BufferUsageFlags::TRANSFER_DST)
@@ -223,6 +216,7 @@ impl<T: Copy> GpuBuffer<T> {
             inner,
             allocation,
             len,
+            _phantom: PhantomData
         })
     }
 
@@ -234,15 +228,22 @@ impl<T: Copy> GpuBuffer<T> {
     ///Copies the data from the Host to the GPU, no synchronization is performed on the GPU side, the caller must ensure the buffer is not being used on the GPU
     ///Offset is the count of T from index 0, not bytes
     pub fn upload(&mut self, data: &[T], offset_ix: usize) -> VkResult<()> {
-        self.upload_buffer.mapped_slice_mut()[0..data.len()].copy_from_slice(data);
+        let mut upload_buffer = CpuBuffer::<T>::new(
+            &self.device,
+            self.len,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            gpu_allocator::MemoryLocation::CpuToGpu,
+        ).unwrap();
+
+        upload_buffer.mapped_slice_mut()[0..data.len()].copy_from_slice(data);
 
         unsafe {
             let device = self.device.raw().clone();
             self.device.submit_commands_immediate(|cmd| {
-                let src_buffer = self.upload_buffer.buffer();
+                let src_buffer = upload_buffer.buffer();
                 let dst_buffer = self.buffer();
 
-                let src_offset = self.upload_buffer.offset(0);
+                let src_offset = upload_buffer.offset(0);
                 let dst_offset = self.offset(offset_ix);
 
                 let size = (data.len() * std::mem::size_of::<T>()) as u64;
