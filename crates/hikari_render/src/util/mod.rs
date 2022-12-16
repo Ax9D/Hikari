@@ -59,3 +59,12 @@ pub fn quick_hash(data: impl std::hash::Hash) -> u64 {
 
     state.finish()
 }
+
+pub fn n_workgroups(num_elements: u32, n_threads: u32) -> u32 {
+    let mut n_workgroups = num_elements / n_threads;
+    if num_elements % n_threads > 1 {
+        n_workgroups +=1;
+    }
+
+    n_workgroups
+}

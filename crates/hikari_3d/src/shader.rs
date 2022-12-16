@@ -97,7 +97,7 @@ impl ShaderLibrary {
     pub fn reload(&mut self) -> anyhow::Result<()> {
 
         for (name, shader) in self.shaders.iter_mut() {
-            *shader = Self::create_shader(&self.device, &self.shader_dir, name)?;
+            *shader = Self::create_shader(&self.device, &self.shader_dir, name, self.config)?;
         }
 
         Ok(())

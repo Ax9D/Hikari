@@ -1,5 +1,5 @@
 use __core::f32::consts::FRAC_PI_2;
-use hikari::{math::{Transform, Quat, EulerRot, Vec2, Vec3}, input::KeyCode};
+use hikari::{math::{Transform, Quat, Vec2, Vec3}, input::KeyCode};
 
 use crate::imgui::*;
 
@@ -16,7 +16,7 @@ pub fn manipulate(ui: &Ui, camera_state: &mut CameraState, transform: &mut Trans
     } else {
         1.0
     };
-
+    
     if ui.io().keys_down[KeyCode::A as usize] {
         transform.position += -transform.right() * speed * fast_multiplier * dt;
     } else if ui.io().keys_down[KeyCode::D as usize] {

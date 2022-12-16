@@ -488,9 +488,9 @@ fn load_mesh(
         translation: [0.0, 0.0, 0.0], rotation: Quat::IDENTITY.to_array(), scale: [1.0, 1.0, 1.0] 
     });
 
-    let (position, rotation, scale) = transform.decomposed();
+    let (positions, rotation, scale) = transform.decomposed();
     let transform = hikari_math::Transform {
-        position: Vec3::from(position),
+        position: Vec3::from(positions),
         rotation: Quat::from_array(rotation),
         scale: Vec3::from(scale)
     };

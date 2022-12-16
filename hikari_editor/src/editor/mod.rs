@@ -4,7 +4,7 @@ use self::{
     outliner::Outliner,
     project::ProjectManager,
     properties::Properties,
-    tools::Tools,
+    debugger::Debugger,
     viewport::Viewport,
 };
 use crate::{component_impls, components::EditorComponents, imgui};
@@ -23,7 +23,7 @@ pub mod meta;
 mod outliner;
 mod project;
 mod properties;
-mod tools;
+mod debugger;
 mod viewport;
 mod icons;
 mod render_settings;
@@ -63,7 +63,7 @@ pub struct Editor {
     viewport: Viewport,
     content_browser: ContentBrowser,
     logging: Logging,
-    tools: Tools,
+    debugger: Debugger,
     show_demo: bool,
     rename_state: RenameState,
     project_manager: ProjectManager,
@@ -163,7 +163,7 @@ impl Editor {
 
         let editor = Self {
             logging: Logging::new(config.log_listener),
-            tools: Tools::new(),
+            debugger: Debugger::new(),
             show_demo: false,
             content_browser: ContentBrowser::new(),
             outliner: Outliner::default(),
@@ -199,6 +199,9 @@ impl Editor {
                         ui.menu_item_config("Preferences").enabled(false).build();
                     });
                     ui.menu("Tools", || {
+                        if ui.menu_item("Debugger") {
+                            self.debugger.open();
+                        }
                         if ui.menu_item("Start Tracy") {
                             let path = std::path::Path::new("./tools/");
 
@@ -220,17 +223,21 @@ impl Editor {
                 });
             });
 
+        //Update render settings before render, so incase of a resize we don't use freed resources in the imgui pass
+        render_settings::draw(ui, self, state).unwrap();
+
         content_browser::draw(ui, self, state).unwrap();
         viewport::draw(ui, self, state).unwrap();
         outliner::draw(ui, self, state).unwrap();
         project::draw(ui, self, state).unwrap();
         properties::draw(ui, self, state).unwrap();
-        render_settings::draw(ui, self, state).unwrap();
         logging::draw(ui, self);
-
+        debugger::draw(ui, self, state).unwrap();
+        
         if self.show_demo {
             ui.show_demo_window(&mut self.show_demo);
         }
+
     }
     pub fn file_menu(&mut self, ui: &imgui::Ui, state: EngineState) -> anyhow::Result<()> {
         let mut open = false;

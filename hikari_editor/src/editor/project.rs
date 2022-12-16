@@ -234,6 +234,8 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                     }
 
                     ui.popup_modal("Open Scene")
+                    .resizable(false)
+                    .save_settings(false)
                     .collapsible(false)
                     .always_auto_resize(true)
                     .build(ui, || {

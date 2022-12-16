@@ -25,10 +25,10 @@ pub struct Viewport {
     gizmo_state: GizmoState,
     camera_state: CameraState
 }
-fn gizmo_toolbar(ui: &imgui::Ui, state: &mut GizmoState) {
+fn gizmo_toolbar(ui: &imgui::Ui, state: &mut GizmoState, editor_camera: &mut Camera) {
     let parent_pos = ui.window_pos();
     let parent_size = ui.window_size();
-    let size = [150.0, 50.0];
+    let size = [200.0, 50.0];
     let pos_offset = [15.0, -15.0];
     let pos = [parent_pos[0] + parent_size[0] - pos_offset[0] - size[0], parent_pos[1] + pos_offset[1] + size[1]];
 
@@ -86,6 +86,25 @@ fn gizmo_toolbar(ui: &imgui::Ui, state: &mut GizmoState) {
                 Mode::World => Mode::Local,
             };
         }
+        ui.same_line();
+
+        if ui.button("C") {
+            ui.open_popup("Editor Camera Settings");
+        }
+
+        ui.popup("Editor Camera Settings", || {
+            imgui::Drag::new("near").build(ui, &mut editor_camera.near);
+            imgui::Drag::new("far").build(ui, &mut editor_camera.far);
+
+        match &mut editor_camera.projection {
+            hikari::g3d::Projection::Perspective(fov) => {
+                imgui::Drag::new("fov").build(ui, fov);
+            }
+            hikari::g3d::Projection::Orthographic => todo!(),
+        }
+
+        imgui::Drag::new("exposure").build(ui, &mut editor_camera.exposure);
+        });
 
     });
 }
@@ -207,7 +226,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
             if ui.is_window_focused() {
                 camera::manipulate(ui, &mut viewport.camera_state, &mut world.get_component::<&mut Transform>(editor_camera).unwrap(), dt);
                 
-                ui.get_foreground_draw_list()
+                ui.get_window_draw_list()
                 .add_rect(viewport_min, viewport_max, imgui::ImColor32::WHITE)
                 .thickness(0.5)
                 .build();
@@ -218,8 +237,11 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
             let pbr_output = ui.get_texture_id(pbr_output);
             imgui::Image::new(pbr_output, window_size_float).build(ui);
 
+            {
             draw_dir_light(ui, &mut world, viewport_min, viewport_max);
-            gizmo_toolbar(ui, &mut viewport.gizmo_state);
+            let mut editor_camera = world.get_component::<&mut Camera>(editor_camera).unwrap();
+            gizmo_toolbar(ui, &mut viewport.gizmo_state, &mut editor_camera);
+            }
 
             if let Some(entity) = outliner.selected {
                 if let Ok(mut query) = world.query_one::<(&Camera, &mut Transform)>(editor_camera) {

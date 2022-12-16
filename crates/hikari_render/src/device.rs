@@ -741,7 +741,7 @@ bitflags::bitflags! {
 
 impl Default for Features {
     fn default() -> Self {
-        Features::SAMPLER_ANISOTROPY | Features::FILL_MODE_NON_SOLID
+        Features::SAMPLER_ANISOTROPY | Features::FILL_MODE_NON_SOLID | Features::DEPTH_CLAMP
     }
 }
 impl From<vk::PhysicalDeviceFeatures> for Features {

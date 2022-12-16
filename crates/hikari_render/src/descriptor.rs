@@ -401,6 +401,7 @@ impl DescriptorSetState {
         state.finish()
     }
     pub fn reset(&mut self) {
+        hikari_dev::profile_function!();
         self.bindings = [BindingState::default(); MAX_BINDINGS_PER_SET];
     }
 }
