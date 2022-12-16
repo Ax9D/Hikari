@@ -1,0 +1,55 @@
+#version 450 
+#extension GL_EXT_control_flow_attributes: enable
+#include <world.glsl>
+
+#define DIM 16
+#define NUM_THREADS DIM * DIM
+
+layout(local_size_x = DIM, local_size_y = DIM, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform WorldUBO {
+    World world;
+};
+
+layout(set = 0, binding = 1) uniform sampler2D srcImage;
+layout(set = 0, binding = 2, rg32f) uniform writeonly image2D dstImage;
+
+shared vec2 samples[NUM_THREADS];
+
+float linearize_Z(float depth , float zNear , float zFar) {
+    float eyeDepth = zNear * zFar / (zFar + depth * (zNear - zFar));
+
+    return (eyeDepth - zNear) / (zFar - zNear);
+}
+
+void main() {
+    float minDepth = 1.0;
+    float maxDepth = 0.0;
+    uvec2 textureSize = textureSize(srcImage, 0);
+    uvec2 samplePos = min(gl_GlobalInvocationID.xy, textureSize - 1);
+    float depth = texelFetch(srcImage, ivec2(samplePos), 0).x;
+    float linearDepth = 0.0;
+
+    if(depth < 1.0) {
+        linearDepth = clamp(linearize_Z(depth, world.cameraNear, world.cameraFar), 0.0, 1.0);
+        minDepth = min(minDepth, linearDepth);
+        maxDepth = max(maxDepth, linearDepth);
+    }
+    samples[gl_LocalInvocationIndex] = vec2(minDepth, maxDepth);
+
+    barrier();
+
+    [[unroll]]
+    for(uint s = NUM_THREADS/2; s > 0; s>>=1) {
+        if(gl_LocalInvocationIndex < s) {
+            samples[gl_LocalInvocationIndex].x = min(samples[gl_LocalInvocationIndex].x, samples[gl_LocalInvocationIndex + s].x);
+            samples[gl_LocalInvocationIndex].y = max(samples[gl_LocalInvocationIndex].y, samples[gl_LocalInvocationIndex + s].y);
+        }
+
+        barrier();
+    }
+
+    if(gl_LocalInvocationIndex == 0) {
+        imageStore(dstImage, ivec2(gl_WorkGroupID.xy), vec4(samples[0].xy, 0.0, 0.0));
+    }
+}

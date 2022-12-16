@@ -1,0 +1,42 @@
+#version 450 
+#extension GL_EXT_control_flow_attributes: enable
+#include <world.glsl>
+
+#define DIM 16
+#define NUM_THREADS DIM * DIM
+
+layout(local_size_x = DIM, local_size_y = DIM, local_size_z = 1) in;
+
+layout(set = 0, binding = 1, rg32f) uniform readonly image2D srcImage;
+layout(set = 0, binding = 2, rg32f) uniform writeonly image2D dstImage;
+
+shared vec2 samples[NUM_THREADS];
+
+void main() {
+    uvec2 textureSize = imageSize(srcImage);
+    uvec2 samplePos = min(gl_GlobalInvocationID.xy, textureSize - 1);
+    vec2 depths = imageLoad(srcImage, ivec2(samplePos)).xy;
+    float minDepth = depths.x;
+    float maxDepth = depths.y;
+
+    if(minDepth == 0.0)
+        minDepth = 1.0;
+        
+    samples[gl_LocalInvocationIndex] = vec2(minDepth, maxDepth);
+
+    barrier();
+
+    [[unroll]]
+    for(uint s = NUM_THREADS/2; s > 0; s>>=1) {
+        if(gl_LocalInvocationIndex < s) {
+            samples[gl_LocalInvocationIndex].x = min(samples[gl_LocalInvocationIndex].x, samples[gl_LocalInvocationIndex + s].x);
+            samples[gl_LocalInvocationIndex].y = max(samples[gl_LocalInvocationIndex].y, samples[gl_LocalInvocationIndex + s].y);
+        }
+
+        barrier();
+    }
+
+    if(gl_LocalInvocationIndex == 0) {
+        imageStore(dstImage, ivec2(gl_WorkGroupID.xy), vec4(samples[0].xy, 0.0, 0.0));
+    }
+}
