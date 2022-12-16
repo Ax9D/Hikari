@@ -1,15 +1,16 @@
 use std::{ops::Range, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
+use vk_sync_fork::{AccessType, ImageBarrier};
 
 use crate::{
     buffer::Buffer,
     descriptor::{DescriptorPool, DescriptorSetState, MAX_DESCRIPTOR_SETS},
     texture::SampledImage,
-    Shader,
+    Shader, util::CacheMap, barrier,
 };
 
-use self::render::PipelineLookup;
+use self::render::{PipelineStateVector};
 
 pub mod compute;
 pub mod render;
@@ -254,6 +255,49 @@ impl<'a> CommandBuffer<'a> {
             index
         );
     }
+    pub(crate) fn apply_image_barrier(&mut self, image: &SampledImage, previous_accesses: &[AccessType], next_accesses: &[AccessType], previous_layout: crate::vk_sync::ImageLayout, next_layout: crate::vk_sync::ImageLayout, range: vk::ImageSubresourceRange) {
+        let barrier = ImageBarrier {
+            previous_accesses,
+            next_accesses,
+            previous_layout,
+            next_layout,
+            discard_contents: false,
+            src_queue_family_index: self.device.unified_queue_ix,
+            dst_queue_family_index: self.device.unified_queue_ix,
+            image: image.image(),
+            range,
+        };
+
+        let (src_stage_mask, dst_stage_mask, vk::ImageMemoryBarrier {
+            src_access_mask,
+            dst_access_mask,
+            old_layout,
+            new_layout,
+            src_queue_family_index,
+            dst_queue_family_index,
+            image,
+            subresource_range,
+            ..
+        }) = vk_sync_fork::get_image_memory_barrier(&barrier);
+
+        let barrier = [*vk::ImageMemoryBarrier2KHR::builder()
+        .image(image)
+        .subresource_range(range)
+        .src_access_mask(barrier::to_sync2_access_flags(src_access_mask))
+        .dst_access_mask(barrier::to_sync2_access_flags(dst_access_mask))
+        .src_stage_mask(barrier::to_sync2_stage_flags(src_stage_mask))
+        .dst_stage_mask(barrier::to_sync2_stage_flags(dst_stage_mask))
+        .old_layout(old_layout)
+        .new_layout(new_layout)];
+
+        let dependency_info = vk::DependencyInfoKHR::builder()
+        .image_memory_barriers(&barrier)
+        .dependency_flags(vk::DependencyFlags::BY_REGION);
+
+        unsafe {
+            self.device.extensions().synchronization2.cmd_pipeline_barrier2(self.cmd, &dependency_info);
+        }
+    }
     pub(crate) fn set_buffer<B: Buffer>(
         &mut self,
         buffer: &B,
@@ -287,5 +331,84 @@ impl<'a> CommandBuffer<'a> {
                 .raw()
                 .reset_command_buffer(self.raw(), vk::CommandBufferResetFlags::empty())
         }
+    }
+}
+
+
+pub struct PipelineLookup {
+    device: Arc<crate::Device>,
+    vk_pipeline_cache: vk::PipelineCache,
+    graphics_pipelines: CacheMap<PipelineStateVector, vk::Pipeline>,
+    compute_pipelines: CacheMap<Arc<Shader>, vk::Pipeline>
+}
+
+impl PipelineLookup {
+    pub fn new(
+        device: &Arc<crate::Device>,
+        capacity: usize,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            device: device.clone(),
+            vk_pipeline_cache: device.pipeline_cache(),
+            graphics_pipelines: CacheMap::new(capacity/2),
+            compute_pipelines: CacheMap::new(capacity/2)
+        })
+    }
+    fn destroy_pipeline(device: &Arc<crate::Device>, vk_pipeline: vk::Pipeline) {
+        unsafe {
+            device.raw().destroy_pipeline(vk_pipeline, None);
+            log::debug!("Destroyed pipeline: {:?}", vk_pipeline);
+        }
+    }
+    pub fn get_vk_graphics_pipeline(
+        &mut self,
+        pipeline_state_vector: &PipelineStateVector,
+        renderpass: vk::RenderPass,
+        n_color_attachments: usize,
+    ) -> VkResult<vk::Pipeline> {
+        let device = &self.device;
+        let pipeline = self.graphics_pipelines.get(pipeline_state_vector, |psv| unsafe {
+            Ok(psv.pipeline_state.create_pipeline(
+                device,
+                psv.shader.as_ref().expect("Shader must not be None"),
+                renderpass,
+                n_color_attachments,
+            ))
+        })?;
+
+        Ok(*pipeline)
+    }
+    pub fn get_vk_compute_pipeline(&mut self, shader: &Arc<crate::Shader>) -> VkResult<vk::Pipeline> {
+        let pipeline = self.compute_pipelines.get(shader, |shader| unsafe {
+                let create_info = vk::ComputePipelineCreateInfo::builder()
+                .stage(shader.vk_stages()[0])
+                .layout(shader.pipeline_layout().raw())
+                .build();
+            unsafe {
+            let pipelines = self.device.raw().create_compute_pipelines(self.vk_pipeline_cache, &[create_info], None).unwrap();
+            Ok(pipelines[0])
+            }
+        })?;
+
+        Ok(*pipeline)
+    }
+
+    //Call once per frame
+    pub fn new_frame(&mut self) {
+        let device = &self.device;
+        self.graphics_pipelines
+            .unused()
+            .drain(..)
+            .for_each(|pipeline| Self::destroy_pipeline(device, pipeline));
+        self.compute_pipelines
+            .unused()
+            .drain(..)
+            .for_each(|pipeline| Self::destroy_pipeline(device, pipeline));
+    }
+}
+
+impl Drop for PipelineLookup {
+    fn drop(&mut self) {
+        self.new_frame();
     }
 }
