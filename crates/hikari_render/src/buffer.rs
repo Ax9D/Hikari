@@ -54,6 +54,84 @@ pub fn create_index_buffer(
     GpuBuffer::new(device, len, vk::BufferUsageFlags::INDEX_BUFFER)
 }
 
+// pub struct ByteBuffer {
+//     device: Arc<crate::Device>,
+//     inner: vk::Buffer,
+//     allocation: Allocation,
+//     len: usize,
+// }
+// impl ByteBuffer {
+//     pub fn new(device: &Arc<crate::Device>,
+//         name: &str,
+//         len: usize,
+//         usage: vk::BufferUsageFlags,
+//         location: gpu_allocator::MemoryLocation) -> Result<Self, anyhow::Error> {
+//         let create_info = vk::BufferCreateInfo::builder()
+//             .size((std::mem::size_of::<u8>() * len) as u64)
+//             .usage(usage | vk::BufferUsageFlags::TRANSFER_DST)
+//             .queue_family_indices(&[0])
+//             .sharing_mode(vk::SharingMode::EXCLUSIVE);
+    
+//         let inner;
+//         let requirements;
+    
+//         unsafe {
+//             inner = device.raw().create_buffer(&create_info, None)?;
+//             requirements = device.raw().get_buffer_memory_requirements(inner);
+//         }
+    
+//         let allocation = device.allocate_memory(AllocationCreateDesc {
+//             name,
+//             requirements,
+//             location,
+//             linear: true,
+//         })?;
+
+//         Ok(Self {
+//             device: device.clone(),
+//             inner,
+//             allocation,
+//             len
+//         })
+//     }
+//     pub fn raw(&self) -> vk::Buffer {
+//         self.inner
+//     }
+//     pub fn data_ptr(&self) -> Option<NonNull<std::ffi::c_void>> {
+//         self.allocation.mapped_ptr()
+//     }
+//     pub fn capacity(&self) -> usize {
+//         self.len
+//     }
+// }
+// impl Drop for ByteBuffer {
+//     fn drop(&mut self) {
+//         unsafe {
+//             self.device.raw().destroy_buffer(self.inner, None);
+//             self.device.free_memory(self.allocation.clone()).unwrap();
+//         }
+//     }
+// }
+
+// impl Buffer for ByteBuffer {
+//     #[inline]
+//     fn buffer(&self) -> vk::Buffer {
+//         self.inner
+//     }
+//     #[inline]
+//     fn byte_step(&self) -> vk::DeviceSize {
+//         std::mem::size_of::<u8>() as u64
+//     }
+//     #[inline]
+//     fn size(&self) -> vk::DeviceSize {
+//         self.offset(self.capacity())
+//     }
+
+//     fn len(&self) -> usize {
+//        self.capacity()
+//     }
+// }
+
 pub struct CpuBuffer<T> {
     device: Arc<crate::Device>,
     inner: vk::Buffer,
@@ -307,7 +385,7 @@ impl<T: Copy> UniformBuffer<T> {
     pub fn new(
         device: &Arc<crate::Device>,
         len: usize,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Self> {
         let inner = [
             CpuBuffer::new(
                 device,
@@ -334,5 +412,23 @@ impl<T: Copy> UniformBuffer<T> {
     }
     pub fn new_frame(&mut self) {
         self.frame = self.frame.wrapping_add(1) % 2;
+    }
+}
+
+impl<T: Copy> Buffer for UniformBuffer<T> {
+    fn buffer(&self) -> vk::Buffer {
+        self.inner[self.frame].buffer()
+    }
+
+    fn byte_step(&self) -> vk::DeviceSize {
+        self.inner[0].byte_step()
+    }
+
+    fn size(&self) -> vk::DeviceSize {
+        self.inner[0].size()
+    }
+
+    fn len(&self) -> usize {
+        self.inner[0].capacity()
     }
 }

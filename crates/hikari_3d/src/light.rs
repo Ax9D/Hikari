@@ -17,24 +17,25 @@ impl Default for Light {
             color: Vec4::ONE,
             intensity: 1.0,
             size: 1.0,
-            shadow: Some(ShadowInfo::default()),
+            shadow: ShadowInfo::default(),
             kind: LightKind::Directional,
         }
     }
 }
 #[derive(Clone, Copy, Debug)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
 pub struct ShadowInfo {
-    pub constant_bias: f32,
+    pub enabled: bool,
+    pub slope_scaled_bias: f32,
     pub normal_bias: f32,
     pub cascade_split_lambda: f32,
     pub fade: f32,
-    pub max_shadow_distance: f32
+    pub max_shadow_distance: f32,
+    pub cull_front_face: bool
 }
 impl Default for ShadowInfo {
     fn default() -> Self {
-        Self { constant_bias: 0.0005, normal_bias: 1.0, cascade_split_lambda: 0.95, fade: 1.0, max_shadow_distance: 1000.0 }
+        Self { enabled: true, slope_scaled_bias: 5.0, normal_bias: 1.0, cascade_split_lambda: 0.95, fade: 1.0, max_shadow_distance: 1000.0, cull_front_face: false }
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
