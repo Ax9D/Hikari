@@ -43,6 +43,11 @@ impl Game {
     pub fn get_mut<S: State>(&self) -> RefMut<S> {
         self.state.get_mut()
     }
+    pub fn create_init_stage(&mut self, name: &str) -> &mut Self {
+        self.init_schedule.create_stage(name);
+
+        self
+    }
     pub fn create_stage(&mut self, name: &str) -> &mut Self {
         self.run_schedule.create_stage(name);
 
