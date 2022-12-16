@@ -1,6 +1,6 @@
 #version 450 core
 
-layout(location = 0) in vec2 tex_coord;
+layout(location = 0) in vec2 texCoord;
 
 layout(binding = 0) uniform sampler2D  color;
 
@@ -22,22 +22,22 @@ float rgb2luma(vec3 rgb){
 	return sqrt(dot(rgb, vec3(0.299, 0.587, 0.114)));
 }
 
-vec4 fxaa(){
+vec3 fxaa(){
     float screen_width = args.resolution.x;
     float screen_height = args.resolution.y;
 
     vec2 inverseScreenSize = 1.0/vec2(screen_width,screen_height);
 
-    vec3 colorCenter = texture(color,tex_coord).rgb;
+    vec3 colorCenter = texture(color,texCoord).rgb;
 	
 	// Luma at the current fragment
 	float lumaCenter = rgb2luma(colorCenter);
 	
 	// Luma at the four direct neighbours of the current fragment.
-	float lumaDown 	= rgb2luma(textureLodOffset(color,tex_coord, 0.0,ivec2( 0,-1)).rgb);
-	float lumaUp 	= rgb2luma(textureLodOffset(color,tex_coord, 0.0,ivec2( 0, 1)).rgb);
-	float lumaLeft 	= rgb2luma(textureLodOffset(color,tex_coord, 0.0,ivec2(-1, 0)).rgb);
-	float lumaRight = rgb2luma(textureLodOffset(color,tex_coord, 0.0,ivec2( 1, 0)).rgb);
+	float lumaDown 	= rgb2luma(textureLodOffset(color,texCoord, 0.0,ivec2( 0,-1)).rgb);
+	float lumaUp 	= rgb2luma(textureLodOffset(color,texCoord, 0.0,ivec2( 0, 1)).rgb);
+	float lumaLeft 	= rgb2luma(textureLodOffset(color,texCoord, 0.0,ivec2(-1, 0)).rgb);
+	float lumaRight = rgb2luma(textureLodOffset(color,texCoord, 0.0,ivec2( 1, 0)).rgb);
 	
 	// Find the maximum and minimum luma around the current fragment.
 	float lumaMin = min(lumaCenter,min(min(lumaDown,lumaUp),min(lumaLeft,lumaRight)));
@@ -48,14 +48,14 @@ vec4 fxaa(){
 	
 	// If the luma variation is lower that a threshold (or if we are in a really dark area), we are not on an edge, don't perform any AA.
 	if(lumaRange < max(EDGE_THRESHOLD_MIN,lumaMax*EDGE_THRESHOLD_MAX)){
-		return vec4(colorCenter,1.0);
+		return colorCenter;
 	}
 	
 	// Query the 4 remaining corners lumas.
-	float lumaDownLeft 	= rgb2luma(textureLodOffset(color,tex_coord, 0.0,ivec2(-1,-1)).rgb);
-	float lumaUpRight 	= rgb2luma(textureLodOffset(color,tex_coord, 0.0,ivec2( 1, 1)).rgb);
-	float lumaUpLeft 	= rgb2luma(textureLodOffset(color,tex_coord, 0.0,ivec2(-1, 1)).rgb);
-	float lumaDownRight = rgb2luma(textureLodOffset(color,tex_coord, 0.0,ivec2( 1,-1)).rgb);
+	float lumaDownLeft 	= rgb2luma(textureLodOffset(color,texCoord, 0.0,ivec2(-1,-1)).rgb);
+	float lumaUpRight 	= rgb2luma(textureLodOffset(color,texCoord, 0.0,ivec2( 1, 1)).rgb);
+	float lumaUpLeft 	= rgb2luma(textureLodOffset(color,texCoord, 0.0,ivec2(-1, 1)).rgb);
+	float lumaDownRight = rgb2luma(textureLodOffset(color,texCoord, 0.0,ivec2( 1,-1)).rgb);
 	
 	// Combine the four edges lumas (using intermediary variables for future computations with the same values).
 	float lumaDownUp = lumaDown + lumaUp;
@@ -101,7 +101,7 @@ vec4 fxaa(){
 	}
 	
 	// Shift UV in the correct direction by half a pixel.
-	vec2 currentUv = tex_coord;
+	vec2 currentUv = texCoord;
 	if(isHorizontal){
 		currentUv.y += stepLength * 0.5;
 	} else {
@@ -167,8 +167,8 @@ vec4 fxaa(){
 	}
 	
 	// Compute the distances to each side edge of the edge (!).
-	float distance1 = isHorizontal ? (tex_coord.x - uv1.x) : (tex_coord.y - uv1.y);
-	float distance2 = isHorizontal ? (uv2.x - tex_coord.x) : (uv2.y - tex_coord.y);
+	float distance1 = isHorizontal ? (texCoord.x - uv1.x) : (texCoord.y - uv1.y);
+	float distance2 = isHorizontal ? (uv2.x - texCoord.x) : (uv2.y - texCoord.y);
 	
 	// In which direction is the side of the edge closer ?
 	bool isDirection1 = distance1 < distance2;
@@ -206,7 +206,7 @@ vec4 fxaa(){
 	finalOffset = max(finalOffset,subPixelOffsetFinal);
 	
 	// Compute the final UV coordinates.
-	vec2 finalUv = tex_coord;
+	vec2 finalUv = texCoord;
 	if(isHorizontal){
 		finalUv.y += finalOffset * stepLength;
 	} else {
@@ -216,12 +216,37 @@ vec4 fxaa(){
 	// Read the color at the new UV coordinates, and use it.
 	vec3 finalColor = textureLod(color,finalUv, 0.0).rgb;
 
-    return vec4(finalColor, 1.0);
+    return finalColor;
 }
 
-void main() {    
+vec3 oil(vec3 color) {
+    // Set the input color of the fragment to the base color of the object
+    vec2 resolution = args.resolution;
+    vec4 fragColor = vec4(color, 1.0);
+
+    // Calculate the distance of the current fragment from the center of the screen
+    vec2 screenCenter = vec2(0.5, 0.5);
+    vec2 fragCoord = gl_FragCoord.xy / resolution;
+    float distFromCenter = distance(fragCoord, screenCenter);
+
+    // Calculate the size of the brush stroke based on the distance from the center
+    float brushSize = smoothstep(0.0025, 0.0045, distFromCenter);
+
+    // Use the brush size to create a dither pattern
+    float dither = (brushSize * 12.0) - floor(brushSize * 12.0);
+
+    // Use the dither pattern to create a color gradient
+    vec3 gradient = mix(vec3(0.4, 0.3, 0.2), vec3(0.9, 0.8, 0.7), dither);
+
+    // Set the output color to the gradient multiplied by the base color
+    fragColor = vec4(gradient * color, 1.0);
+
+    return fragColor.xyz;
+}
+
+void main() {  
     if(args.enabled == 1)
-        outColor = fxaa();
+        outColor = vec4(fxaa(), 1.0);
     else   
-        outColor = texture(color, tex_coord);
+        outColor = vec4(texture(color, texCoord).rgb, 1.0);
 }

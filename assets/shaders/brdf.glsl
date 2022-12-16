@@ -1,3 +1,6 @@
+#ifndef BRDF_GLSL
+#define BRDF_GLSL
+
 const float PI = 3.14159265359;
 
 struct PBRInfo
@@ -149,3 +152,5 @@ void BRDF(Surface surface, LightInfo lightInfo, PBRMaterial material, out BRDFOu
     ret.brdf = brdf * lightInfo.color * lightInfo.intensity;
     ret.ambient = (diffuseAmbient + specularAmbient) * ambientFactor;
 }
+
+#endif

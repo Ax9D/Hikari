@@ -1,3 +1,8 @@
+#ifndef PCSS_GLSL
+#define PCSS_GLSL
+
+#include <shadow.glsl>
+
 const vec2 Poisson[32] = vec2[](
     vec2(-0.975402, -0.0711386),
     vec2(-0.920347, -0.41142),
@@ -45,7 +50,7 @@ float projectToLightUV(float z, float near, float penumbraRadius, float lightSiz
 float zClipToEye(float z, float near, float far) {
     return near + (far - near) * z;
 }
-void findBlocker(out float avgBlockerDepth, out uint numBlockers, sampler2D shadowMap, vec3 shadowCoord, float searchRegionRadiusUV) {
+void findBlocker(out float avgBlockerDepth, out uint numBlockers, sampler2D shadowMap, ShadowInfo shadowInfo, float searchRegionRadiusUV) {
     avgBlockerDepth = 0.0;
     numBlockers = 0;
 
@@ -53,9 +58,9 @@ void findBlocker(out float avgBlockerDepth, out uint numBlockers, sampler2D shad
     for(uint i = 0; i < blockerSearchSamples; i++) {
         vec2 offset = Poisson[i] * searchRegionRadiusUV;
 
-        float blockerDepth = getBlockerDepth(shadowMap, shadowCoord, offset);
+        float blockerDepth = getBlockerDepth(shadowMap, shadowInfo, offset);
 
-        if(shadowCoord.z < blockerDepth) {
+        if(shadowInfo.shadowCoord.z < blockerDepth) {
             avgBlockerDepth += blockerDepth;
             numBlockers++;
         }
@@ -63,23 +68,23 @@ void findBlocker(out float avgBlockerDepth, out uint numBlockers, sampler2D shad
 
     avgBlockerDepth /= numBlockers;
 }
-float PCFPoissonFilter(sampler2D shadowMap, vec3 shadowCoord, float radius) {
+float PCFPoissonFilter(sampler2D shadowMap, ShadowInfo shadowInfo, float radius) {
     uint PCFSamples = 32;
     float sum = 0.0;
     for(uint i = 0; i < PCFSamples; i++) {
         vec2 offset = Poisson[i] * radius;
-        sum+= getShadow(shadowMap, shadowCoord, offset);
+        sum+= getShadow(shadowMap, shadowInfo, offset);
     }
 
     return sum / PCFSamples;
 }
-float PCSSInner(sampler2D shadowMap, vec3 shadowCoord, float lightViewZ, float near, float far) {
-    float lightSizeUV = 0.4;
+float PCSSInner(sampler2D shadowMap, ShadowInfo shadowInfo, float lightViewZ, float near, float far) {
+    float lightSizeUV = 0.7;
     float avgBlockerDepth = 0.0;
     uint numBlockers = 0;
 
     float searchRadiusUV = searchRegionRadiusUV(lightViewZ, near, lightSizeUV);
-    findBlocker(avgBlockerDepth, numBlockers, shadowMap, shadowCoord, searchRadiusUV);
+    findBlocker(avgBlockerDepth, numBlockers, shadowMap, shadowInfo, searchRadiusUV);
 
     if(numBlockers == 0) {
         return 1.0;
@@ -89,11 +94,13 @@ float PCSSInner(sampler2D shadowMap, vec3 shadowCoord, float lightViewZ, float n
     float penumbraRadius = penumbraRadiusUV(lightViewZ, avgBlockerDepthEye);
     float filterRadius = projectToLightUV(lightViewZ, near, penumbraRadius, lightSizeUV);
     
-    return PCFPoissonFilter(shadowMap, shadowCoord, filterRadius);
+    return PCFPoissonFilter(shadowMap, shadowInfo, filterRadius);
 }
-float PCSS(sampler2D shadowMap, vec3 shadowCoord, vec3 worldPosition, mat4 lightView, float near, float far) {
-    vec4 lightViewPos = lightView * vec4(worldPosition, 1.0);
+float PCSS(sampler2D shadowMap, Surface surface, ShadowInfo shadowInfo, mat4 lightView, float near, float far) {
+    vec4 lightViewPos = lightView * vec4(surface.worldPosition, 1.0);
     //lightViewPos.xyz /= lightViewPos.w;
 
-    return PCSSInner(shadowMap, shadowCoord, lightViewPos.z, near + 0.1, far);
+    return PCSSInner(shadowMap, shadowInfo, lightViewPos.z, near + 0.1, far);
 }
+
+#endif

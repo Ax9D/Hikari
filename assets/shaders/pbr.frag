@@ -1,6 +1,5 @@
 #version 450
 
-#include <light.glsl>
 #include <surface.glsl>
 #include <world.glsl>
 #include <material.glsl>
@@ -16,7 +15,7 @@ layout(location = 4) in vec3 viewPosition;
 
 layout(location = 0) out vec4 outColor;
 
-layout(set = 0, binding = 1) uniform sampler2D shadowMap[MAX_CASCADES];
+layout(set = 0, binding = 1) uniform sampler2D shadowMap;
 
 layout(set = 1, binding = 0) uniform sampler2D albedoMap;
 layout(set = 1, binding = 1) uniform sampler2D roughnessMap;
@@ -26,7 +25,9 @@ layout(set = 1, binding = 3) uniform sampler2D normalMap;
 layout(std140, set = 0, binding = 0) uniform WorldUBO {
     World world;
 };
-
+layout(std140, set = 0, binding = 2) readonly buffer cascadeRenderInfoSSBO {
+    CascadeRenderInfo cascades[];
+};
 struct MaterialInputs {
     vec4 albedo;
     float roughness;
@@ -90,7 +91,6 @@ vec3 tonemapACES(vec3 color)
         outcol = outcol * (1.0f / aces(vec3(11.2f)));
         return pow(outcol, vec3(1.0f / gamma));
 }
-
 mat3 cotangentFrame( vec3 N, vec3 p, vec2 uv )
 {
     // get edge vectors of the pixel triangle
@@ -176,7 +176,7 @@ PBRMaterial getMaterial() {
         albedo *= texture(albedoMap, material.albedoUVSet == 0? tc0Fs: tc1Fs);
     }
 
-    //albedo = SRGBtoLINEAR(albedo);
+    albedo = SRGBtoLINEAR(albedo);
     float perceptualRoughness = material.roughness;
     float metallic = material.metallic;
 
@@ -212,39 +212,23 @@ PBRMaterial getMaterial() {
 
 //     return mix(mixA, mixB, fracPart.x);
 // }
-
-float PCF(sampler2D shadowMap, vec3 shadowCoord) {
-    ivec2 texDim = textureSize(shadowMap, 0).xy;
-
-    float dx = 1.0 / float(texDim.x);
-    float dy = 1.0 / float(texDim.y);
-
-    float shadowFactor = 0.0;
-    int count = 0;
-    int range = 2;
-
-    for(int x = -range; x <= range; x++) {
-        for(int y = -range; y <= range; y++) {
-            shadowFactor += getShadow(shadowMap, shadowCoord, vec2(dx * x, dy * y));
-            count++;
-        }
-    }
-
-    return shadowFactor / count;
-}
-
 float getDirectionalShadow(Surface surface, LightInfo lightInfo, uint cascadeIndex) {
+    ShadowCascade cascade = world.dirLight.cascades[cascadeIndex];
+    ShadowInfo shadowInfo = getShadowInfo(surface, 
+                                lightInfo, 
+                                cascades[cascadeIndex].viewProj, 
+                                cascade.atlasUVOffset, 
+                                cascade.atlasSizeRatio, 
+                                cascade.mapTexelSize,
+                                world.dirLight.normalBias);
     float intensity = clamp((1.0 - (surface.viewPosition.z / world.dirLight.maxShadowDistance)) / world.dirLight.shadowFade, 0.0, 1.0);
-
-    if(intensity == 0.0) {
-        return 1.0;
+    
+    if(intensity <= 0.0) {
+        return 1;
     }
 
-    ivec2 texelSize = textureSize(shadowMap[cascadeIndex], 0).xy;
-    ShadowCascade cascade = world.dirLight.cascades[cascadeIndex];
-    ShadowInfo shadowInfo = getShadowInfo(surface, lightInfo, cascade.viewProj, 1.0 / texelSize.x, world.dirLight.constantBiasFactor, world.dirLight.normalBiasFactor);
-    float shadow = PCF(shadowMap[cascadeIndex], shadowInfo.shadowCoord);
-    //float shadow = PCSS(shadowMap[cascadeIndex], shadowInfo.shadowCoord, surface.worldPosition, cascade.view, cascade.near, cascade.far);
+    float shadow = PCF(shadowMap, shadowInfo);
+    //float shadow = PCSS(shadowMap, surface, shadowInfo, cascades[cascadeIndex].view, world.cameraNear, world.cameraFar);
 
     return mix(1.0, shadow, intensity);
 }
@@ -257,28 +241,27 @@ void main() {
     BRDF(surface, dirLightInfo, pbrMaterial, brdfOutput);
 
     uint cascadeIndex = 0;
-	for(uint i = 0; i < MAX_CASCADES - 1; ++i) {
-		if(viewPosition.z < world.dirLight.cascades[i].split) {	
+	for(uint i = 0; i < N_CASCADES - 1; ++i) {
+		if(viewPosition.z < cascades[i].split) {	
 			cascadeIndex = i + 1;
 		}
 	}
 
     float shadow = getDirectionalShadow(surface, dirLightInfo, cascadeIndex);
     vec3 color = brdfOutput.brdf * shadow + brdfOutput.ambient;
-    //outColor = vec4(material.albedo.rgb * texture(albedoMap, material.albedoUVSet == 0? tc0Fs: tc1Fs).rgb * directionalShadow(), 1.0);
 
     if(world.showCascades == 1) {
         switch(cascadeIndex) {
-        		case 0 : 
+        		case 0: 
         			color = length(color) * vec3(1.0f, 0.25f, 0.25f);
         			break;
-        		case 1 : 
+        		case 1: 
         			color = length(color) * vec3(0.25f, 1.0f, 0.25f);
         			break;
-        		case 2 : 
+        		case 2: 
         			color = length(color) * vec3(0.25f, 0.25f, 1.0f);
         			break;
-        		case 3 : 
+        		case 3: 
         			color = length(color) * vec3(1.0f, 1.0f, 0.25f);
         			break;
         }

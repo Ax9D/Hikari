@@ -1,6 +1,5 @@
 #version 450 
 
-#include <light.glsl>
 #include <world.glsl>
 
 layout(location = 0) in vec3 position;
