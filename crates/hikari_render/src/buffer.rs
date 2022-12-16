@@ -6,6 +6,7 @@ use std::{marker::PhantomData, sync::Arc};
 pub trait Buffer {
     fn buffer(&self) -> vk::Buffer;
     fn byte_step(&self) -> vk::DeviceSize;
+    fn len(&self) -> usize;
     fn size(&self) -> vk::DeviceSize;
 
     fn offset(&self, ix: usize) -> vk::DeviceSize {
@@ -163,13 +164,18 @@ impl<T: Copy> Buffer for CpuBuffer<T> {
     fn size(&self) -> vk::DeviceSize {
         self.offset(self.capacity())
     }
+
+    fn len(&self) -> usize {
+        self.capacity()
+    }
 }
 
 pub struct GpuBuffer<T> {
     device: Arc<crate::Device>,
     inner: vk::Buffer,
     allocation: Allocation,
-    upload_buffer: CpuBuffer<T>,
+    len: usize,
+    _phantom: PhantomData<T>,
 }
 
 impl<T: Copy> GpuBuffer<T> {
@@ -216,13 +222,13 @@ impl<T: Copy> GpuBuffer<T> {
             device: device.clone(),
             inner,
             allocation,
-            upload_buffer,
+            len,
         })
     }
 
     #[inline]
     pub fn capacity(&self) -> usize {
-        self.upload_buffer.capacity()
+        self.len
     }
 
     ///Copies the data from the Host to the GPU, no synchronization is performed on the GPU side, the caller must ensure the buffer is not being used on the GPU
@@ -284,6 +290,10 @@ impl<T: Copy> Buffer for GpuBuffer<T> {
     #[inline]
     fn size(&self) -> vk::DeviceSize {
         self.offset(self.capacity())
+    }
+
+    fn len(&self) -> usize {
+        self.capacity()
     }
 }
 
