@@ -25,6 +25,9 @@ mod components;
 mod editor;
 mod widgets;
 
+//#[global_allocator]
+//static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+
 const EDITOR_STAGE: &str = "EDITOR_STAGE";
 struct EditorPlugin {
     log_listener: editor::logging::LogListener,
@@ -41,13 +44,16 @@ fn prepare_graph(
     let pass = Renderpass::<()>::new(
         "Imgui",
         ImageSize::default_xy(),
-        move |cmd: &mut RenderpassCommands, ()| {
-            renderer
-                .lock()
-                .render_from_shared(cmd.raw(), &draw_data)
-                .unwrap();
-        },
     )
+    .cmd(move |cmd: &mut RenderpassCommands, _, record_info, ()| {
+        cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
+        cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+        
+        renderer
+            .lock()
+            .render_from_shared(cmd.raw(), &draw_data)
+            .unwrap();
+    })
     .present();
 
     let swapchain = gfx.swapchain().unwrap().lock();
@@ -151,7 +157,7 @@ impl Plugin for EditorPlugin {
                 .get_mut::<imgui_support::Backend>()
                 .unwrap()
                 .handle_event(window, event);
-
+            
             match event {
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::Resized(size) => {
@@ -190,9 +196,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     game.add_plugin(CorePlugin);
     game.add_plugin(InputPlugin);
 
+    let enable_validation = std::env::var("ENABLE_VALIDATION").is_ok();
+
     game.add_plugin(GfxPlugin {
         config: GfxConfig {
-            debug: false,
+            debug: enable_validation,
             features: Features::default(),
             vsync: true,
         },
