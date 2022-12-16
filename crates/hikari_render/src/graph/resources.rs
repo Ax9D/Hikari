@@ -111,7 +111,7 @@ impl GraphResources {
         device: &Arc<crate::Device>,
         new_width: u32,
         new_height: u32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<()> {
         for handle in self.img_handles.values() {
             let (image, size) = self.images.get_with_metadata_mut(handle).unwrap();
             let config = *image.config();

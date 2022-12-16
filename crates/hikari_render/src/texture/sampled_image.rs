@@ -234,14 +234,13 @@ impl SampledImage {
         height: u32,
         depth: u32,
         vkconfig: &ImageConfig,
-    ) -> Result<
+    ) -> anyhow::Result<
         (
             vk::Image,
             gpu_allocator::vulkan::Allocation,
             vk::Sampler,
             Vec<vk::ImageView>,
-        ),
-        anyhow::Error,
+        )
     > {
         let image_create_info = vk::ImageCreateInfo::builder()
             .image_type(vkconfig.image_type)
@@ -270,6 +269,31 @@ impl SampledImage {
             gpu_allocator::MemoryLocation::GpuOnly,
         )?;
 
+        if !(vkconfig.initial_layout == vk::ImageLayout::UNDEFINED || vkconfig.initial_layout == vk::ImageLayout::PREINITIALIZED) {
+            let device_raw = device.raw();
+            unsafe { 
+                device.submit_commands_immediate(|cmd| {
+                crate::barrier::image_memory_barrier(device_raw, cmd, image, 
+                    vk::ImageSubresourceRange {
+                        aspect_mask: format_to_aspect_flags(vkconfig.format),
+                        base_mip_level: 0,
+                        level_count: vkconfig.mip_levels,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    }
+                    ,
+                    vk::AccessFlags::empty(), 
+                    vk::AccessFlags::empty(), 
+                    vk::ImageLayout::UNDEFINED, 
+                    vkconfig.initial_layout,
+                     vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                    vk::PipelineStageFlags::TOP_OF_PIPE);
+
+                    Ok(())
+            })?;
+            }
+        }
+
         let sampler = Self::create_sampler(device, vkconfig)?;
         let image_views = Self::create_views(device, image, vkconfig)?;
 
@@ -282,7 +306,7 @@ impl SampledImage {
         height: u32,
         depth: u32,
         vkconfig: ImageConfig,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Self> {
         let (image, allocation, sampler, image_views) =
             Self::create_image_with_sampler_and_views(device, width, height, depth, &vkconfig)?;
 
@@ -319,7 +343,7 @@ impl SampledImage {
         height: u32,
         depth: u32,
         mut vkconfig: ImageConfig,
-    ) -> Result<Self, anyhow::Error> {
+    ) -> anyhow::Result<Self> {
         vkconfig.usage |= vk::ImageUsageFlags::TRANSFER_DST;
 
         if vkconfig.host_readable {
@@ -612,10 +636,9 @@ impl SampledImage {
     /// Copies the image from the GPU to the Host; the read is not synchronized on the GPU, the caller must ensure the image is not being used on the GPU
     /// Returns a slice to the downloaded data if the image was created with `host_readable` set to `true` in the `ImageConfig`
     /// Otherwise returns `None`
-    pub fn download(&self, mip_level: u32) -> Option<&[u8]> {
+    pub fn download(&self, mip_level: u32, layout: vk::ImageLayout) -> Option<&[u8]> {
         if let Some(ref download_buffer) = self.download_buffer {
             assert!(mip_level > 0);
-            let now = std::time::Instant::now();
 
             unsafe {
                 self.device
@@ -666,11 +689,23 @@ impl SampledImage {
                             &regions,
                         );
 
+                        crate::barrier::image_memory_barrier(
+                            device,
+                            cmd,
+                            self.image,
+                            subresource_range,
+                            vk::AccessFlags::TRANSFER_READ,
+                            vk::AccessFlags::empty(),
+                            vk::ImageLayout::UNDEFINED,
+                            layout,
+                            vk::PipelineStageFlags::TRANSFER,
+                            vk::PipelineStageFlags::TRANSFER,
+                        );
+
                         Ok(())
                     })
                     .ok()?
             }
-            println!("{:?}", now.elapsed());
             let slice = download_buffer.mapped_slice();
             return Some(slice);
         }

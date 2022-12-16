@@ -276,7 +276,7 @@ impl<T: Args> Graph<T> {
         &mut self,
         new_width: u32,
         new_height: u32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<()> {
         assert!(!(new_width == 0 || new_height == 0));
 
         self.prepare_exit();
