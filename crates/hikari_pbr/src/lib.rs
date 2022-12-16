@@ -21,20 +21,43 @@ pub use world_renderer::WorldRenderer;
 
 type Args = (World, RenderResources, ShaderLibrary, AssetStorage);
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct DebugSettings {
     pub show_shadow_cascades: bool
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ShadowResolution {
+    D256 = 0,
+    D512,
+    D1024,
+    D2048,
+    D4096
+}
+
+impl ShadowResolution {
+    pub fn size(self) -> u32 {
+        match self {
+            ShadowResolution::D256 => 256,
+            ShadowResolution::D512 => 512,
+            ShadowResolution::D1024 => 1024,
+            ShadowResolution::D2048 => 2048,
+            ShadowResolution::D4096 => 4096,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct Settings {
     pub fxaa: bool,
+    pub vsync: bool,
+    pub directional_shadow_map_resolution: ShadowResolution,
     pub debug: DebugSettings
 }
 
 impl Settings {
     fn new() -> Self {
-        Self { fxaa: true, debug: DebugSettings::default() }
+        Self { fxaa: true, vsync: true, directional_shadow_map_resolution: ShadowResolution::D2048, debug: DebugSettings::default() }
     }
 }
 pub struct PBRPlugin {
@@ -76,7 +99,7 @@ impl Plugin for PBRPlugin {
                             state
                                 .get_mut::<WorldRenderer>()
                                 .unwrap()
-                                .resize(size.width, size.height)
+                                .resize_and_set_viewport(size.width as f32, size.height as f32)
                                 .expect("Failed to resize graph");
                         }
                     }

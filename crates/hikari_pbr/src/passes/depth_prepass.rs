@@ -23,9 +23,6 @@ pub fn build_pass(
         .buffer(
             &[
                 ShaderDataType::Vec3f,
-                ShaderDataType::Vec3f,
-                ShaderDataType::Vec2f,
-                ShaderDataType::Vec2f,
             ],
             StepMode::Vertex,
         )
@@ -42,65 +39,67 @@ pub fn build_pass(
     graph.add_renderpass(
         Renderpass::<Args>::new(
             "DepthPrepass",
-            ImageSize::default_xy(),
-            move |cmd, (world, res, shader_lib, assets)| {
-                cmd.set_shader(shader_lib.get("depth_only").unwrap());
-                cmd.set_vertex_input_layout(layout);
+            ImageSize::default_xy())
+        .draw_image(&depth_output, AttachmentConfig::depth_only_default())
+        .cmd(move |cmd, _, record_info, (world, res, shader_lib, assets)| {
+            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
+            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_height);
 
-                cmd.set_depth_stencil_state(DepthStencilState {
-                    depth_test_enabled: true,
-                    depth_write_enabled: true,
-                    depth_compare_op: CompareOp::Less,
-                    ..Default::default()
-                });
-                let camera = res.camera;
+            cmd.set_shader(shader_lib.get("depth_only").unwrap());
+            cmd.set_vertex_input_layout(layout);
 
-                if camera.is_some() {
+            cmd.set_depth_stencil_state(DepthStencilState {
+                depth_test_enabled: true,
+                depth_write_enabled: true,
+                depth_compare_op: CompareOp::Less,
+                ..Default::default()
+            });
+            let camera = res.camera;
 
-                    cmd.set_uniform_buffer(res.world_ubo.get(), 0..1, 0, 0);
+            if camera.is_some() {
 
-                    let scenes = assets.get::<Scene>().expect("Scenes pool not found");
-                    for (_, (transform, mesh_comp)) in
-                        &mut world.query::<(&Transform, &MeshRender)>()
-                    {
-                        let mut transform = transform.get_matrix();
-                        match &mesh_comp.source {
-                            MeshSource::Scene(handle, mesh_ix) => {
-                                if let Some(scene) = scenes.get(handle) {
-                                    let mesh = &scene.meshes[*mesh_ix];
+                cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
 
-                                    transform *= mesh.transform.get_matrix();
+                let scenes = assets.get::<Scene>().expect("Scenes pool not found");
+                for (_, (transform, mesh_comp)) in
+                    &mut world.query::<(&Transform, &MeshRender)>()
+                {
+                    let mut transform = transform.get_matrix();
+                    match &mesh_comp.source {
+                        MeshSource::Scene(handle, mesh_ix) => {
+                            if let Some(scene) = scenes.get(handle) {
+                                let mesh = &scene.meshes[*mesh_ix];
 
-                                    cmd.push_constants(&PushConstants { transform }, 0);
+                                transform *= mesh.transform.get_matrix();
 
-                                    for submesh in &mesh.sub_meshes {
-                                        {
-                                            hikari_dev::profile_scope!(
-                                                "Set vertex and index buffers"
-                                            );
-                                            cmd.set_vertex_buffer(&submesh.vertices, 0);
-                                            cmd.set_index_buffer(&submesh.indices);
-                                        }
+                                cmd.push_constants(&PushConstants { transform }, 0);
 
-                                        // println!(
-                                        //     "{:?} {:?} {:?} {:?}",
-                                        //     albedo.raw().image(),
-                                        //     roughness.raw().image(),
-                                        //     metallic.raw().image(),
-                                        //     normal.raw().image()
-                                        // );
-
-                                        cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
+                                for submesh in &mesh.sub_meshes {
+                                    {
+                                        hikari_dev::profile_scope!(
+                                            "Set vertex and index buffers"
+                                        );
+                                        cmd.set_vertex_buffer(&submesh.position, 0);
+                                        cmd.set_index_buffer(&submesh.indices);
                                     }
+
+                                    // println!(
+                                    //     "{:?} {:?} {:?} {:?}",
+                                    //     albedo.raw().image(),
+                                    //     roughness.raw().image(),
+                                    //     metallic.raw().image(),
+                                    //     normal.raw().image()
+                                    // );
+
+                                    cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
                                 }
                             }
-                            MeshSource::None => {}
                         }
+                        MeshSource::None => {}
                     }
                 }
-            },
-        )
-        .draw_image(&depth_output, AttachmentConfig::depth_only_default()),
+            }
+        })
     );
 
     Ok(depth_output)

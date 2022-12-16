@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use hikari_asset::AssetStorage;
 use hikari_core::{World, Entity};
 use hikari_3d::*;
@@ -9,7 +7,7 @@ use hikari_render::*;
 #[cfg(feature = "editor")]
 use hikari_render::{AccessType, Renderpass};
 
-use crate::{Args, RenderResources, Settings, world::WorldUBO, util, passes};
+use crate::{Args, RenderResources, Settings, world::WorldUBO, util, passes::{self}};
 
 pub struct WorldRenderer {
     graph: hikari_render::Graph<Args>,
@@ -17,57 +15,72 @@ pub struct WorldRenderer {
 }
 
 impl WorldRenderer {
-    fn create_render_resources(device: &Arc<Device>, width: u32, height: u32) -> anyhow::Result<RenderResources> {
-        log::debug!("sizeof(UBO)={}", std::mem::size_of::<WorldUBO>());
-
-        Ok(RenderResources { 
-            settings: Settings::new(),
-            viewport: (width as f32, height as f32),
-            camera: None,
-            directional_light: None,
-            world_ubo: PerFrame::new([create_uniform_buffer(device, 1)?, create_uniform_buffer(device, 1)?])
-        })
-    }
     pub fn new(
         gfx: &mut Gfx,
         width: u32,
         height: u32,
         shader_library: &mut ShaderLibrary,
     ) -> anyhow::Result<Self> {
+        let res = RenderResources::new(gfx.device(), width, height)?;
+        let graph = Self::build_graph(gfx, width, height, shader_library, &res)?;
+        Ok(
+        Self {
+            graph,
+            res
+        })
+    }
+    fn build_graph(
+        gfx: &mut Gfx,
+        width: u32,
+        height: u32,
+        shader_library: &mut ShaderLibrary, res: &RenderResources) -> anyhow::Result<hikari_render::Graph<Args>> {
         let device = gfx.device().clone();
         let mut graph = GraphBuilder::<Args>::new(gfx, width, height);
-        let shadow_cascades = passes::shadow::build_pass(&device, &mut graph, shader_library)?;
         let depth_prepass = passes::depth_prepass::build_pass(&device, &mut graph, shader_library)?;
-        let pbr_output = passes::pbr::build_pass(&device, &mut graph, shader_library, &shadow_cascades, &depth_prepass)?;
+        let (shadow_cascades, cascade_render_buffer) = passes::shadow::build_pass(&device, &mut graph, shader_library, &res.settings, &depth_prepass)?;
+        let pbr_output = passes::pbr::build_pass(&device, &mut graph, shader_library, &shadow_cascades, &cascade_render_buffer, &depth_prepass)?;
+        #[cfg(feature = "editor")]
         let _fxaa_output = passes::fxaa::build_pass(&device, &mut graph, shader_library, &pbr_output)?;
 
+        #[cfg(not(feature = "editor"))]
+        passes::fxaa::build_pass(&device, &mut graph, shader_library, &pbr_output)?;
+
         #[cfg(feature = "editor")]
-        let (depth_debug, shadow_debug) = passes::debug::build_pass(&device, &mut graph, shader_library, &depth_prepass, &shadow_cascades)?;
+        {
+        //let debug = passes::debug::build_pass(&device, &mut graph, shader_library, &depth_prepass, &shadow_cascades)?;
         
-        let mut fake_pass = Renderpass::empty("DummyTransitionForImGui")
+        let fake_pass = Renderpass::new("DummyTransitionForImGui", ImageSize::default_xy())
         .read_image(
             &_fxaa_output,
             AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-        )
-        .read_image(&depth_debug, AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer);
+        );
 
-        for cascade in shadow_debug {
-            fake_pass = fake_pass.read_image(&cascade, AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer);
-        }
-        #[cfg(feature = "editor")]
+        // for rt in debug {
+        //     fake_pass = fake_pass.read_image(&rt, AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer);
+        // }
+
         graph.add_renderpass(
             fake_pass
         );
-        // .read_image(&shadow_debug, AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer)
-        // );
+        }
 
-        Ok(Self {
-            graph: graph.build()?,
-            res: Self::create_render_resources(gfx.device(), width, height)?
-        })
+        Ok(graph.build()?)
     }
-    pub fn settings(&mut self) -> &mut Settings {
-        &mut self.res.settings
+    pub fn update_settings(&mut self, gfx: &mut Gfx, shader_library: &mut ShaderLibrary, mut update_fn: impl FnMut(&mut Settings)) -> anyhow::Result<()> {
+        let old_settings = self.res.settings.clone();
+
+        (update_fn)(&mut self.res.settings);
+
+        if self.res.settings.directional_shadow_map_resolution != old_settings.directional_shadow_map_resolution {
+            let (width, height) = self.graph.size();
+
+            self.graph.finish()?;
+            self.graph = Self::build_graph(gfx, width, height, shader_library, &self.res)?;
+        }
+
+        gfx.set_vsync(self.res.settings.vsync);
+
+        Ok(())
     }
     pub fn graph_resources(&self) -> &GraphResources {
         &self.graph.resources()
@@ -87,7 +100,6 @@ impl WorldRenderer {
         res.directional_light = directional_light;
 
         let world_ubo = &mut res.world_ubo;
-        let world_ubo = world_ubo.get_mut();
 
         let mut ubo_data = WorldUBO::default();
 
@@ -102,6 +114,8 @@ impl WorldRenderer {
             ubo_data.camera_position = transform.position.into();
             ubo_data.view = view.to_cols_array();
             ubo_data.view_proj = camera_view_proj.to_cols_array();
+            ubo_data.camera_near = camera.near;
+            ubo_data.camera_far = camera.far;
             ubo_data.exposure = camera.exposure;
 
             if let Some(entity) = directional_light {
@@ -109,23 +123,21 @@ impl WorldRenderer {
                 let (transform, light) = query.get().unwrap();
 
                 let direction = transform.forward();
+                let up_direction = transform.up();
 
                 ubo_data.dir_light.intensity = light.intensity;
                 ubo_data.dir_light.size = light.size;
                 ubo_data.dir_light.color = light.color.into();
                 ubo_data.dir_light.direction = direction.into();
+                ubo_data.dir_light.up_direction = up_direction.into();
+                ubo_data.dir_light.cascade_split_lambda = light.shadow.cascade_split_lambda;
                 ubo_data.show_cascades = res.settings.debug.show_shadow_cascades as u32;
-                if let Some(shadow) = light.shadow {
-                    ubo_data.dir_light.constant_bias_factor = shadow.constant_bias;
-                    ubo_data.dir_light.normal_bias_factor = shadow.normal_bias;
+                if light.shadow.enabled {
+                    let shadow = &light.shadow;
+                    ubo_data.dir_light.normal_bias = shadow.normal_bias;
                     ubo_data.dir_light.shadow_fade = shadow.fade;
                     ubo_data.dir_light.max_shadow_distance = shadow.max_shadow_distance;
-                    passes::shadow::compute_cascades(passes::shadow::MAX_SHADOW_CASCADES,
-                        &shadow,
-                        transform, 
-                        &camera,
-                        &camera_view_proj, 
-                        &mut ubo_data);
+                    passes::shadow::compute_cascades(&mut ubo_data, &res.settings);
                     }
             }
         }
@@ -136,7 +148,7 @@ impl WorldRenderer {
     fn reset(&mut self) {
         self.res.camera = None;
         self.res.directional_light = None;
-        self.res.world_ubo.next_frame();
+        self.res.world_ubo.new_frame();
     }
     pub fn render(
         &mut self,
@@ -176,14 +188,16 @@ impl WorldRenderer {
     pub fn viewport(&self) -> (f32, f32) {
         self.res.viewport
     }
-    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), Box<dyn std::error::Error>> {
-        self.graph.resize(width, height)
+    pub fn resize(&mut self, width: u32, height: u32) -> anyhow::Result<()> {
+        self.graph.resize(width, height)?;
+
+        self.res.on_resize(width, height)
     }
     pub fn resize_and_set_viewport(
         &mut self,
         width: f32,
         height: f32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<()> {
         self.set_viewport(width, height);
         self.resize(width.round() as u32, height.round() as u32)
     }
