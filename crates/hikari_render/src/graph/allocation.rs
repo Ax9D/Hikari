@@ -4,7 +4,7 @@ use ash::{prelude::VkResult, vk};
 use vec_map::VecMap;
 use vk_sync_fork::AccessType;
 
-use crate::{graph::pass::AttachmentKind, renderpass::PhysicalRenderpass, texture::SampledImage};
+use crate::{graph::pass::AttachmentKind, renderpass::PhysicalRenderpass, texture::SampledImage, Buffer};
 
 use super::{pass::AnyPass, resources::GraphResources, Renderpass};
 
@@ -13,11 +13,13 @@ unsafe impl Send for BarrierStorage {}
 
 pub struct BarrierStorage {
     image_barriers: Vec<vk::ImageMemoryBarrier2KHR>,
+    buffer_barriers: Vec<vk::BufferMemoryBarrier2KHR>,
 }
 impl BarrierStorage {
     pub fn new() -> Self {
         Self {
             image_barriers: Vec::new(),
+            buffer_barriers: Vec::new()
         }
     }
     pub fn add_image_barrier(
@@ -92,9 +94,52 @@ impl BarrierStorage {
 
         self.image_barriers.push(barrier);
     }
+    pub fn add_buffer_barrier(&mut self, buffer: &dyn Buffer, previous_accesses: &[AccessType], next_accesses: &[AccessType], queue_index: u32) {
+        use vk_sync_fork as sync;
+
+        let barrier = sync::BufferBarrier {
+            previous_accesses,
+            next_accesses,
+            src_queue_family_index: queue_index,
+            dst_queue_family_index: queue_index,
+            buffer: buffer.buffer(),
+            offset: 0,
+            size: buffer.size() as usize,
+        };
+
+        let (
+            src_stage_mask,
+            dst_stage_mask,
+            vk::BufferMemoryBarrier {
+                buffer,
+                src_access_mask,
+                dst_access_mask,
+                size,
+                offset,
+                ..
+            },
+        ) = sync::get_buffer_memory_barrier(&barrier);
+
+        use crate::barrier;
+        let barrier = *vk::BufferMemoryBarrier2KHR::builder()
+        .buffer(buffer)
+        .size(size)
+        .offset(offset)
+        .src_access_mask(barrier::to_sync2_access_flags(src_access_mask))
+        .dst_access_mask(barrier::to_sync2_access_flags(dst_access_mask))
+        .src_stage_mask(barrier::to_sync2_stage_flags(src_stage_mask))
+        .dst_stage_mask(barrier::to_sync2_stage_flags(dst_stage_mask));
+
+        self.buffer_barriers.push(barrier);
+
+    }
     pub unsafe fn apply(&self, device: &Arc<crate::Device>, cmd: vk::CommandBuffer) {
+        if self.image_barriers.is_empty() && self.buffer_barriers.is_empty() {
+            return;
+        }
         let dependency_info = vk::DependencyInfoKHR::builder()
             .image_memory_barriers(&self.image_barriers)
+            .buffer_memory_barriers(&self.buffer_barriers)
             .dependency_flags(vk::DependencyFlags::BY_REGION);
 
         device
@@ -188,16 +233,16 @@ impl AllocationData {
         for output in pass.outputs() {
             if let super::pass::Output::DrawImage(handle, attachment_config) = output {
                 let image = graph_resources.get_image(handle).unwrap();
-                
+                let access_info = crate::barrier::get_access_info(attachment_config.access);
                 let (final_layout, clear_value) = match attachment_config.kind {
                     AttachmentKind::Color(location) => {
                         color_attachment_refs[location as usize] =
                             *vk::AttachmentReference::builder()
                                 .attachment(attachments.len() as u32)
-                                .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+                                .layout(access_info.image_layout);
 
                         (
-                            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                            access_info.image_layout,
                             vk::ClearValue {
                                 color: vk::ClearColorValue {
                                     float32: [0.0, 0.0, 0.0, 0.0],
@@ -209,11 +254,11 @@ impl AllocationData {
                         depth_attachment_ref.replace(
                             *vk::AttachmentReference::builder()
                                 .attachment(attachments.len() as u32)
-                                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+                                .layout(access_info.image_layout),
                         );
 
                         (
-                            vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                            access_info.image_layout,
                             vk::ClearValue {
                                 depth_stencil: vk::ClearDepthStencilValue {
                                     depth: 1.0,
@@ -226,11 +271,11 @@ impl AllocationData {
                         depth_attachment_ref.replace(
                             *vk::AttachmentReference::builder()
                                 .attachment(attachments.len() as u32)
-                                .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
+                                .layout(access_info.image_layout),
                         );
 
                         (
-                            vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                            access_info.image_layout,
                             vk::ClearValue {
                                 depth_stencil: vk::ClearDepthStencilValue {
                                     depth: 1.0,
@@ -254,6 +299,7 @@ impl AllocationData {
                         }
                     })
                     .unwrap_or(vk::ImageLayout::UNDEFINED);
+                println!("{:?} {:?}", initial_layout, final_layout);
                 clear_values.push(clear_value);
                 let attachment = *vk::AttachmentDescription::builder()
                     .format(image.config().format)
@@ -336,58 +382,97 @@ impl AllocationData {
         passes: &[AnyPass<T>],
         graph_resources: &GraphResources,
     ) {
-        let mut prev_accesses: HashMap<_, Vec<AccessType>> = graph_resources
+        self.create_barriers_(device, passes, graph_resources)
+    }
+    fn create_barriers_<T: crate::Args>(
+        &mut self,
+        device: &Arc<crate::Device>,
+        passes: &[AnyPass<T>],
+        graph_resources: &GraphResources,
+    ) {
+        let mut prev_image_accesses: HashMap<_, Vec<AccessType>> = graph_resources
             .image_handles()
-            .map(|handle| (handle, Vec::new()))
+            .map(|(_, handle)| (handle, Vec::new()))
             .collect();
 
+        let mut prev_buffer_accesses: HashMap<_, Vec<AccessType>> = graph_resources
+        .buffer_handles()
+        .map(|(_, handle)| (handle, Vec::new()))
+        .collect();
+
         for (ix, pass) in passes.iter().enumerate() {
-            let mut current_accesses: HashMap<_, Vec<_>> = HashMap::new();
+            let mut current_image_accesses: HashMap<_, Vec<_>> = HashMap::new();
+            let mut current_buffer_accesses: HashMap<_, Vec<_>> = HashMap::new();
+
             let mut barrier_storage = BarrierStorage::new();
 
             for input in pass.inputs() {
                 match input {
-                    crate::graph::pass::Input::ReadImage(handle, access)
-                    | crate::graph::pass::Input::SampleImage(handle, access, _, _) => current_accesses
+                       crate::graph::pass::Input::ReadImage(handle, access) => current_image_accesses
                         .entry(handle.clone())
                         .or_default()
                         .push(*access),
+                    super::pass::Input::ReadStorageBuffer(handle, access) => {
+                        current_buffer_accesses.entry(handle.clone())
+                        .or_default()
+                        .push(*access)
+                    },
                 }
             }
             for output in pass.outputs() {
-                let (handle, access) = match output {
-                    crate::graph::pass::Output::WriteImage(handle, access) => {
-                        (handle.clone(), *access)
+                match output {
+                    crate::graph::pass::Output::WriteImage(handle, access) => {     
+                        current_image_accesses
+                        .entry(handle.clone())
+                        .or_default()
+                        .push(*access)
                     }
                     crate::graph::pass::Output::DrawImage(handle, config) => {
-                        (handle.clone(), config.access)
+                        current_image_accesses
+                        .entry(handle.clone())
+                        .or_default()
+                        .push(config.access)
                     }
-                    crate::graph::pass::Output::StorageBuffer => {
-                        continue;
-                    }
+                    super::pass::Output::WriteStorageBuffer(handle, access) => {
+                        current_buffer_accesses
+                        .entry(handle.clone())
+                        .or_default()
+                        .push(*access)
+                    },
                 };
-
-                current_accesses
-                    .entry(handle.clone())
-                    .or_default()
-                    .push(access)
             }
-            for (handle, current_accesses) in current_accesses {
-                let prev_accesses = prev_accesses.get_mut(&handle).unwrap();
+            for (handle, current_accesses) in current_image_accesses {
+                let prev_image_accesses = prev_image_accesses.get_mut(&handle).unwrap();
 
-                if crate::barrier::is_hazard(prev_accesses, &current_accesses) {
+                if crate::barrier::is_hazard(prev_image_accesses, &current_accesses) {
+                    println!("{} {:?} {:?}", pass.name(), prev_image_accesses, current_accesses);
                     //Add Transition
                     barrier_storage.add_image_barrier(
                         graph_resources.get_image(&handle).unwrap(),
-                        prev_accesses,
+                        prev_image_accesses,
                         &current_accesses,
                         device.unified_queue_ix,
                     );
                 }
 
-                let old_accesses = std::mem::replace(prev_accesses, current_accesses);
+                let old_image_accesses = std::mem::replace(prev_image_accesses, current_accesses);
             }
+            for (handle, current_accesses) in current_buffer_accesses {
+                let prev_buffer_accesses = prev_buffer_accesses.get_mut(&handle).unwrap();
 
+                if crate::barrier::is_hazard(prev_buffer_accesses, &current_accesses) {
+                    println!("{} {:?} {:?}", pass.name(), prev_buffer_accesses, current_accesses);
+                    //Add Transition
+                    barrier_storage.add_buffer_barrier(
+                        graph_resources.get_dyn_buffer(&handle).unwrap(),
+                        prev_buffer_accesses,
+                        &current_accesses,
+                        device.unified_queue_ix,
+                    );
+                }
+
+                let old_buffer_accesses = std::mem::replace(prev_buffer_accesses, current_accesses);
+            }
             if self.barriers.insert(ix, barrier_storage).is_some() {
                 panic!("Barrier with same index already exists");
             }

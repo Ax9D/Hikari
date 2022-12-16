@@ -131,13 +131,14 @@ impl AttachmentConfig {
 #[derive(Debug, Clone)]
 pub enum Input {
     ReadImage(GpuHandle<SampledImage>, AccessType),
-    SampleImage(GpuHandle<SampledImage>, AccessType, u32, usize),
+    ReadStorageBuffer(ErasedHandle, AccessType),
 }
 
 impl Input {
     pub fn erased_handle(&self) -> ErasedHandle {
         match self {
             Input::ReadImage(handle, _) => handle.clone().into(),
+            Input::ReadStorageBuffer(handle, _) => handle.clone(),
         }
     }
 }
@@ -145,7 +146,7 @@ impl Input {
 pub enum Output {
     WriteImage(GpuHandle<SampledImage>, AccessType),
     DrawImage(GpuHandle<SampledImage>, AttachmentConfig),
-    StorageBuffer,
+    WriteStorageBuffer(ErasedHandle, AccessType),
 }
 
 impl Output {
