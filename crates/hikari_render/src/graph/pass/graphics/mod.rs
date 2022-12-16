@@ -33,18 +33,6 @@ impl<T: Args> Renderpass<T> {
             inputs: Vec::new(),
             outputs: Vec::new(),
             present_to_swapchain: false,
-            record_fn: Some(Box::new(record_fn)),
-        }
-    }
-    // Create a dummy renderpass. Useful for layout transitioning resources for use outside of the graph
-    pub fn empty(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            id: crate::util::quick_hash(name),
-            render_area: ImageSize::default_xy(),
-            inputs: Vec::new(),
-            outputs: Vec::new(),
-            present_to_swapchain: false,
             record_fn: None,
         }
     }
@@ -270,6 +258,16 @@ impl<T: Args> Renderpass<T> {
         self.draw_image_check(image, attachment_config.access);
         self.outputs
             .push(Output::DrawImage(image.clone(), attachment_config));
+        self
+    }
+    pub fn read_buffer<B: Buffer + 'static>(mut self, buffer: &GpuHandle<B>, access_type: AccessType) -> Self {
+        self.inputs.push(Input::ReadStorageBuffer(buffer.clone().into(), access_type));
+
+        self
+    }
+    pub fn write_buffer<B: Buffer + 'static>(mut self, buffer: &GpuHandle<B>, access_type: AccessType) -> Self {
+        self.outputs.push(Output::WriteStorageBuffer(buffer.clone().into(), access_type));
+
         self
     }
     /// Marks that the renderpass will be used for presentation to the swapchain.
