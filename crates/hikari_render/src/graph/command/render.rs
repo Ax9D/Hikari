@@ -54,6 +54,10 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         }
     }
     #[inline]
+    pub(crate) fn inner(&mut self) -> &mut &'cmd mut CommandBuffer<'graph> {
+        &mut self.cmd
+    }
+    #[inline]
     pub fn raw(&self) -> vk::CommandBuffer {
         self.cmd.raw()
     }

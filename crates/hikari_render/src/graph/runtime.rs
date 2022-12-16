@@ -4,15 +4,15 @@ use ash::{prelude::VkResult, vk};
 
 use crate::{
     descriptor::DescriptorPool,
-    graph::{command::CommandBufferSavedState, CommandBuffer},
-    swapchain::Swapchain,
+    graph::{command::{CommandBufferSavedState, render::PassRecordInfo, compute::ComputepassCommands}, CommandBuffer},
+    swapchain::Swapchain, ComputePass,
 };
 
 use super::{
     allocation::AllocationData,
-    command::{render::PipelineLookup, DescriptorState},
+    command::{PipelineLookup, DescriptorState},
     graphics::Renderpass,
-    pass::AnyPass,
+    pass::{AnyPass},
     resources::GraphResources,
 };
 struct FrameData {
@@ -201,7 +201,10 @@ impl GraphExecutor {
                         Some((swapchain, swapchain_image_ix)),
                     )?;
                 }
-                AnyPass::Compute(_) => todo!(),
+                AnyPass::Compute(pass) => {
+                    hikari_dev::profile_scope!(pass.name());
+                    Self::execute_computepass(device, &mut cmd, args, size, ix, pass, resources, allocation_data)?;
+                },
             }
         }
 
@@ -268,7 +271,10 @@ impl GraphExecutor {
                         None,
                     )?;
                 }
-                AnyPass::Compute(_) => todo!(),
+                AnyPass::Compute(pass) => {
+                    hikari_dev::profile_scope!(pass.name());
+                    Self::execute_computepass(device, &mut cmd, args, size, ix, pass, resources, allocation_data)?;
+                },
             }
         }
 
@@ -335,25 +341,81 @@ impl GraphExecutor {
                 framebuffer,
             });
 
-            rcmd.set_viewport(0.0, 0.0, width as f32, height as f32);
-            rcmd.set_scissor(0, 0, width, height);
+            //Self::bind_resources::<T>(rcmd.inner(), resources, pass.inputs(), pass.outputs());
 
-            //log::debug!("Binding renderpass resources");
-            for input in pass.inputs() {
-                match input {
-                    crate::graph::pass::Input::SampleImage(handle, _, binding, index) => {
-                        let image = resources.get_image(handle).unwrap();
-
-                        rcmd.set_image_array(image, 0, *binding, *index);
-                    }
-                    _ => {}
-                }
-            }
-
-            (pass.record_fn.as_mut().unwrap())(&mut rcmd, args);
+            //rcmd.set_viewport(0.0, 0.0, width as f32, height as f32);
+            //rcmd.set_scissor(0, 0, width, height);
+            
+            let record_info = PassRecordInfo {
+                framebuffer_width: width,
+                framebuffer_height: height,
+            };
+            
+            (pass.record_fn.as_mut().unwrap())(&mut rcmd, resources, &record_info, args);
         }
         Ok(())
     }
+    #[allow(clippy::too_many_arguments)]
+    fn execute_computepass<'cmd, 'graph, T: crate::Args>(
+        device: &Arc<crate::Device>,
+        cmd: &'cmd mut CommandBuffer<'graph>,
+        args: <T::Ref as crate::ByRef>::Item,
+        size: (u32, u32),
+        ix: usize,
+        pass: &mut ComputePass<T>,
+        resources: &GraphResources,
+        allocation_data: &AllocationData,
+    ) -> VkResult<()> {
+        hikari_dev::profile_function!();
+        let barriers = allocation_data.get_barrier_storage(ix);
+        unsafe {
+            barriers.apply(device, cmd.raw());
+        }
+        let mut ccmd = ComputepassCommands::new(cmd);
+        if pass.record_fn.is_some() {
+            //Self::bind_resources::<T>(ccmd.inner(), resources, pass.inputs(), pass.outputs());
+
+            let record_info = PassRecordInfo {
+                framebuffer_width: size.0,
+                framebuffer_height: size.1
+            };
+            (pass.record_fn.as_mut().unwrap())(&mut ccmd, resources, &record_info, args);
+        }
+        
+        Ok(())
+    }
+    // fn bind_resources<'cmd, 'graph, T: crate::Args>(cmd: &mut&'cmd mut CommandBuffer<'graph>, resources: &GraphResources, inputs: &[Input], outputs: &[Output]) {
+    //     //log::debug!("Binding renderpass resources");
+    //     for input in inputs {
+    //         match input {
+    //             crate::graph::pass::Input::SampleImage(handle, _, binding, index) |
+    //             crate::graph::pass::Input::ReadStorageImage(handle, _, binding, index ) => {
+    //                 let image = resources.get_image(handle).unwrap();
+
+    //                 cmd.set_image_array(image, 0, *binding, *index);
+    //             }
+    //             crate::graph::pass::Input::ReadStorageBuffer(handle, _, binding) => {
+    //                 let buffer = resources.get_dyn_buffer(handle).unwrap();
+    //                 cmd.set_buffer(buffer, 0..buffer.len(), 0, *binding);
+    //             }
+    //             _ => {}
+    //         }
+    //     }
+    //     for output in outputs {
+    //         match output {
+    //             crate::graph::pass::Output::WriteStorageImage(handle, _, binding) => {
+    //                 let image = resources.get_image(handle).unwrap();
+
+    //                 cmd.set_image_array(image, 0, *binding, 0);
+    //             }
+    //             crate::graph::pass::Output::WriteStorageBuffer(handle, _, binding) => {
+    //                 let buffer = resources.get_dyn_buffer(handle).unwrap();
+    //                 cmd.set_buffer(buffer, 0..buffer.len(), 0, *binding);
+    //             }
+    //             _=> {}
+    //         }
+    //     }
+    // }
     fn submit(
         device: &Arc<crate::Device>,
         cmd: &CommandBuffer,
