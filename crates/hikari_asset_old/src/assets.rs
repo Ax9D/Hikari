@@ -1,88 +1,63 @@
-use std::sync::{atomic::AtomicUsize, Arc};
+use std::{
+    any::{type_name, Any, TypeId},
+    collections::HashMap,
+    sync::Arc,
+};
 
-use flume::{Receiver, Sender};
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 
-use crate::handle::{HandleIndex, RefOp};
-
-use super::Handle;
-
-pub(crate) struct HandleAllocator {
-    index: AtomicUsize,
-    free_list: Receiver<usize>,
-    free_list_sender: Sender<usize>,
-    ref_send: Sender<RefOp>,
-    ref_recv: Receiver<RefOp>,
+use crate::handle::{Handle, HandleAllocator, RefOp};
+#[allow(unused)]
+struct RefCounts {
+    ref_send: flume::Sender<RefOp>,
+    ref_recv: flume::Receiver<RefOp>,
 }
-
-impl HandleAllocator {
-    pub(crate) fn new(ref_send: Sender<RefOp>, ref_recv: Receiver<RefOp>) -> Self {
-        let (free_list_sender, free_list) = flume::unbounded();
-        Self {
-            index: AtomicUsize::new(0),
-            free_list,
-            free_list_sender,
-            ref_send,
-            ref_recv,
-        }
-    }
-    pub fn allocate<T>(&self) -> Handle<T> {
-        let index = self.free_list.try_recv().unwrap_or_else(|_| {
-            self.index
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        });
-
-        let sender = self.ref_send.clone();
-
-        Handle::new(index, sender)
-    }
-    pub(crate) fn ref_op_channel(&self) -> &Receiver<RefOp> {
-        &self.ref_recv
-    }
-    ///Assumes that there are no references to the current handle
-    pub fn deallocate(&self, handle_index: HandleIndex) {
-        self.free_list_sender
-            .send(handle_index)
-            .expect("Failed to deallocate handle");
-    }
-}
-
-pub struct Assets<T> {
-    pool: Vec<Option<T>>,
-    handle_allocator: Arc<HandleAllocator>,
-}
-
-impl<T> Assets<T> {
+impl RefCounts {
     pub fn new() -> Self {
         let (ref_send, ref_recv) = flume::unbounded();
+        Self { ref_send, ref_recv }
+    }
+}
+#[allow(unused)]
+pub struct AssetPool<T> {
+    pool: Vec<Option<T>>,
+    handle_allocator: Arc<HandleAllocator>,
+    ref_counts: RefCounts,
+}
+impl<T> Default for AssetPool<T> {
+    fn default() -> Self {
+        let ref_counts = RefCounts::new();
         Self {
-            pool: Vec::new(),
-            handle_allocator: Arc::new(HandleAllocator::new(ref_send, ref_recv)),
+            pool: Default::default(),
+            handle_allocator: Arc::new(HandleAllocator::new(ref_counts.ref_send.clone())),
+            ref_counts,
         }
     }
-    pub(crate) fn handle_allocator(&self) -> &Arc<HandleAllocator> {
-        &self.handle_allocator
-    }
-    fn allocate_handle(&self) -> Handle<T> {
-        self.handle_allocator.allocate()
-    }
+}
+impl<T: 'static> AssetPool<T> {
     fn ensure_length(&mut self, ix: usize) {
         if ix >= self.pool.len() {
             self.pool.resize_with(ix + 1, || None);
         }
     }
-    pub fn push(&mut self, asset: T) -> Handle<T> {
+    pub(crate) fn handle_allocator(&self) -> &Arc<HandleAllocator> {
+        &self.handle_allocator
+    }
+    pub fn insert(&mut self, handle_ix: usize, data: T) {
+        self.ensure_length(handle_ix);
+        self.pool[handle_ix] = Some(data);
+    }
+    pub fn add(&mut self, data: T) -> Handle<T> {
         let handle = self.handle_allocator.allocate();
-        self.insert(handle.index(), asset);
+        let index = handle.index();
+        self.ensure_length(index);
+        self.pool[index] = Some(data);
 
         handle
     }
-    pub(crate) fn remove(&mut self, index: HandleIndex) -> Option<T> {
-        self.pool[index].take()
-    }
-    pub(crate) fn insert(&mut self, index: HandleIndex, asset: T) {
-        self.ensure_length(index);
-
-        self.pool[index] = Some(asset);
+    pub fn remove(&mut self, handle_ix: usize) -> Option<T> {
+        self.handle_allocator.deallocate(handle_ix);
+        self.pool[handle_ix].take()
     }
     pub fn get(&self, handle: &Handle<T>) -> Option<&T> {
         match self.pool.get(handle.index()) {
@@ -97,5 +72,64 @@ impl<T> Assets<T> {
         }
     }
 }
-#[cfg(test)]
-mod test {}
+
+#[derive(Default)]
+pub struct AssetStorage {
+    map: HashMap<TypeId, Mutex<Box<dyn Any + Send + Sync + 'static>>>,
+}
+
+impl AssetStorage {
+    pub fn add<T: Send + Sync + 'static>(&mut self) {
+        let previous = self.map.insert(
+            TypeId::of::<T>(),
+            Mutex::new(Box::new(AssetPool::<T>::default())),
+        );
+        if previous.is_some() {
+            panic!("AssetPool of type: {} already exists!", type_name::<T>());
+        }
+    }
+    pub fn get<T: Send + Sync + 'static>(&self) -> Option<MappedMutexGuard<AssetPool<T>>> {
+        let any_pool = self.map.get(&TypeId::of::<T>())?;
+
+        let guard: MappedMutexGuard<AssetPool<T>> = MutexGuard::map(any_pool.lock(), |any_pool| {
+            any_pool
+                .downcast_mut::<AssetPool<T>>()
+                .expect("AssetPool type mismatch")
+        });
+
+        Some(guard)
+    }
+    pub fn get_mut<T: Send + Sync + 'static>(&mut self) -> Option<&mut AssetPool<T>> {
+        let any_pool = self.map.get_mut(&TypeId::of::<T>())?;
+
+        let any_pool = any_pool.get_mut();
+        Some(
+            any_pool
+                .downcast_mut::<AssetPool<T>>()
+                .expect("AssetPool type mismatch"),
+        )
+    }
+}
+
+#[test]
+fn add_pool() {
+    use crate::Asset;
+    struct Texture;
+    impl Asset for Texture {
+        type Settings = ();
+    }
+    let mut storage = AssetStorage::default();
+    storage.add::<Texture>();
+}
+#[test]
+fn get_pool() {
+    use crate::Asset;
+    struct Texture;
+    impl Asset for Texture {
+        type Settings = ();
+    }
+    let mut storage = AssetStorage::default();
+    storage.add::<Texture>();
+    assert!(storage.get::<Texture>().is_some());
+    assert!(storage.get_mut::<Texture>().is_some());
+}

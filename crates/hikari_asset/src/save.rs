@@ -1,6 +1,6 @@
 use std::{any::Any, io::Write};
 
-use crate::*;
+use crate::Asset;
 
 pub struct SaveContext<'a> {
     asset: &'a dyn Any,

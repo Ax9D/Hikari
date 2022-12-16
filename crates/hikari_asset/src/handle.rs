@@ -3,7 +3,7 @@ use std::{any::TypeId, marker::PhantomData, sync::atomic::AtomicUsize};
 
 use crate::Asset;
 
-struct RawHandle {
+pub struct RawHandle {
     index: usize,
     kind: HandleKind,
 }
@@ -17,7 +17,6 @@ pub(crate) enum RefOp {
 pub(crate) enum HandleKind {
     Strong(flume::Sender<RefOp>),
     Weak(flume::Sender<RefOp>),
-    Internal,
 }
 impl PartialEq for RawHandle {
     fn eq(&self, other: &Self) -> bool {
@@ -33,20 +32,30 @@ impl Hash for RawHandle {
 }
 
 impl RawHandle {
-    pub fn new(index: usize, ref_send: flume::Sender<RefOp>) -> Self {
+    pub(crate) fn new(index: usize, ref_send: flume::Sender<RefOp>) -> Self {
         Self {
             index,
             kind: HandleKind::Strong(ref_send),
         }
     }
-    pub fn internal(index: usize) -> Self {
-        Self {
-            index,
-            kind: HandleKind::Internal,
-        }
-    }
     pub fn index(&self) -> usize {
         self.index
+    }
+    pub fn clone_weak(&self) -> Self {
+        match self.kind.clone() {
+            HandleKind::Strong(chan) | HandleKind::Weak(chan) => Self {
+                kind: HandleKind::Weak(chan),
+                index: self.index,
+            },
+        }
+    }
+    pub fn clone_strong(&self) -> Self {
+        match self.kind.clone() {
+            HandleKind::Strong(chan) | HandleKind::Weak(chan) => Self {
+                kind: HandleKind::Strong(chan),
+                index: self.index,
+            },
+        }
     }
 }
 
@@ -75,6 +84,9 @@ pub struct ErasedHandle {
 }
 
 impl ErasedHandle {
+    pub fn raw(&self) -> &RawHandle {
+        &self.raw
+    }
     pub fn into_typed<T: Asset>(self) -> Option<Handle<T>> {
         if TypeId::of::<T>() == self.type_id {
             Some(Handle {
@@ -87,6 +99,15 @@ impl ErasedHandle {
     }
     pub fn clone_typed<T: Asset>(&self) -> Option<Handle<T>> {
         self.clone().into_typed::<T>()
+    }
+    pub fn clone_strong(&self) -> Self {
+        Self {
+            raw: self.raw.clone_strong(),
+            type_id: self.type_id,
+        }
+    }
+    pub fn is_weak(&self) -> bool {
+        matches!(self.raw.kind, HandleKind::Weak(_))
     }
 }
 pub struct Handle<T> {
@@ -122,14 +143,13 @@ impl<T: 'static> Handle<T> {
     pub fn clone_erased(&self) -> ErasedHandle {
         self.clone().into()
     }
-    pub fn clone_erased_as_internal(&self) -> ErasedHandle {
+    pub fn clone_erased_as_weak(&self) -> ErasedHandle {
         ErasedHandle {
-            raw: RawHandle::internal(self.index()),
+            raw: self.raw.clone_weak(),
             type_id: TypeId::of::<T>(),
         }
     }
 }
-
 impl<T: 'static> Into<ErasedHandle> for Handle<T> {
     fn into(self) -> ErasedHandle {
         ErasedHandle {
@@ -142,6 +162,7 @@ impl<T: 'static> Into<ErasedHandle> for Handle<T> {
 pub(crate) struct HandleAllocator {
     handle_count: AtomicUsize,
     free_list_recv: flume::Receiver<usize>,
+    #[allow(unused)]
     free_list_send: flume::Sender<usize>,
     refcount_send: flume::Sender<RefOp>,
 }
@@ -155,7 +176,7 @@ impl HandleAllocator {
             refcount_send,
         }
     }
-    pub fn allocate<T: 'static>(&self) -> Handle<T> {
+    pub fn allocate<T: Asset>(&self) -> Handle<T> {
         let index = self.free_list_recv.try_recv().unwrap_or_else(|_| {
             self.handle_count
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -163,9 +184,10 @@ impl HandleAllocator {
 
         Handle::new(index, self.refcount_send.clone())
     }
-    pub fn deallocate(&self, index: usize) {
+    #[allow(unused)]
+    pub fn deallocate<T: Asset>(&self, handle: Handle<T>) {
         self.free_list_send
-            .send(index)
+            .send(handle.index())
             .expect("Failed to update free list");
     }
 }
