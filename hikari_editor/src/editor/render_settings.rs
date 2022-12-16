@@ -56,8 +56,16 @@ pub fn draw(ui: &imgui::Ui, _editor: &mut Editor, state: EngineState) -> anyhow:
 
         ui.separator();
         
-        imgui::Image::new(ui.get_texture_id(depth_map), [400.0, 400.0]).build(ui);
+        let mut generate_debug_info = shader_lib.config().generate_debug_info;
 
+        if ui.checkbox("Generate Shader Debug Info", &mut generate_debug_info) {
+            match shader_lib.set_generate_debug(ShaderLibraryConfig {
+                generate_debug_info
+            }) {
+                Ok(_) => {},
+                Err(why) => log::error!("{}", why),
+            }
+        }
             
         if ui.button("Reload Shaders") {
             match shader_lib.reload() {

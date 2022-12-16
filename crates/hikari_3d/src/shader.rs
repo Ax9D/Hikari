@@ -5,34 +5,51 @@ use hikari_render::shaderc;
 use std::sync::Arc;
 use std::collections::HashMap;
 
+#[derive(Clone, Copy)]
+pub struct ShaderLibraryConfig {
+    pub generate_debug_info: bool
+}
 pub struct ShaderLibrary {
     device: Arc<Device>,
     shaders: HashMap<String, Arc<Shader>>,
     shader_dir: PathBuf,
+    config: ShaderLibraryConfig
 }
 
 impl ShaderLibrary {
-    pub fn new(device: &Arc<Device>, shader_dir: impl AsRef<Path>) -> Self {
+    pub fn new(device: &Arc<Device>, shader_dir: impl AsRef<Path>, config: ShaderLibraryConfig) -> Self {
         assert!(shader_dir.as_ref().is_dir());
-        Self { device: device.clone(), shaders: HashMap::new(), shader_dir: shader_dir.as_ref().canonicalize().unwrap().to_owned() }
+        Self { device: device.clone(), shaders: HashMap::new(), shader_dir: shader_dir.as_ref().canonicalize().unwrap().to_owned(), config }
     }
     pub fn insert(&mut self, name: &str) -> anyhow::Result<()> {
-        let shader = Self::create_shader(&self.device, &self.shader_dir, name)?;
+        let shader = Self::create_shader(&self.device, &self.shader_dir, name, self.config)?;
         self.shaders.insert(name.to_owned(), shader);
         Ok(())
     }
-    fn create_shader(device: &Arc<Device>, shader_dir: &Path, name: &str) -> anyhow::Result<Arc<Shader>> {
+    pub fn config(&self) -> &ShaderLibraryConfig {
+        &self.config
+    }
+    pub fn set_generate_debug(&mut self, config: ShaderLibraryConfig) -> anyhow::Result<()> {
+        self.config = config;
+        self.reload()
+    }
+    fn create_shader(device: &Arc<Device>, shader_dir: &Path, name: &str, config: ShaderLibraryConfig) -> anyhow::Result<Arc<Shader>> {
         let mut path = shader_dir.join(name);
         let stage_exts = [
         (ShaderStage::Vertex, "vert"), 
         (ShaderStage::Fragment, "frag"), 
         (ShaderStage::TessControl, "tesc"), 
         (ShaderStage::TessEvaluation, "tese"),
-        (ShaderStage::Geometry, "geom")];
+        (ShaderStage::Geometry, "geom"),
+        (ShaderStage::Compute, "comp")];
 
         let filename = path.file_name().unwrap().to_owned();
 
         let mut compile_options = shaderc::CompileOptions::new().unwrap();
+
+        if !config.generate_debug_info {
+            compile_options.set_generate_debug_info();
+        }
 
         compile_options.set_include_callback(move |requested_source, ty, _requestee, _depth| -> shaderc::IncludeCallbackResult {
             match ty {

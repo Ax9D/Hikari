@@ -49,7 +49,17 @@ impl Plugin for Plugin3D {
         game.create_asset::<Scene>();
 
         let device = game.get::<Gfx>().device().clone();
-        let shader_lib = ShaderLibrary::new(&device, std::env::current_dir().unwrap().join("assets/shaders"));
+
+        #[cfg(debug_assertions)]
+        let generate_debug_info = true;
+        #[cfg(not(debug_assertions))]
+        let generate_debug_info = false;
+
+        let config = ShaderLibraryConfig {
+            generate_debug_info
+        };
+
+        let shader_lib = ShaderLibrary::new(&device, std::env::current_dir().unwrap().join("assets/shaders"), config);
         game.add_state(shader_lib);
 
         let mut manager = game.get_mut::<AssetManager>();
