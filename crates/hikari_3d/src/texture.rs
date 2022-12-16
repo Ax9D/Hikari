@@ -113,6 +113,7 @@ pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageC
         wrap_x,
         wrap_y,
         wrap_z,
+        sampler_reduction_mode: None,
         aniso_level: config.aniso_level,
         mip_levels: if config.generate_mips {
             TextureConfig::get_mip_count(width, height)

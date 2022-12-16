@@ -117,6 +117,7 @@ impl Swapchain {
                 wrap_x: vk::SamplerAddressMode::REPEAT,
                 wrap_y: vk::SamplerAddressMode::REPEAT,
                 wrap_z: vk::SamplerAddressMode::REPEAT,
+                sampler_reduction_mode: None,
                 aniso_level: 0.0,
                 mip_levels: 1,
                 mip_filtering: vk::SamplerMipmapMode::LINEAR,

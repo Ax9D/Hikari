@@ -49,12 +49,14 @@ pub struct ImageConfig {
     pub wrap_x: vk::SamplerAddressMode,
     pub wrap_y: vk::SamplerAddressMode,
     pub wrap_z: vk::SamplerAddressMode,
+    pub sampler_reduction_mode: Option<vk::SamplerReductionMode>,
     pub aniso_level: f32,
     pub mip_levels: u32,
     pub mip_filtering: vk::SamplerMipmapMode,
     pub usage: vk::ImageUsageFlags,
     pub image_type: vk::ImageType,
     pub image_view_type: vk::ImageViewType,
+    pub initial_layout: vk::ImageLayout,
     pub host_readable: bool,
 }
 
@@ -69,12 +71,14 @@ impl ImageConfig {
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
             wrap_z: vk::SamplerAddressMode::REPEAT,
+            sampler_reduction_mode: None,
             aniso_level: 0.0,
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::LINEAR,
             usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             image_type: vk::ImageType::TYPE_2D,
             image_view_type: vk::ImageViewType::TYPE_2D,
+            initial_layout: vk::ImageLayout::UNDEFINED,
             host_readable: false,
         }
     }
@@ -85,12 +89,14 @@ impl ImageConfig {
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
             wrap_z: vk::SamplerAddressMode::REPEAT,
+            sampler_reduction_mode: None,
             aniso_level: 0.0,
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::LINEAR,
             usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             image_type: vk::ImageType::TYPE_3D,
             image_view_type: vk::ImageViewType::TYPE_3D,
+            initial_layout: vk::ImageLayout::UNDEFINED,
             host_readable: false,
         }
     }
@@ -104,12 +110,14 @@ impl ImageConfig {
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
             wrap_z: vk::SamplerAddressMode::REPEAT,
+            sampler_reduction_mode: None,
             aniso_level: 0.0,
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::NEAREST,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             image_type: vk::ImageType::TYPE_2D,
             image_view_type: vk::ImageViewType::TYPE_2D,
+            initial_layout: vk::ImageLayout::UNDEFINED,
             host_readable: false,
         }
     }
@@ -123,17 +131,18 @@ impl ImageConfig {
             wrap_x: vk::SamplerAddressMode::REPEAT,
             wrap_y: vk::SamplerAddressMode::REPEAT,
             wrap_z: vk::SamplerAddressMode::REPEAT,
+            sampler_reduction_mode: None,
             aniso_level: 0.0,
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::NEAREST,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
             image_type: vk::ImageType::TYPE_2D,
             image_view_type: vk::ImageViewType::TYPE_2D,
+            initial_layout: vk::ImageLayout::UNDEFINED,
             host_readable: false,
         }
     }
 }
-
 pub(crate) fn format_to_aspect_flags(format: vk::Format) -> vk::ImageAspectFlags {
     match format {
         vk::Format::D16_UNORM | vk::Format::D32_SFLOAT => vk::ImageAspectFlags::DEPTH,
@@ -152,7 +161,7 @@ impl SampledImage {
         vkconfig: &ImageConfig,
     ) -> VkResult<vk::Sampler> {
         //TODO: use a sampler cache
-        let mut create_info = *vk::SamplerCreateInfo::builder()
+        let mut create_info = vk::SamplerCreateInfo::builder()
             .min_filter(vkconfig.filtering)
             .mag_filter(vkconfig.filtering)
             .mipmap_mode(vkconfig.mip_filtering)
@@ -176,6 +185,15 @@ impl SampledImage {
             create_info.max_anisotropy = vkconfig.aniso_level;
             create_info.anisotropy_enable = vk::TRUE;
         }
+
+        let mut reduce_info = vk::SamplerReductionModeCreateInfo::builder();
+
+        let create_info = if let Some(reduction_mode) = vkconfig.sampler_reduction_mode {
+            reduce_info.reduction_mode = reduction_mode;
+            create_info.push_next(&mut reduce_info)
+        } else {
+            create_info
+        };
 
         unsafe { device.raw().create_sampler(&create_info, None) }
     }
