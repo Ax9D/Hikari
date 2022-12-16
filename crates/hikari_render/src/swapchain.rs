@@ -124,6 +124,7 @@ impl Swapchain {
                 usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
                 image_type: vk::ImageType::TYPE_2D,
                 image_view_type: vk::ImageViewType::TYPE_2D,
+                initial_layout: vk::ImageLayout::UNDEFINED,
                 host_readable: true,
             },
         )?;

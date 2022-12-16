@@ -124,6 +124,7 @@ pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageC
         usage: vk::ImageUsageFlags::SAMPLED,
         image_type: vk::ImageType::TYPE_2D,
         image_view_type: vk::ImageViewType::TYPE_2D,
+        initial_layout: vk::ImageLayout::UNDEFINED,
         host_readable: false,
     }
 }
