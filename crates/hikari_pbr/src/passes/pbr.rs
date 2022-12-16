@@ -33,7 +33,7 @@ struct Defaults {
 impl Defaults {
     pub fn prepare(device: &Arc<Device>) -> Self {
         let (checkerboard, width, height) =
-            hikari_3d::old::image::load_from_file("assets/textures/checkerboard.png")
+            hikari_3d::old::image::load_from_file("engine_assets/textures/checkerboard.png")
                 .expect("Failed to load checkerboard texture");
         let checkerboard = Texture2D::new(
             device,

@@ -84,7 +84,7 @@ mod tests {
         manager.load_db().expect("Failed to load Asset DB");
 
         let sponza: Handle<crate::Scene> = manager
-            .load("../../assets/models/sponza/sponza.glb", None, false)
+            .load("../../engine_assets/models/sponza/sponza.glb", None, false)
             .expect("Failed to load sponza");
 
         let sponza: ErasedHandle = sponza.into();

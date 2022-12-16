@@ -58,7 +58,7 @@ impl Plugin for Plugin3D {
             generate_debug_info
         };
 
-        let shader_lib = ShaderLibrary::new(&device, std::env::current_dir().unwrap().join("assets/shaders"), config);
+        let shader_lib = ShaderLibrary::new(&device, std::env::current_dir().unwrap().join("engine_assets/shaders"), config);
         game.add_state(shader_lib);
         game.register_asset_loader::<Texture2D, TextureLoader>(TextureLoader {
             device: device.clone(),

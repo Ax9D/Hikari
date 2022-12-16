@@ -134,7 +134,7 @@ impl Editor {
         ctx.io_mut().config_flags = imgui::ConfigFlags::DOCKING_ENABLE;
 
         ctx.fonts().add_font(&[imgui::FontSource::TtfData {
-            data: include_bytes!("../../../assets/fonts/Roboto/Roboto-Regular.ttf"),
+            data: include_bytes!("../../../engine_assets/fonts/Roboto/Roboto-Regular.ttf"),
             size_pixels: 13.0 * config.hidpi_factor * 1.5,
             config: None,
         }, icons::icon_ttf(config.hidpi_factor)]);

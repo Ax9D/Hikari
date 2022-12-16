@@ -12,7 +12,7 @@ pub const MOUSE_SELECT: &str = "\u{f059c}";
 
 pub fn icon_ttf(hidpi_factor: f32) -> FontSource<'static> {
     FontSource::TtfData { 
-    data:  include_bytes!("../../../assets/fonts/icons/icons.ttf"),
+    data:  include_bytes!("../../../engine_assets/fonts/icons/icons.ttf"),
     size_pixels: 13.0 * hidpi_factor * 1.5,
     config: Some(FontConfig {
         glyph_ranges: FontGlyphRanges::from_slice(&[0xf0597, 0xf059c, 0]),
