@@ -35,10 +35,7 @@ mod tests {
     use crate::{texture::TextureLoader, Material, MaterialLoader, Scene, Texture2D};
     #[test]
     fn sponza() {
-        use std::sync::Arc;
-
         use hikari_render::GfxConfig;
-        use rayon::ThreadPoolBuilder;
 
         use crate::GLTFLoader;
 
@@ -69,35 +66,34 @@ mod tests {
         })
         .unwrap();
 
-        let thread_pool = Arc::new(ThreadPoolBuilder::new().build().unwrap());
-        let mut meshes = AssetPool::<crate::Scene>::default();
-        let mut textures = AssetPool::<crate::Texture2D>::default();
-        let mut materials = AssetPool::<crate::Material>::default();
-        let mut manager = AssetManager::with_threadpool(thread_pool);
-        manager.register_asset(&meshes);
-        manager.register_asset(&textures);
-        manager.register_asset(&materials);
-        manager.add_loader::<Scene, GLTFLoader>(GLTFLoader {
-            device: gfx.device().clone(),
-        });
-        manager.add_loader::<Texture2D, TextureLoader>(TextureLoader {
-            device: gfx.device().clone(),
-        });
-        manager.add_loader::<Material, MaterialLoader>(MaterialLoader);
+        let mut manager = AssetManager::builder();
+        manager.register_asset_type::<crate::Scene>();
+        manager.register_asset_type::<crate::Texture2D>();
+        manager.register_asset_type::<crate::Material>();
 
-        hikari_asset::serde::init(manager.clone());
+        manager.register_loader::<Scene, GLTFLoader>(GLTFLoader {
+            device: gfx.device().clone(),
+        });
+        manager.register_loader::<Texture2D, TextureLoader>(TextureLoader {
+            device: gfx.device().clone(),
+        });
+        manager.register_loader::<Material, MaterialLoader>(MaterialLoader);
+
+        let manager = manager.build().unwrap();
+
+        manager.load_db().expect("Failed to load Asset DB");
 
         let sponza: Handle<crate::Scene> = manager
-            .load("../../assets/models/sponza/sponza.glb".as_ref())
+            .load("../../assets/models/sponza/sponza.glb", None, false)
             .expect("Failed to load sponza");
 
         let sponza: ErasedHandle = sponza.into();
         loop {
-            manager.update(&mut meshes).expect("Failed meshes");
-            manager.update(&mut textures).expect("Failed textures");
-            manager.update(&mut materials).expect("Failed materials");
+            manager.update::<crate::Scene>();
+            manager.update::<crate::Texture2D>();
+            manager.update::<crate::Material>();
 
-            if let Some(load_status) = manager.load_status(&sponza) {
+            if let Some(load_status) = manager.status(&sponza) {
                 match load_status {
                     LoadStatus::Loaded => break,
                     LoadStatus::Failed => panic!(),
@@ -106,6 +102,7 @@ mod tests {
             }
         }
 
+        manager.save_db().expect("Failed to save Asset DB");
         // For race condition in hikari_render related to Textures
         std::thread::sleep(std::time::Duration::from_millis(500));
     }

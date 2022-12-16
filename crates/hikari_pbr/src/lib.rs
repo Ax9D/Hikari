@@ -1,5 +1,5 @@
 use hikari_3d::ShaderLibrary;
-use hikari_asset::AssetStorage;
+use hikari_asset::AssetManager;
 use hikari_core::{Plugin, World};
 
 mod passes;
@@ -19,7 +19,7 @@ use light::*;
 pub use resources::*;
 pub use world_renderer::WorldRenderer;
 
-type Args = (World, RenderResources, ShaderLibrary, AssetStorage);
+type Args = (World, RenderResources, ShaderLibrary, AssetManager);
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct DebugSettings {
@@ -85,7 +85,7 @@ impl Plugin for PBRPlugin {
                     move |renderer: &mut WorldRenderer,
                           world: &World,
                           shader_lib: &ShaderLibrary,
-                          assets: &AssetStorage| {
+                          assets: &AssetManager| {
                         renderer
                             .render(world, shader_lib, assets)
                             .expect("Failed to render world");

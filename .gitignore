@@ -6,6 +6,4 @@ dist
 vk_pipeline_cache
 hikari.log
 
-*.hmeta
-*.hmat
-*.meta
+assets.db

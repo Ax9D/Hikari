@@ -41,7 +41,8 @@ impl Default for WrapMode {
     }
 }
 
-#[derive(Copy, Clone, Default, Serialize, Deserialize)]
+#[derive(Copy, Clone, Default, Serialize, Deserialize, type_uuid::TypeUuid)]
+#[uuid = "304e0256-1f2c-4a71-94f6-6e858fa4d9be"]
 pub struct TextureConfig {
     pub format: Format,
     pub filtering: FilterMode,

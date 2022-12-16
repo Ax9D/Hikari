@@ -1,10 +1,10 @@
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::Arc, io::{Read, Cursor},
 };
 
-use hikari_asset::{Handle, LoadContext};
+use hikari_asset::{Handle, LoadContext, Mode};
 use hikari_math::{Vec2, Vec3, Vec4, Quat};
 
 use crate::{
@@ -21,12 +21,14 @@ struct ImportData {
     buffers: Vec<gltf::buffer::Data>,
 }
 impl ImportData {
-    pub fn new(path: &Path, _data: &[u8]) -> Result<Self, gltf::Error> {
+    pub fn new(path: &Path, data: &[u8]) -> Result<Self, gltf::Error> {
+        assert!(path.is_relative());
+
         let (document, buffers, _images) = gltf::import(path)?;
+        
         let parent_path = path
             .parent()
             .unwrap_or_else(|| Path::new("./"))
-            .canonicalize()?
             .to_owned();
         Ok(Self {
             path: path.to_owned(),
@@ -269,14 +271,6 @@ fn parse_texture_data(
     config: TextureConfig,
     load_context: &mut LoadContext,
 ) -> Result<Handle<Texture2D>, anyhow::Error> {
-    let base_path = gltf.parent_path();
-    let texture_name = texture
-        .name()
-        .map(|name| name.to_owned())
-        .unwrap_or_else(|| format!("{}_texture_{}", gltf.filename(), texture.index()));
-    let mut fake_texture_path = base_path.to_owned();
-    fake_texture_path.push(texture_name);
-
     let asset_manager = load_context.asset_manager();
     match texture.source().source() {
         gltf::image::Source::View { view, mime_type } => {
@@ -287,21 +281,8 @@ fn parse_texture_data(
             let data = &parent_buffer[start..end];
 
             match mime_type {
-                "image/png" => {
-                    fake_texture_path.set_extension("png");
-                    asset_manager.load_with_data::<Texture2D>(
-                        &fake_texture_path,
-                        data.to_owned(),
-                        config,
-                    )
-                }
-                "image/jpeg" => {
-                    fake_texture_path.set_extension("jpeg");
-                    asset_manager.load_with_data::<Texture2D>(
-                        &fake_texture_path,
-                        data.to_owned(),
-                        config,
-                    )
+                "image/png" | "image/jpeg" => {
+                    create_and_load_image_with_data(&data, texture, config, gltf, load_context)
                 }
                 _ => Err(anyhow::anyhow!(
                     crate::error::Error::UnsupportedImageFormat(
@@ -332,13 +313,8 @@ fn parse_texture_data(
                 };
 
                 match mime_type {
-                    "image/png" => {
-                        fake_texture_path.set_extension("png");
-                        asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data, config)
-                    }
-                    "image/jpeg" => {
-                        fake_texture_path.set_extension("jpeg");
-                        asset_manager.load_with_data::<Texture2D>(&fake_texture_path, data, config)
+                    "image/png" | "image/jpeg" => {              
+                        create_and_load_image_with_data(&data,texture, config,  gltf, load_context)
                     }
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
@@ -351,7 +327,7 @@ fn parse_texture_data(
                 let path = gltf.parent_path().join(uri);
 
                 match mime_type {
-                    "image/jpeg" | "image/png" => asset_manager.load_with_settings(&path, config),
+                    "image/jpeg" | "image/png" => asset_manager.load(&path, Some(config), false),
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
                             mime_type.split(r"/").last().unwrap().to_string(),
@@ -362,10 +338,32 @@ fn parse_texture_data(
             } else {
                 let path = gltf.parent_path().join(uri);
 
-                asset_manager.load_with_settings(&path, config)
+                asset_manager.load(&path, Some(config), false)
             }
         }
     }
+}
+fn create_and_load_image_with_data(data: &[u8], texture: &gltf::Texture, config: TextureConfig, import_data: &ImportData, load_context: &mut LoadContext) -> anyhow::Result<Handle<Texture2D>> {
+    let base_path =import_data.parent_path();
+    let texture_name = texture
+        .name()
+        .map(|name| name.to_owned())
+        .unwrap_or_else(|| format!("{}_texture_{}", import_data.filename(), texture.index()));
+
+    let mut new_texture_path = base_path.to_owned();
+    new_texture_path.push(texture_name);
+
+    
+    if !new_texture_path.exists() {
+        let mut file = load_context.io().write_file(&new_texture_path, &Mode::create_and_write())?;
+        file.write(&data)?;
+        file.flush()?;
+    }
+
+    let texture = load_context.asset_manager().load::<Texture2D>(new_texture_path, Some(config), false)?;
+
+
+    Ok(texture)
 }
 fn load_materials(
     import_data: &ImportData,
@@ -467,7 +465,7 @@ fn load_material(
 
     load_context
         .asset_manager()
-        .load::<crate::Material>(&material_path)
+        .load::<crate::Material>(&material_path, None, false)
 }
 
 fn load_mesh(

@@ -1,4 +1,4 @@
-use hikari_asset::AssetStorage;
+use hikari_asset::AssetManager;
 use hikari_core::{World, Entity};
 use hikari_3d::*;
 use hikari_math::*;
@@ -154,13 +154,13 @@ impl WorldRenderer {
         &mut self,
         world: &World,
         shader_lib: &ShaderLibrary,
-        asset_storage: &AssetStorage,
+        asset_manager: &AssetManager,
     ) -> anyhow::Result<()> {
         hikari_dev::profile_function!();
 
         self.prepare(world, None);
         self.graph
-            .execute((world, &self.res, shader_lib, asset_storage))?;
+            .execute((world, &self.res, shader_lib, asset_manager))?;
 
         self.reset();
         Ok(())
@@ -171,13 +171,13 @@ impl WorldRenderer {
         world: &World,
         camera: Option<hikari_core::Entity>,
         shader_lib: &ShaderLibrary,
-        asset_storage: &AssetStorage,
+        asset_manager: &AssetManager,
     ) -> anyhow::Result<&SampledImage> {
         hikari_dev::profile_function!();
 
         self.prepare(world, camera);
         self.graph
-            .execute((world, &self.res, shader_lib, asset_storage))?;
+            .execute((world, &self.res, shader_lib, asset_manager))?;
 
         self.reset();
         Ok(self.get_output_image())

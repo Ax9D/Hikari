@@ -60,7 +60,7 @@ pub fn build_pass(
 
                 cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
 
-                let scenes = assets.get::<Scene>().expect("Scenes pool not found");
+                let scenes = assets.read_assets::<Scene>().expect("Scenes pool not found");
                 for (_, (transform, mesh_comp)) in
                     &mut world.query::<(&Transform, &MeshRender)>()
                 {

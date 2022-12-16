@@ -10,7 +10,6 @@ pub use ecs::*;
 pub use game::*;
 pub use time::*;
 
-use hikari_asset::{AssetManager, AssetStorage};
 use hikari_systems::Task;
 pub use plugin::*;
 use rayon::ThreadPoolBuilder;
@@ -46,10 +45,5 @@ impl crate::Plugin for CorePlugin {
         let threadpool = Arc::new(threadpool);
 
         game.add_state(threadpool.clone());
-        let asset_manager = AssetManager::with_threadpool(threadpool);
-        hikari_asset::serde::init(asset_manager.clone());
-
-        game.add_state(AssetStorage::default());
-        game.add_state(asset_manager);
     }
 }

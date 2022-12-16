@@ -13,7 +13,6 @@ use std::ffi::OsStr;
 
 pub use camera::*;
 pub use error::Error;
-use hikari_asset::AssetManager;
 use hikari_core::Plugin;
 use hikari_render::Gfx;
 pub use light::*;
@@ -61,13 +60,11 @@ impl Plugin for Plugin3D {
 
         let shader_lib = ShaderLibrary::new(&device, std::env::current_dir().unwrap().join("assets/shaders"), config);
         game.add_state(shader_lib);
-
-        let mut manager = game.get_mut::<AssetManager>();
-        manager.add_loader::<Texture2D, TextureLoader>(TextureLoader {
+        game.register_asset_loader::<Texture2D, TextureLoader>(TextureLoader {
             device: device.clone(),
         });
-        manager.add_loader::<Material, MaterialLoader>(MaterialLoader);
-        manager.add_loader::<Scene, GLTFLoader>(GLTFLoader {
+        game.register_asset_loader::<Material, MaterialLoader>(MaterialLoader);
+        game.register_asset_loader::<Scene, GLTFLoader>(GLTFLoader {
             device,
         });
     }

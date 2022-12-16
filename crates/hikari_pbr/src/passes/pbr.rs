@@ -177,11 +177,11 @@ pub fn build_pass(
 
             {
                 hikari_dev::profile_scope!("Render scene");
-                let scenes = assets.get::<Scene>().expect("Meshes pool not found");
+                let scenes = assets.read_assets::<Scene>().expect("Meshes pool not found");
                 let materials = assets
-                    .get::<hikari_3d::Material>()
+                    .read_assets::<hikari_3d::Material>()
                     .expect("Materials pool not found");
-                let textures = assets.get::<Texture2D>().expect("Textures pool not found");
+                let textures = assets.read_assets::<Texture2D>().expect("Textures pool not found");
 
                 for (_, (transform, mesh_comp)) in
                     &mut world.query::<(&Transform, &MeshRender)>()

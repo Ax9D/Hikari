@@ -1,4 +1,4 @@
-use hikari_asset::{Asset, AssetManager, AssetStorage};
+use hikari_asset::{Asset, AssetManager, AssetManagerBuilder, Loader, Saver};
 use hikari_systems::*;
 
 use winit::{
@@ -15,6 +15,7 @@ pub struct Game {
     state: StateBuilder,
     init_schedule: ScheduleBuilder,
     run_schedule: ScheduleBuilder,
+    asset_manager_builder: AssetManagerBuilder,
     event_hooks:
         Vec<Box<dyn FnMut(&GlobalState, &mut Window, &Event<()>, &mut ControlFlow) + 'static>>,
 }
@@ -29,6 +30,7 @@ impl Game {
             state: StateBuilder::new(),
             init_schedule: ScheduleBuilder::new(),
             run_schedule: ScheduleBuilder::new(),
+            asset_manager_builder: AssetManager::builder(),
             event_hooks: Vec::new(),
         })
     }
@@ -75,34 +77,38 @@ impl Game {
         self
     }
     pub fn create_asset<T: Asset>(&mut self) -> &mut Self {
-        {
-            let mut asset_storage = self.get_mut::<AssetStorage>();
-            let mut asset_manager = self.get_mut::<AssetManager>();
+        self.asset_manager_builder.register_asset_type::<T>();
 
-            asset_storage.add::<T>();
-            asset_manager.register_asset(&asset_storage.get::<T>().unwrap());
-        }
         let mut task_name = String::from(std::any::type_name::<T>());
         task_name.push_str("_asset_update");
         self.add_task(
             crate::LAST,
             Task::new(
                 &task_name,
-                |asset_manager: &AssetManager, asset_storage: &mut AssetStorage| {
-                    let mut pool = asset_storage.get::<T>().unwrap();
+                |asset_manager: &AssetManager| {
                     asset_manager
-                        .update(&mut pool)
-                        .expect("Failed to update asset pool");
+                        .update::<T>();
                 },
             ),
         );
         self
     }
+    pub fn register_asset_loader<T: Asset, L: Loader>(&mut self, loader: L) -> &mut Self {
+        self.asset_manager_builder.register_loader::<T, L>(loader);
+
+        self
+    }
+    pub fn register_asset_saver<T: Asset, S: Saver>(&mut self, saver: S) -> &mut Self {
+        self.asset_manager_builder.register_saver::<T, S>(saver);
+
+        self
+    }
+
     pub fn window(&mut self) -> &mut Window {
         &mut self.window
     }
 
-    pub fn run(self) -> ! {
+    pub fn run(mut self) -> ! {
         let mut init = self
             .init_schedule
             .build()
@@ -111,6 +117,10 @@ impl Game {
             .run_schedule
             .build()
             .expect("Failed to create update schedule");
+        
+        let asset_manager = self.asset_manager_builder.build().expect("Failed to create asset manager");
+        self.state.add_state(asset_manager);
+
         let mut state = self.state.build();
         let mut hooks = self.event_hooks;
 

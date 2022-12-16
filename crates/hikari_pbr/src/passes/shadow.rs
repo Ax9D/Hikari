@@ -241,7 +241,7 @@ depth_prepass: &GpuHandle<SampledImage>
             let cascade_render_buffer = graph_res.get_buffer(&cascade_render_buffer).unwrap();
             cmd.set_buffer(cascade_render_buffer, 0..N_CASCADES, 0, 1);
 
-            let scenes = assets.get::<Scene>().expect("Scenes pool not found");
+            let scenes = assets.read_assets::<Scene>().expect("Scenes pool not found");
             for cascade_ix in 0..N_CASCADES {
                 cmd.set_viewport((cascade_ix as u32 * shadow_map_size) as f32, 0.0, shadow_map_size as f32, shadow_map_size as f32);
                 cmd.set_scissor((cascade_ix as u32 * shadow_map_size) as i32, 0, shadow_map_size, shadow_map_size);
