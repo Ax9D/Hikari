@@ -2,13 +2,12 @@ use hikari_math::Vec4;
 
 #[derive(Clone, Copy, Debug, type_uuid::TypeUuid)]
 #[uuid = "205dd658-14f4-49eb-9e3a-d6cd0fd128ab"]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[serde(default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
 pub struct Light {
     pub color: Vec4,
     pub intensity: f32,
     pub size: f32,
-    pub shadow: Option<ShadowInfo>,
+    pub shadow: ShadowInfo,
     pub kind: LightKind,
 }
 
