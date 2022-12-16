@@ -1,7 +1,7 @@
 pub mod pipeline;
 use vk_sync_fork::AccessType;
 
-use crate::{graph::GpuHandle, texture::SampledImage, Args, ByRef, RenderpassCommands};
+use crate::{graph::{GpuHandle, command::render::PassRecordInfo}, texture::SampledImage, Args, ByRef, RenderpassCommands, GraphResources, Buffer};
 
 use super::{AttachmentConfig, ImageSize, Input, Output};
 
@@ -15,7 +15,7 @@ pub struct Renderpass<T: Args> {
     outputs: Vec<Output>,
     pub(crate) present_to_swapchain: bool,
     pub(crate) record_fn:
-        Option<Box<dyn FnMut(&mut RenderpassCommands, <T::Ref as ByRef>::Item) + Send + Sync>>,
+        Option<Box<dyn FnMut(&mut RenderpassCommands, &GraphResources, &PassRecordInfo, <T::Ref as ByRef>::Item) + Send + Sync>>,
 }
 
 impl<T: Args> Renderpass<T> {
@@ -25,7 +25,6 @@ impl<T: Args> Renderpass<T> {
     pub fn new(
         name: &str,
         area: ImageSize,
-        record_fn: impl FnMut(&mut RenderpassCommands, <T::Ref as ByRef>::Item) + Send + Sync + 'static,
     ) -> Self {
         Self {
             name: name.to_string(),
@@ -63,27 +62,95 @@ impl<T: Args> Renderpass<T> {
     }
     fn read_image_check(&mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) {
         if self.inputs.iter().any(|input| match input {
-            Input::SampleImage(existing_image, _, _, _) | Input::ReadImage(existing_image, _) => {
+            Input::ReadImage(existing_image, _) => {
                 existing_image == image
             }
+            _=> false
         }) {
-            panic!("Image handle {:?} already registered for read", image);
+            panic!("Image handle {:?} already registered for read in renderpass", image);
         }
 
         match access_type {
-            AccessType::AnyShaderReadSampledImageOrUniformTexelBuffer
-            | AccessType::VertexShaderReadSampledImageOrUniformTexelBuffer
-            | AccessType::TessellationControlShaderReadSampledImageOrUniformTexelBuffer
-            | AccessType::TessellationEvaluationShaderReadSampledImageOrUniformTexelBuffer
-            | AccessType::GeometryShaderReadSampledImageOrUniformTexelBuffer
-            | AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer
-            | AccessType::FragmentShaderReadColorInputAttachment
-            | AccessType::FragmentShaderReadDepthStencilInputAttachment => {}
+            AccessType::ComputeShaderReadSampledImageOrUniformTexelBuffer |
+            AccessType::Nothing |
+            AccessType::VertexShaderReadSampledImageOrUniformTexelBuffer |
+            AccessType::VertexShaderReadOther |
+            AccessType::TessellationControlShaderReadSampledImageOrUniformTexelBuffer |
+            AccessType::TessellationControlShaderReadOther |
+            AccessType::TessellationEvaluationShaderReadSampledImageOrUniformTexelBuffer |
+            AccessType::TessellationEvaluationShaderReadOther |
+            AccessType::GeometryShaderReadSampledImageOrUniformTexelBuffer |
+            AccessType::GeometryShaderReadOther |
+            AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer |
+            AccessType::FragmentShaderReadColorInputAttachment |
+            AccessType::FragmentShaderReadDepthStencilInputAttachment |
+            AccessType::FragmentShaderReadOther |
+            AccessType::ColorAttachmentRead |
+            AccessType::DepthStencilAttachmentRead |
+            AccessType::ComputeShaderReadOther |
+            AccessType::AnyShaderReadSampledImageOrUniformTexelBuffer |
+            AccessType::AnyShaderReadOther => {},
             _ => panic!(
-                "Invalid access type {:?}, for renderpass sample_image",
+                "Invalid access type {:?} for image read in renderpass",
                 access_type
             ),
         }
+    }
+    fn write_image_check(&mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) {
+        if self.outputs.iter().any(|input| match input {
+            Output::WriteImage(existing_image, _) => {
+                existing_image == image
+            }
+            _=> false
+        }) {
+            panic!("Image handle {:?} already registered for write", image);
+        }
+
+        match access_type {
+            AccessType::VertexShaderWrite |
+            AccessType::TessellationControlShaderWrite |
+            AccessType::TessellationEvaluationShaderWrite |
+            AccessType::GeometryShaderWrite |
+            AccessType::FragmentShaderWrite |
+            AccessType::ComputeShaderWrite |
+            AccessType::AnyShaderWrite |
+            AccessType::TransferWrite |
+            AccessType::HostWrite |
+            AccessType::General => {}
+
+            _ => panic!(
+                "Invalid access type {:?} for image write in computepass",
+                access_type
+            ),
+        }
+    }
+    fn draw_image_check(&mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) {
+        if self.outputs.iter().any(|input| match input {
+            Output::WriteImage(existing_image, _) => {
+                existing_image == image
+            }
+            _=> false
+        }) {
+            panic!("Image handle {:?} already registered for write", image);
+        }
+
+        match access_type {
+            AccessType::ColorAttachmentRead |
+            AccessType::ColorAttachmentReadWrite |
+            AccessType::DepthStencilAttachmentRead |
+            AccessType::ColorAttachmentWrite |
+            AccessType::DepthStencilAttachmentWrite |
+            AccessType::DepthAttachmentWriteStencilReadOnly |
+            AccessType::StencilAttachmentWriteDepthReadOnly => {}
+            _ => panic!(
+                "Invalid access type {:?} for image write in computepass",
+                access_type
+            ),
+        }
+    }
+    pub fn cmd(mut self, record_fn: impl FnMut(&mut RenderpassCommands, &GraphResources, &PassRecordInfo, <T::Ref as ByRef>::Item) + Send + Sync + 'static) -> Self {
+        self.record_fn = Some(Box::new(record_fn));
+        self
     }
     pub fn read_image(mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) -> Self {
         self.read_image_check(image, access_type);
@@ -92,33 +159,33 @@ impl<T: Args> Renderpass<T> {
             .push(Input::ReadImage(image.clone(), access_type));
         self
     }
-    /// Used to add an "input" image to this pass, which will be automatically bound at the specified binding and be available in shaders for sampling
-    pub fn sample_image(
-        mut self,
-        image: &GpuHandle<SampledImage>,
-        access_type: AccessType,
-        binding: u32,
-    ) -> Self {
-        self.read_image_check(image, access_type);
+    // /// Used to add an "input" image to this pass, which will be automatically bound at the specified binding and be available in shaders for sampling
+    // pub fn sample_image(
+    //     mut self,
+    //     image: &GpuHandle<SampledImage>,
+    //     access_type: AccessType,
+    //     binding: u32,
+    // ) -> Self {
+    //     self.read_image_check(image, access_type);
 
-        self.inputs
-            .push(Input::SampleImage(image.clone(), access_type, binding, 0));
-        self
-    }
+    //     self.inputs
+    //         .push(Input::SampleImage(image.clone(), access_type, binding, 0));
+    //     self
+    // }
 
-    pub fn sample_image_array(
-        mut self,
-        image: &GpuHandle<SampledImage>,
-        access_type: AccessType,
-        binding: u32,
-        index: usize
-    ) -> Self {
-        self.read_image_check(image, access_type);
+    // pub fn sample_image_array(
+    //     mut self,
+    //     image: &GpuHandle<SampledImage>,
+    //     access_type: AccessType,
+    //     binding: u32,
+    //     index: usize
+    // ) -> Self {
+    //     self.read_image_check(image, access_type);
 
-        self.inputs
-            .push(Input::SampleImage(image.clone(), access_type, binding, index));
-        self
-    }
+    //     self.inputs
+    //         .push(Input::SampleImage(image.clone(), access_type, binding, index));
+    //     self
+    // }
     // pub fn read_image(mut self, image: &GpuHandle<SampledImage>, access_type: AccessType) -> Self {
     //     if self.inputs.iter().any(|input| {
     //         match input {
@@ -200,11 +267,11 @@ impl<T: Args> Renderpass<T> {
         //     panic!("Image handle {:?} already registered for writes", image);
         // }
 
+        self.draw_image_check(image, attachment_config.access);
         self.outputs
             .push(Output::DrawImage(image.clone(), attachment_config));
         self
     }
-
     /// Marks that the renderpass will be used for presentation to the swapchain.
     /// If a Renderpass has been marked for presentation, draws to other images is not permitted, and only the Swapchain's Framebuffer
     /// consisting of a single Color Attachment(Binding 0) and a Depth Stencil Attachment(Binding 1) will be available

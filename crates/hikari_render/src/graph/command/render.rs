@@ -13,6 +13,10 @@ pub struct RenderpassBeginInfo<'a> {
     pub framebuffer: vk::Framebuffer,
 }
 
+pub struct PassRecordInfo {
+    pub framebuffer_width: u32,
+    pub framebuffer_height: u32,
+}
 
 pub struct RenderpassCommands<'cmd, 'graph> {
     cmd: &'cmd mut CommandBuffer<'graph>,

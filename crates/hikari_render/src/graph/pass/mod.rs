@@ -121,6 +121,13 @@ impl AttachmentConfig {
     }
 }
 
+// #[derive(Debug, Clone)]
+// pub struct BufferInfo {
+//     raw: vk::Buffer,
+//     offset: u64,
+//     len: u64
+// }
+
 #[derive(Debug, Clone)]
 pub enum Input {
     ReadImage(GpuHandle<SampledImage>, AccessType),
@@ -130,7 +137,7 @@ pub enum Input {
 impl Input {
     pub fn erased_handle(&self) -> ErasedHandle {
         match self {
-            Input::ReadImage(handle, _) | Input::SampleImage(handle, _, _, _) => handle.clone().into(),
+            Input::ReadImage(handle, _) => handle.clone().into(),
         }
     }
 }
