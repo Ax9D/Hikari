@@ -237,22 +237,34 @@ impl<'a> CommandBuffer<'a> {
     }
     #[inline]
     pub(crate) fn set_image(&mut self, image: &SampledImage, set: u32, binding: u32) {
+        self.set_image_mip(image, 1, set, binding)
+    }
+    #[inline]
+    pub(crate) fn set_image_mip(&mut self, image: &SampledImage, mip_level: u32, set: u32, binding: u32) {
+        self.set_image_view_and_sampler(image.image_view(mip_level as usize).unwrap(), image.sampler(), set, binding, 0)
+    }
+    #[inline]
+    pub(crate) fn set_image_view_and_sampler(&mut self, image_view: vk::ImageView, sampler: vk::Sampler, set: u32, binding: u32, index: usize) {
         self.saved_state.descriptor_state.set_image(
-            image.image_view(1).unwrap(),
-            image.sampler(),
+            image_view,
+            sampler,
             set,
             binding,
-            0,
+            index,
         );
     }
     #[inline]
     pub(crate) fn set_image_array(&mut self, image: &SampledImage, set: u32, binding: u32, index: usize) {
+        self.set_image_mip_array(image, 1, set, binding, index)
+    }
+    #[inline]
+    pub(crate) fn set_image_mip_array(&mut self, image: &SampledImage, mip_level: u32, set: u32, binding: u32, index: usize) {
         self.saved_state.descriptor_state.set_image(
-            image.image_view(1).unwrap(),
+            image.image_view(mip_level as usize).unwrap(),
             image.sampler(),
             set,
             binding,
-            index
+            index,
         );
     }
     pub(crate) fn apply_image_barrier(&mut self, image: &SampledImage, previous_accesses: &[AccessType], next_accesses: &[AccessType], previous_layout: crate::vk_sync::ImageLayout, next_layout: crate::vk_sync::ImageLayout, range: vk::ImageSubresourceRange) {
