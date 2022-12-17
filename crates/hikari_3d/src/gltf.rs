@@ -21,7 +21,7 @@ struct ImportData {
     buffers: Vec<gltf::buffer::Data>,
 }
 impl ImportData {
-    pub fn new(path: &Path, data: &[u8]) -> Result<Self, gltf::Error> {
+    pub fn new(path: &Path, _data: &[u8]) -> Result<Self, gltf::Error> {
         assert!(path.is_relative());
 
         let (document, buffers, _images) = gltf::import(path)?;
@@ -282,7 +282,7 @@ fn parse_texture_data(
 
             match mime_type {
                 "image/png" | "image/jpeg" => {
-                    create_and_load_image_with_data(&data, texture, config, gltf, load_context)
+                    create_and_load_image_with_data(&data, texture, config, mime_type, gltf, load_context)
                 }
                 _ => Err(anyhow::anyhow!(
                     crate::error::Error::UnsupportedImageFormat(
@@ -314,7 +314,7 @@ fn parse_texture_data(
 
                 match mime_type {
                     "image/png" | "image/jpeg" => {              
-                        create_and_load_image_with_data(&data,texture, config,  gltf, load_context)
+                        create_and_load_image_with_data(&data, texture, config,  mime_type, gltf, load_context)
                     }
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
@@ -343,16 +343,21 @@ fn parse_texture_data(
         }
     }
 }
-fn create_and_load_image_with_data(data: &[u8], texture: &gltf::Texture, config: TextureConfig, import_data: &ImportData, load_context: &mut LoadContext) -> anyhow::Result<Handle<Texture2D>> {
+fn create_and_load_image_with_data(data: &[u8], texture: &gltf::Texture, config: TextureConfig, mime_type: &str, import_data: &ImportData, load_context: &mut LoadContext) -> anyhow::Result<Handle<Texture2D>> {
     let base_path =import_data.parent_path();
     let texture_name = texture
         .name()
         .map(|name| name.to_owned())
         .unwrap_or_else(|| format!("{}_texture_{}", import_data.filename(), texture.index()));
 
+    let ext = mime_type.split("/").nth(1).unwrap();
+
     let mut new_texture_path = base_path.to_owned();
     new_texture_path.push(texture_name);
-
+    
+    if new_texture_path.extension().is_none() {
+        new_texture_path.set_extension(ext);
+    }
     
     if !new_texture_path.exists() {
         let mut file = load_context.io().write_file(&new_texture_path, &Mode::create_and_write())?;
@@ -567,24 +572,7 @@ fn load_mesh(
 
     Ok(crate::Mesh { sub_meshes, transform })
 }
-fn pack_for_gpu(
-    positions: Vec<Vec3>,
-    normals: Vec<Vec3>,
-    tc0s: Vec<Vec2>,
-    tc1s: Vec<Vec2>,
-) -> Vec<Vertex> {
-    let mut vertices = Vec::with_capacity(positions.capacity());
-    for (position, normal, tc0, tc1) in itertools::izip!(positions, normals, tc0s, tc1s) {
-        vertices.push(Vertex {
-            position,
-            normal,
-            tc0,
-            tc1,
-        });
-    }
 
-    vertices
-}
 pub fn load_scene(
     device: &Arc<hikari_render::Device>,
     path: &Path,
