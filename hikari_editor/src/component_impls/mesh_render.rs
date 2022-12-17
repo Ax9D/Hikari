@@ -32,7 +32,11 @@ impl EditorComponent for MeshRender {
         let ass_man = state.get::<AssetManager>().unwrap();
 
         let mut path = if let MeshSource::Scene(scene, _) = &self.source {
-            ass_man.get_path(scene).display().to_string()
+            let db = ass_man.asset_db().read();
+            let erased = scene.clone_erased_as_weak();
+            let path = db.handle_to_path(&erased).unwrap();
+
+            path.display().to_string()
         } else {
             "None".into()
         };
@@ -44,7 +48,8 @@ impl EditorComponent for MeshRender {
                 .pick_file()
             {
                 assert!(path.extension().is_some());
-                let scene = ass_man.load::<Scene>(&path)?;
+                let path = path.strip_prefix(ass_man.get_asset_dir())?;
+                let scene = ass_man.load::<Scene>(path, None, false)?;
                 self.source = MeshSource::Scene(scene, 0);
             }
         }
