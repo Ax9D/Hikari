@@ -1,13 +1,13 @@
 use std::{fs::File, path::Path};
 
-use hikari::{asset::{AssetManager, AssetStorage, Handle}};
+use hikari::{asset::{AssetManager, Handle, LazyHandle}};
 use serde::{Deserialize, Serialize};
 
 use crate::scene::Scene;
 
 pub const PROJECT_EXTENSION: &str = "hikari";
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 pub struct Project {
     pub name: String,
     engine_version: String,
@@ -24,7 +24,8 @@ impl Project {
         }
     }
     pub fn open(path: impl AsRef<Path>) -> anyhow::Result<Self> {
-        Ok(serde_yaml::from_reader(File::open(path)?)?)
+        let serialized_project: SerializedProject = serde_yaml::from_reader(File::open(path)?)?;
+        Ok(serialized_project.into())
     }
     pub fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
         // let mut file_name = PathBuf::from(path);
@@ -43,15 +44,14 @@ impl Project {
         path: impl AsRef<Path>,
         scene: Scene,
         manager: &AssetManager,
-        storage: &mut AssetStorage,
     ) -> anyhow::Result<Handle<Scene>> {
         // let mut name_with_ext = PathBuf::from(name);
         // name_with_ext.set_extension(SCENE_EXTENSION);
         // let full_path = path.as_ref().join(name_with_ext);
 
-        let mut scenes = storage.get_mut::<Scene>().unwrap();
-        let handle = manager.create(path.as_ref(), scene, &mut scenes)?;
-        manager.save(&handle, scenes)?;
+        let handle = manager.create(path.as_ref(), scene, None)?;
+        manager.save(&handle)?;
+
         self.scenes.push(handle.clone());
         Ok(handle)
     }
@@ -68,6 +68,29 @@ impl Project {
 
     pub fn scenes(&self) -> &[Handle<Scene>] {
         &self.scenes
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct SerializedProject {
+    name: String,
+    engine_version: String,
+    scenes: Vec<LazyHandle<Scene>>
+}
+
+impl Into<Project> for SerializedProject {
+    fn into(self) -> Project {
+        let mut scenes = Vec::with_capacity(self.scenes.len());
+
+        for scene in self.scenes {
+            scenes.push(scene.into());
+        }
+
+        Project {
+            name: self.name,
+            engine_version: self.engine_version,
+            scenes,
+        }
     }
 }
 

@@ -10,7 +10,6 @@ use self::{
 use crate::{component_impls, components::EditorComponents, imgui};
 use clipboard::ClipboardProvider;
 use hikari::{
-    asset::AssetManager,
     core::{serde::Registry, Game},
     input::KeyCode,
 };
@@ -153,13 +152,10 @@ impl Editor {
 
         let registry = std::sync::Arc::new(registry);
 
-        {
-            game.create_asset::<Scene>();
-            let mut ass_man = game.get_mut::<AssetManager>();
-            let loader = SceneLoader { registry };
-            ass_man.add_loader::<Scene, SceneLoader>(loader.clone());
-            ass_man.add_saver::<Scene, SceneLoader>(loader);
-        }
+        game.create_asset::<Scene>();
+        let loader = SceneLoader { registry };
+        game.register_asset_loader::<Scene, SceneLoader>(loader.clone());
+        game.register_asset_saver::<Scene, SceneLoader>(loader);
 
         let editor = Self {
             logging: Logging::new(config.log_listener),
@@ -265,7 +261,7 @@ impl Editor {
                 .add_filter("Hikari Project", &["hikari"])
                 .pick_file()
             {
-                self.project_manager.open(project_file, state);
+                self.project_manager.open(project_file, state)?;
             }
         }
 

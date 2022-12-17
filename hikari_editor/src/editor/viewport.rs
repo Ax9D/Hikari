@@ -1,9 +1,10 @@
 use crate::{imgui};
 use crate::imgui::gizmo::*;
+use hikari::asset::AssetManager;
 use hikari::core::{Entity, Time};
 use hikari::g3d::{Light, LightKind};
 use hikari::math::*;
-use hikari::{pbr::WorldRenderer, render::imgui_support::TextureExt, math::{Transform, Vec2}, core::World, g3d::{Camera, ShaderLibrary}, asset::AssetStorage};
+use hikari::{pbr::WorldRenderer, render::imgui_support::TextureExt, math::{Transform, Vec2}, core::World, g3d::{Camera, ShaderLibrary}};
 use hikari_editor::*;
 
 use super::camera::CameraState;
@@ -190,7 +191,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
     let mut renderer = state.get_mut::<WorldRenderer>().unwrap();
     let mut world = state.get_mut::<World>().unwrap();
     let shader_lib = state.get_mut::<ShaderLibrary>().unwrap();
-    let asset_storage = state.get_mut::<AssetStorage>().unwrap();
+    let asset_manager = state.get::<AssetManager>().unwrap();
 
     let dt = state.get::<Time>().unwrap().dt();
 
@@ -232,7 +233,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                 .build();
             }
 
-            let pbr_output = renderer.render_editor(&world, Some(editor_camera), &shader_lib, &asset_storage).expect("Failed to render editor viewport");
+            let pbr_output = renderer.render_editor(&world, Some(editor_camera), &shader_lib, &asset_manager).expect("Failed to render editor viewport");
 
             let pbr_output = ui.get_texture_id(pbr_output);
             imgui::Image::new(pbr_output, window_size_float).build(ui);

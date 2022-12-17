@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use hikari::{
-    asset::{AssetManager, AssetStorage, Handle, LoadStatus},
+    asset::{AssetManager, Handle, LoadStatus},
     core::{World}, g3d::Camera,
 };
 use hikari_editor::{project::Project, Scene, SCENE_EXTENSION};
@@ -64,7 +64,7 @@ impl SceneCreator {
             !valid || path_string.is_empty() || self.name.is_empty(),
             || {
                 if ui.button("Create") {
-                    let path = self.path.clone();
+                    let path = self.path.strip_prefix(std::env::current_dir().unwrap()).unwrap();
                     let name = self.name.clone();
 
                     let mut full_path = path.join(name);
@@ -90,14 +90,16 @@ impl SceneCreator {
 }
 
 impl ProjectManager {
-    pub fn open(&mut self, file: impl AsRef<Path>, state: EngineState) {
+    pub fn open(&mut self, file: impl AsRef<Path>, state: EngineState) -> anyhow::Result<()> {
         let file_clone = file.as_ref().to_owned();
 
         let proj_dir = file_clone.parent().unwrap();
-        state
-            .get_mut::<AssetManager>()
-            .unwrap()
-            .set_asset_dir(proj_dir);
+        
+        let asset_manager = state.get::<AssetManager>().unwrap();
+
+        asset_manager.set_asset_dir(proj_dir)?;
+        std::env::set_current_dir(proj_dir)?;
+        
 
         match Project::open(file) {
             Ok(project) => {
@@ -117,12 +119,18 @@ impl ProjectManager {
                 log::error!("Failed to load project: {}", err);
             }
         }
+        
+        Ok(())
     }
     pub fn set_scene(&mut self, handle: Handle<Scene>, state: EngineState) -> anyhow::Result<()> {
         let components = state.get::<EditorComponents>().unwrap();
         let mut world = state.get_mut::<World>().unwrap();
-        let mut storage = state.get_mut::<AssetStorage>().unwrap();
-        let scenes = storage.get_mut::<Scene>().unwrap();
+        let manager = state.get::<AssetManager>().unwrap();
+        
+        manager.request_load(&handle, None, false)?;
+        manager.wait_for_load(&handle);
+
+        let mut scenes = manager.write_assets::<Scene>().unwrap();
 
         let scene = scenes.get_mut(&handle).unwrap();
 
@@ -143,13 +151,12 @@ impl ProjectManager {
     }
     pub fn save_all(&self, state: EngineState) -> anyhow::Result<()> {
         let manager = state.get::<AssetManager>().unwrap();
-        let mut storage = state.get_mut::<AssetStorage>().unwrap();
         let components = state.get::<EditorComponents>().unwrap();
 
         let world = state.get::<World>().unwrap();
 
         if let Some(handle) = &self.current_scene {
-            let scenes = storage.get_mut::<Scene>().unwrap();
+            let mut scenes = manager.write_assets::<Scene>().unwrap();
             let scene = scenes.get_mut(handle).unwrap();
             scene.world.clear();
 
@@ -160,11 +167,12 @@ impl ProjectManager {
                     }
                 }
             }
-
-            manager.save(handle, scenes)?;
+            drop(scenes);
+            manager.save(handle)?;
         }
         if let Some((path, project)) = &self.current {
             project.save(path)?;
+            manager.save_db()?;
         }
         Ok(())
     }
@@ -185,7 +193,6 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
 
     let mut new_scene_sure = false;
     {
-        let mut storage = state.get_mut::<AssetStorage>().unwrap();
         let manager = state.get::<AssetManager>().unwrap();
 
         ui.window("Project")
@@ -205,17 +212,19 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                                 let scene = new_scene();
                                 project_manager.new_scene_scratch = Some(
                                     project
-                                        .create_scene(path, scene, &manager, &mut storage)
+                                        .create_scene(path, scene, &manager)
                                         .expect("Failed to create project"),
                                 );
                             }
                         });
 
                     for handle in project.scenes() {
-                        let scene_path = manager.get_path(handle);
+                        let erased_handle = handle.clone_erased_as_weak();
+                        let db = manager.asset_db().read();
+                        let scene_path = db.handle_to_path(&erased_handle).unwrap();
                         let scene_name = scene_path.file_stem().unwrap().to_str().unwrap();
 
-                        if manager.load_status(&handle.clone_erased_as_internal()) != Some(LoadStatus::Loaded) {
+                        if manager.status(&erased_handle) == Some(LoadStatus::Failed) {
                             continue;
                         }
                         let selected = if let Some(current_handle) = &project_manager.current_scene

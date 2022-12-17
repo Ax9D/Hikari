@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use parking_lot::{RwLockUpgradableReadGuard};
 use serde::{
     de::{self, Visitor},
     ser::SerializeStruct,
@@ -43,13 +44,20 @@ impl<'de, T: Asset> Deserialize<'de> for Handle<T> {
         deserializer.deserialize_struct("Handle", &["uuid", "path"], HandleVisitor::new())
     }
 }
-
 struct HandleVisitor<T> {
+    lazy: bool,
     _phantom: PhantomData<T>,
 }
 impl<T> HandleVisitor<T> {
     pub fn new() -> Self {
         Self {
+            lazy: false,
+            _phantom: PhantomData::default(),
+        }
+    }
+    pub fn lazy() -> Self {
+        Self {
+            lazy: true,
             _phantom: PhantomData::default(),
         }
     }
@@ -95,21 +103,67 @@ impl<'de, T: Asset> Visitor<'de> for HandleVisitor<T> {
 
         let asset_manager = crate::manager::get_asset_manager();
 
-        let handle = asset_manager
-            .load(&path, None, false)
+        let handle = if self.lazy {
+            asset_manager
+            .load_lazy(&path, None)
+        } else {
+            asset_manager.load(&path, None, false)
+        };
+
+        let handle = handle
             .map_err(|err| de::Error::custom(&format!("Failed to load asset: {}", err)))?;
 
-        let asset_db = asset_manager.asset_db().read();
+        let asset_db = asset_manager.asset_db().upgradable_read();
         let loader_uuid = asset_db
             .handle_to_uuid(&handle.clone_erased_as_weak())
-            .unwrap();
+            .unwrap().clone();
 
         //assert!(&uuid == loader_uuid, "{}", path.display());
 
-        if &uuid != loader_uuid {
+        if uuid != loader_uuid {
+            println!("{:?}", (uuid, loader_uuid));
             log::warn!("Inconsistent UUIDs detected for {:?}. This can happen when newly created asset metadata is not saved", path);
+            let mut asset_db = RwLockUpgradableReadGuard::upgrade(asset_db);
+            asset_db.fix_uuid(&loader_uuid, uuid.clone());
         }
 
         Ok(handle)
+    }
+}
+
+
+pub struct LazyHandle<T> {
+    inner: Handle<T>
+}
+
+impl<T: Asset> From<Handle<T>> for LazyHandle<T> {
+    fn from(inner: Handle<T>) -> Self {
+        Self {
+            inner
+        }
+    }
+}
+impl<T: Asset> Into<Handle<T>> for LazyHandle<T> {
+    fn into(self) -> Handle<T> {
+        self.inner
+    }
+}
+
+impl<T: Asset> Serialize for LazyHandle<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.inner.serialize(serializer)
+    }
+}
+
+impl<'de, T: Asset> Deserialize<'de> for LazyHandle<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let handle = deserializer.deserialize_struct("Handle", &["uuid", "path"], HandleVisitor::lazy())?;
+        Ok(handle.into())
     }
 }
