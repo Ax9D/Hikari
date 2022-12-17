@@ -117,8 +117,13 @@ impl Game {
             .run_schedule
             .build()
             .expect("Failed to create update schedule");
+
+        let asset_manager = {
+        let threadpool = self.state.get::<std::sync::Arc<rayon::ThreadPool>>();
+        self.asset_manager_builder.thread_pool(&threadpool);
+        self.asset_manager_builder.build().expect("Failed to create asset manager")
+        };
         
-        let asset_manager = self.asset_manager_builder.build().expect("Failed to create asset manager");
         self.state.add_state(asset_manager);
 
         let mut state = self.state.build();
