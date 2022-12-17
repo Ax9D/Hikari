@@ -23,6 +23,33 @@ pub enum LoadStatus {
     Unloaded,
     Failed,
 }
+
+struct LoadStatuses {
+    inner: RwLock<HashMap<ErasedHandle, LoadStatus>>
+}
+impl LoadStatuses {
+    pub fn new() -> Self {
+        Self {
+            inner: RwLock::new(HashMap::new())
+        }
+    }
+    pub fn insert(&self, handle: &ErasedHandle, status: LoadStatus) {
+        let mut inner = self.inner.write();
+        inner.insert(handle.clone(), status);
+    }
+
+    pub fn get(&self, handle: &ErasedHandle) -> Option<LoadStatus> {
+        self.inner.read().get(handle).copied()
+    }
+    pub fn get_mut(&self, handle: &ErasedHandle) -> MappedRwLockWriteGuard<'_, LoadStatus> {
+        RwLockWriteGuard::map(self.inner.write(), |x| {
+            x.get_mut(handle).unwrap()
+        })
+    }
+    pub fn full_lock(&self) -> RwLockWriteGuard<'_, HashMap<ErasedHandle, LoadStatus>> {
+        self.inner.write()
+    }
+}
 struct LoadResult<T: Asset> {
     result: anyhow::Result<T>,
     handle: ErasedHandle,
@@ -58,7 +85,7 @@ struct AssetManagerInner {
     asset_db: RwLock<AssetDB>,
     loaders: HashMap<TypeId, Vec<Arc<dyn Loader>>>,
     savers: HashMap<TypeId, Vec<Arc<dyn Saver>>>,
-    load_statuses: RwLock<HashMap<ErasedHandle, LoadStatus>>,
+    load_statuses: LoadStatuses,
     thread_pool: Arc<ThreadPool>,
     io: Arc<dyn IO>,
     load_queue: Arc<LoadQueue>,
@@ -127,10 +154,6 @@ impl AssetManagerInner {
         settings: &T::Settings,
         reload: bool,
     ) -> anyhow::Result<()> {
-        self.load_statuses
-            .write()
-            .insert(handle.clone(), LoadStatus::Loading);
-
         let loader = self.get_loader::<T>(path)?.clone();
 
         let io = self.io.clone();
@@ -256,20 +279,21 @@ impl AssetManagerInner {
         self.asset_db().write().rename_record(path.as_ref(), new_path.as_ref())
     }
     fn queue_update<T: Asset>(&self) {
-        let mut pool = self.write_assets::<T>().unwrap();
-
+        let asset_db = self.asset_db.read();
+        let mut load_statuses = self.load_statuses.full_lock();
+        
         for result in self.load_queue.recv::<T>() {
-            let mut load_statuses = self.load_statuses.write();
             let load_status = load_statuses.get_mut(&result.handle).unwrap();
-
+            
             match result.result {
                 Ok(data) => {
                     log::info!(
                         "Loaded {:?}",
-                        self.asset_db.read().handle_to_path(&result.handle).unwrap()
+                        asset_db.handle_to_path(&result.handle).unwrap()
                     );
-
+                    
                     let handle = result.handle.into_typed::<T>().unwrap();
+                    let mut pool = self.write_assets::<T>().unwrap();
                     pool.insert_with_handle(&handle, data);
 
                     *load_status = LoadStatus::Loaded;
@@ -435,11 +459,9 @@ impl AssetManagerBuilder {
             #[cfg(feature = "serialize")]
             any_serde,
             load_queue: Arc::new(load_queue),
-            load_statuses: RwLock::new(HashMap::new()),
-            asset_dir: RwLock::new(PathBuf::new()),
+            load_statuses: LoadStatuses::new(),
+            asset_dir: RwLock::new(std::env::current_dir()?),
         };
-
-        asset_manager.set_asset_dir(std::env::current_dir()?);
 
         let asset_manager = AssetManager::new(asset_manager);
 
