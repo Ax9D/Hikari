@@ -106,6 +106,12 @@ impl ErasedHandle {
             type_id: self.type_id,
         }
     }
+    pub fn clone_weak(&self) -> Self {
+        Self {
+            raw: self.raw.clone_weak(),
+            type_id: self.type_id
+        }
+    }
     pub fn is_weak(&self) -> bool {
         matches!(self.raw.kind, HandleKind::Weak(_))
     }
