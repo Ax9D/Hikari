@@ -81,33 +81,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         rg::Renderpass::<(f32, f32)>::new(
             "Push",
             rg::ImageSize::default_xy(),
-            move |cmd: &mut rg::RenderpassCommands, (_, _)| {
-                cmd.set_shader(&pbr);
-                cmd.set_vertex_input_layout(layout);
-                cmd.set_vertex_buffer(&vertices, 0);
-                cmd.set_index_buffer(&indices);
-
-                cmd.push_constants(
-                    &PushConstants {
-                        position: hikari_math::vec2(1.0 * f32::sin(t as f32 * 0.01), 0.0),
-                        color: hikari_math::vec4(1.0, 0.0, 0.0, 1.0).into(),
-                    },
-                    0,
-                );
-                cmd.draw_indexed(0..QUAD_INDS.len(), 0, 0..1);
-
-                cmd.push_constants(
-                    &PushConstants {
-                        position: hikari_math::vec2(0.0, 1.0 * f32::sin(t as f32 * 0.01)),
-                        color: hikari_math::vec4(0.0, 0.0, 0.59, 1.0).into(),
-                    },
-                    0,
-                );
-                cmd.draw_indexed(0..QUAD_INDS.len(), 0, 0..1);
-
-                t += 1;
-            },
         )
+        .cmd(move |cmd: &mut rg::RenderpassCommands, _, record_info, (_, _)| {
+            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
+            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+
+            cmd.set_shader(&pbr);
+            cmd.set_vertex_input_layout(layout);
+            cmd.set_vertex_buffer(&vertices, 0);
+            cmd.set_index_buffer(&indices);
+
+            cmd.push_constants(
+                &PushConstants {
+                    position: hikari_math::vec2(1.0 * f32::sin(t as f32 * 0.01), 0.0),
+                    color: hikari_math::vec4(1.0, 0.0, 0.0, 1.0).into(),
+                },
+                0,
+            );
+            cmd.draw_indexed(0..QUAD_INDS.len(), 0, 0..1);
+
+            cmd.push_constants(
+                &PushConstants {
+                    position: hikari_math::vec2(0.0, 1.0 * f32::sin(t as f32 * 0.01)),
+                    color: hikari_math::vec4(0.0, 0.0, 0.59, 1.0).into(),
+                },
+                0,
+            );
+            cmd.draw_indexed(0..QUAD_INDS.len(), 0, 0..1);
+
+            t += 1;
+        })
         .present(),
     );
     let mut dt = 0.0;

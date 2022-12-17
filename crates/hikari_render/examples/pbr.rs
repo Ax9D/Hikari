@@ -1,3 +1,4 @@
+use hikari_3d::ShadowInfo;
 use hikari_math::Transform;
 use itertools::izip;
 use simple_logger::SimpleLogger;
@@ -289,55 +290,58 @@ fn depth_prepass(
     gb.add_renderpass(
         rg::Renderpass::<Args>::new(
             "DepthPrepass",
-            rg::ImageSize::default_xy(),
-            move |cmd, (scene, settings, _)| {
-                cmd.set_shader(&shader);
-                cmd.set_vertex_input_layout(layout);
-
-                cmd.set_depth_stencil_state(rg::DepthStencilState {
-                    depth_test_enabled: true,
-                    depth_write_enabled: true,
-                    depth_compare_op: rg::CompareOp::Less,
-                    ..Default::default()
-                });
-
-                let proj = scene
-                    .camera
-                    .get_projection_matrix(settings.width as f32, settings.height as f32);
-                let view = scene.camera.get_view_matrix();
-                let view_proj = (proj * view).to_cols_array();
-
-                ubo.get_mut().mapped_slice_mut()[0] = UBO { view_proj };
-
-                cmd.set_uniform_buffer(ubo.get(), 0..1, 0, 0);
-
-                for object in &scene.objects {
-                    let transform = object.transform.get_matrix();
-                    let model = &object.model;
-                    for mesh in &model.meshes {
-                        {
-                            hikari_dev::profile_scope!("Set vertex and index buffers");
-                            cmd.set_vertex_buffer(&mesh.vertices, 0);
-                            cmd.set_index_buffer(&mesh.indices);
-                        }
-
-                        cmd.push_constants(&PushConstants { transform }, 0);
-
-                        // println!(
-                        //     "{:?} {:?} {:?} {:?}",
-                        //     albedo.raw().image(),
-                        //     roughness.raw().image(),
-                        //     metallic.raw().image(),
-                        //     normal.raw().image()
-                        // );
-
-                        cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
-                    }
-                }
-
-                ubo.next_frame();
-            },
+            rg::ImageSize::default_xy()
         )
+        .cmd(move |cmd, _, record_info, (scene, settings, _)| {
+            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
+            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+
+            cmd.set_shader(&shader);
+            cmd.set_vertex_input_layout(layout);
+
+            cmd.set_depth_stencil_state(rg::DepthStencilState {
+                depth_test_enabled: true,
+                depth_write_enabled: true,
+                depth_compare_op: rg::CompareOp::Less,
+                ..Default::default()
+            });
+
+            let proj = scene
+                .camera
+                .get_projection_matrix(settings.width as f32, settings.height as f32);
+            let view = scene.camera.get_view_matrix();
+            let view_proj = (proj * view).to_cols_array();
+
+            ubo.get_mut().mapped_slice_mut()[0] = UBO { view_proj };
+
+            cmd.set_buffer(ubo.get(), 0..1, 0, 0);
+
+            for object in &scene.objects {
+                let transform = object.transform.get_matrix();
+                let model = &object.model;
+                for mesh in &model.meshes {
+                    {
+                        hikari_dev::profile_scope!("Set vertex and index buffers");
+                        cmd.set_vertex_buffer(&mesh.vertices, 0);
+                        cmd.set_index_buffer(&mesh.indices);
+                    }
+
+                    cmd.push_constants(&PushConstants { transform }, 0);
+
+                    // println!(
+                    //     "{:?} {:?} {:?} {:?}",
+                    //     albedo.raw().image(),
+                    //     roughness.raw().image(),
+                    //     metallic.raw().image(),
+                    //     normal.raw().image()
+                    // );
+
+                    cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
+                }
+            }
+
+            ubo.next_frame();
+        })
         .draw_image(&depth_output, rg::AttachmentConfig::depth_only_default()),
     );
 
@@ -479,93 +483,96 @@ fn pbr_pass(
         rg::Renderpass::<Args>::new(
             "PBR",
             rg::ImageSize::default_xy(),
-            move |cmd, (scene, settings, _)| {
-                let proj = scene
-                    .camera
-                    .get_projection_matrix(settings.width as f32, settings.height as f32);
-                let view = scene.camera.get_view_matrix();
+        )
+        .cmd(move |cmd, res, record_info, (scene, settings, _)| {
+            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
+            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
 
-                let view_proj = (proj * view).to_cols_array();
+            let proj = scene
+                .camera
+                .get_projection_matrix(settings.width as f32, settings.height as f32);
+            let view = scene.camera.get_view_matrix();
 
-                use hikari_math::Vec3;
-                let direction = scene.dir_light.transform.rotation * -Vec3::Y;
+            let view_proj = (proj * view).to_cols_array();
 
-                ubo.get_mut().mapped_slice_mut()[0] = UBO {
-                    view_proj,
-                    camera_position: scene.camera.transform.position.into(),
-                    exposure: scene.camera.inner.exposure,
-                    dir_light: DirLight {
-                        color: scene.dir_light.light.color.into(),
-                        direction: direction.into(),
-                        intensity: scene.dir_light.light.intensity,
-                    },
-                };
+            use hikari_math::Vec3;
+            let direction = scene.dir_light.transform.rotation * -Vec3::Y;
 
-                cmd.set_shader(&shader);
+            ubo.get_mut().mapped_slice_mut()[0] = UBO {
+                view_proj,
+                camera_position: scene.camera.transform.position.into(),
+                exposure: scene.camera.inner.exposure,
+                dir_light: DirLight {
+                    color: scene.dir_light.light.color.into(),
+                    direction: direction.into(),
+                    intensity: scene.dir_light.light.intensity,
+                },
+            };
 
-                cmd.set_vertex_input_layout(layout);
+            cmd.set_shader(&shader);
 
-                cmd.set_depth_stencil_state(rg::DepthStencilState {
-                    depth_test_enabled: true,
-                    depth_write_enabled: false,
-                    depth_compare_op: rg::CompareOp::Equal,
-                    ..Default::default()
-                });
+            cmd.set_vertex_input_layout(layout);
 
-                cmd.set_uniform_buffer(ubo.get(), 0..1, 0, 0);
+            cmd.set_depth_stencil_state(rg::DepthStencilState {
+                depth_test_enabled: true,
+                depth_write_enabled: false,
+                depth_compare_op: rg::CompareOp::Equal,
+                ..Default::default()
+            });
 
-                {
-                    hikari_dev::profile_scope!("Render scene");
-                    for object in &scene.objects {
-                        let transform = object.transform.get_matrix();
-                        let model = &object.model;
-                        for mesh in &model.meshes {
-                            {
-                                hikari_dev::profile_scope!("Set vertex and index buffers");
-                                cmd.set_vertex_buffer(&mesh.vertices, 0);
-                                cmd.set_index_buffer(&mesh.indices);
-                            }
-                            let material = Material {
-                                albedo: mesh.material.albedo_factor,
-                                roughness: mesh.material.roughness_factor,
-                                metallic: mesh.material.metallic_factor,
-                                albedo_uv_set: mesh.material.albedo_set,
-                                roughness_uv_set: mesh.material.roughness_set,
-                                metallic_uv_set: mesh.material.metallic_set,
-                                normal_uv_set: mesh.material.normal_set,
-                            };
+            cmd.set_buffer(ubo.get(), 0..1, 0, 0);
 
-                            let pc = PushConstants {
-                                transform,
-                                material,
-                            };
-
-                            cmd.push_constants(&pc, 0);
-
-                            let albedo = mesh.material.albedo.as_ref().unwrap_or(&checkerboard);
-                            let roughness = mesh.material.roughness.as_ref().unwrap_or(&black);
-                            let metallic = mesh.material.metallic.as_ref().unwrap_or(&black);
-                            let normal = mesh.material.normal.as_ref().unwrap_or(&black);
-
-                            // println!(
-                            //     "{:?} {:?} {:?} {:?}",
-                            //     albedo.raw().image(),
-                            //     roughness.raw().image(),
-                            //     metallic.raw().image(),
-                            //     normal.raw().image()
-                            // );
-                            cmd.set_image(albedo.raw(), 1, 0);
-                            cmd.set_image(roughness.raw(), 1, 1);
-                            cmd.set_image(metallic.raw(), 1, 2);
-                            cmd.set_image(normal.raw(), 1, 3);
-
-                            cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
+            {
+                hikari_dev::profile_scope!("Render scene");
+                for object in &scene.objects {
+                    let transform = object.transform.get_matrix();
+                    let model = &object.model;
+                    for mesh in &model.meshes {
+                        {
+                            hikari_dev::profile_scope!("Set vertex and index buffers");
+                            cmd.set_vertex_buffer(&mesh.vertices, 0);
+                            cmd.set_index_buffer(&mesh.indices);
                         }
+                        let material = Material {
+                            albedo: mesh.material.albedo_factor,
+                            roughness: mesh.material.roughness_factor,
+                            metallic: mesh.material.metallic_factor,
+                            albedo_uv_set: mesh.material.albedo_set,
+                            roughness_uv_set: mesh.material.roughness_set,
+                            metallic_uv_set: mesh.material.metallic_set,
+                            normal_uv_set: mesh.material.normal_set,
+                        };
+
+                        let pc = PushConstants {
+                            transform,
+                            material,
+                        };
+
+                        cmd.push_constants(&pc, 0);
+
+                        let albedo = mesh.material.albedo.as_ref().unwrap_or(&checkerboard);
+                        let roughness = mesh.material.roughness.as_ref().unwrap_or(&black);
+                        let metallic = mesh.material.metallic.as_ref().unwrap_or(&black);
+                        let normal = mesh.material.normal.as_ref().unwrap_or(&black);
+
+                        // println!(
+                        //     "{:?} {:?} {:?} {:?}",
+                        //     albedo.raw().image(),
+                        //     roughness.raw().image(),
+                        //     metallic.raw().image(),
+                        //     normal.raw().image()
+                        // );
+                        cmd.set_image(albedo.raw(), 1, 0);
+                        cmd.set_image(roughness.raw(), 1, 1);
+                        cmd.set_image(metallic.raw(), 1, 2);
+                        cmd.set_image(normal.raw(), 1, 3);
+
+                        cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
                     }
                 }
-                ubo.next_frame();
-            },
-        )
+            }
+            ubo.next_frame();
+        })
         .draw_image(&color_output, rg::AttachmentConfig::color_default(0))
         .draw_image(
             &depth_prepass,
@@ -645,26 +652,27 @@ fn fxaa_pass(
         rg::Renderpass::<Args>::new(
             "FXAA",
             rg::ImageSize::default_xy(),
-            move |cmd, (_, settings, _)| {
-                cmd.set_shader(&shader);
-
-                cmd.push_constants(
-                    &PushConstants {
-                        res: hikari_math::vec2(settings.width as f32, settings.height as f32),
-                        enabled: settings.fxaa as _,
-                    },
-                    0,
-                );
-
-                cmd.draw(0..6, 0..1);
-            },
         )
         .draw_image(&output, rg::AttachmentConfig::color_default(0))
-        .sample_image(
-            &pbr_pass,
-            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-            0,
-        ),
+        .read_image(&pbr_pass, rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer)
+        .cmd(move |cmd, res, record_info, (_, settings, _)| {
+            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
+            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+
+            cmd.set_shader(&shader);
+
+            let pbr_image = res.get_image(&pbr_pass).unwrap();
+            cmd.set_image(pbr_image, 0, 0);
+            cmd.push_constants(
+                &PushConstants {
+                    res: hikari_math::vec2(settings.width as f32, settings.height as f32),
+                    enabled: settings.fxaa as _,
+                },
+                0,
+            );
+
+            cmd.draw(0..6, 0..1);
+        })
     );
 
     output
@@ -694,12 +702,15 @@ fn imgui_pass(
         rg::Renderpass::<Args>::new(
             "ImguiRenderer",
             rg::ImageSize::default_xy(),
-            move |cmd, (_, _, draw_data)| {
-                renderer
-                    .render(cmd.raw(), draw_data)
-                    .expect("Failed to render imgui");
-            },
         )
+        .cmd(move |cmd, _, record_info, (_, _, draw_data)| {
+            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
+            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+            
+            renderer
+                .render(cmd.raw(), draw_data)
+                .expect("Failed to render imgui");
+        })
         .draw_image(&imgui_image, rg::AttachmentConfig::color_default(0)),
     );
 
@@ -931,7 +942,25 @@ fn composite_pass(
     .expect("Failed to create composite shader");
 
     gb.add_renderpass(
-        rg::Renderpass::<Args>::new("CompositePass", rg::ImageSize::default_xy(), move |cmd, _| {
+        rg::Renderpass::<Args>::new("CompositePass", rg::ImageSize::default_xy())
+        .read_image(
+            &pbr_output,
+            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+        )
+        .read_image(
+            &imgui_output,
+            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+        )
+        .cmd(move |cmd, res, record_info, _| {
+            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
+            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+
+            let pbr_image = res.get_image(&pbr_output).unwrap();
+            let imgui_image = res.get_image(&imgui_output).unwrap();
+
+            cmd.set_image(pbr_image, 0, 0);
+            cmd.set_image(imgui_image, 0, 1);
+
             cmd.set_shader(&shader);
             // cmd.set_blend_state(rg::BlendState {
             //     enabled: true,
@@ -944,16 +973,6 @@ fn composite_pass(
             // });
             cmd.draw(0..6, 0..1);
         })
-        .sample_image(
-            &pbr_output,
-            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-            0,
-        )
-        .sample_image(
-            &imgui_output,
-            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-            1,
-        )
         .present(),
     );
 }
@@ -1011,8 +1030,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut graph = gb.build()?;
 
     //let mut sponza = load_mesh(&device, "../../assets/models/sponza/sponza.glb")?;
-    let mut sponza = load_mesh(&device, "../../assets/models/sponza/sponza.glb")?;
-    let mut helmet = load_mesh(&device, "../../assets/models/cerberus/cerberus.gltf")?;
+    let mut sponza = load_mesh(&device, "../../engine_assets/models/sponza/sponza.glb")?;
+    let mut helmet = load_mesh(&device, "../../engine_assets/models/cerberus/cerberus.gltf")?;
     //let mut sponza =  load_mesh(&device, "../../assets/models/cube.glb")?;
     let mut scene = Scene {
         objects: vec![
@@ -1042,7 +1061,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 color: hikari_math::Vec4::ONE,
                 intensity: 1.0,
                 size: 1.0,
-                shadow: None,
+                shadow: ShadowInfo::default(),
                 kind: hikari_3d::LightKind::Directional,
             },
             transform: Transform::default(),

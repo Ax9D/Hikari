@@ -1,8 +1,7 @@
-use hikari_render::{Gfx, GfxConfig, Graph};
+use hikari_render::{Gfx, GfxConfig};
 use winit::{
-    dpi::LogicalSize,
     event::{Event, WindowEvent},
-    event_loop::{self, ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
 };
 
