@@ -6,6 +6,7 @@ pub struct Mode {
     pub read: bool,
     pub write: bool,
     pub append: bool,
+    pub truncate: bool,
 }
 impl Mode {
     pub fn read_only() -> Self {
@@ -15,6 +16,7 @@ impl Mode {
             read: true,
             write: false,
             append: false,
+            truncate: false,
         }
     }
     pub fn create_and_write() -> Self {
@@ -24,6 +26,17 @@ impl Mode {
             read: false,
             write: true,
             append: false,
+            truncate: false,
+        }
+    }
+    pub fn create_and_write_and_truncate() -> Self {
+        Mode {
+            create: true,
+            create_new: false,
+            read: false,
+            write: true,
+            append: false,
+            truncate: true,
         }
     }
 }
@@ -54,6 +67,7 @@ pub trait IO: Send + Sync + 'static {
                 read: mode.read, 
                 write: mode.write,
                 append: mode.append,
+                truncate: mode.truncate,
             });
             
             match result {
@@ -86,6 +100,7 @@ impl IO for PhysicalIO {
             .read(mode.read)
             .write(mode.write)
             .append(mode.append)
+            .truncate(mode.truncate)
             .open(path)?;
 
         Ok(Box::new(file))
@@ -102,6 +117,7 @@ impl IO for PhysicalIO {
             .read(mode.read)
             .write(mode.write)
             .append(mode.append)
+            .truncate(mode.truncate)
             .open(path)?;
 
         Ok(Box::new(file))
