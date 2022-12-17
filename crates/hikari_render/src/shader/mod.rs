@@ -128,9 +128,10 @@ impl std::hash::Hash for Shader {
 }
 impl PartialEq for Shader {
     fn eq(&self, other: &Self) -> bool {
-        self.modules.iter()
-        .zip(other.modules.iter())
-        .all(|(current, other)| current.spirv == other.spirv)
+        self.modules
+            .iter()
+            .zip(other.modules.iter())
+            .all(|(current, other)| current.spirv == other.spirv)
     }
 }
 impl Eq for Shader {}
@@ -358,7 +359,7 @@ pub enum ShaderStage {
     Geometry,
     TessControl,
     TessEvaluation,
-    Compute
+    Compute,
 }
 impl std::fmt::Display for ShaderStage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -397,7 +398,7 @@ impl ShaderStage {
 pub struct ShaderProgramBuilder<'entry, 'options> {
     name: String,
     stages: HashMap<ShaderStage, ShaderCode<'entry>>,
-    options: Option<shaderc::CompileOptions<'options>>
+    options: Option<shaderc::CompileOptions<'options>>,
 }
 
 // fn shaderc_to_vulkan_stage(kind: shaderc::ShaderKind) -> vk::ShaderStageFlags {
@@ -440,19 +441,27 @@ pub struct ShaderProgramBuilder<'entry, 'options> {
 
 impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
     fn new(name: String) -> Self {
-        Self { name, stages: HashMap::new(), options: None }
-    } 
+        Self {
+            name,
+            stages: HashMap::new(),
+            options: None,
+        }
+    }
     #[deprecated(note = "Use with_stage(...) as it is more general")]
-    pub fn vertex_and_fragment(name: &str, vertex: &ShaderCode<'entry>, fragment: &ShaderCode<'entry>) -> Self {
+    pub fn vertex_and_fragment(
+        name: &str,
+        vertex: &ShaderCode<'entry>,
+        fragment: &ShaderCode<'entry>,
+    ) -> Self {
         Self::new(name.to_owned())
-        .with_stage(ShaderStage::Vertex, vertex.clone())
-        .with_stage(ShaderStage::Fragment, fragment.clone())
+            .with_stage(ShaderStage::Vertex, vertex.clone())
+            .with_stage(ShaderStage::Fragment, fragment.clone())
     }
     pub fn with_options(mut self, compile_options: shaderc::CompileOptions<'options>) -> Self {
         self.options = Some(compile_options);
 
         self
-    } 
+    }
     pub fn with_stage(mut self, stage: ShaderStage, code: ShaderCode<'entry>) -> Self {
         self.stages.insert(stage, code);
 
@@ -464,7 +473,7 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
         entry_point: &str,
         stage: ShaderStage,
         debug_name: &str,
-        options: Option<&shaderc::CompileOptions>
+        options: Option<&shaderc::CompileOptions>,
     ) -> Result<Vec<u32>, ShaderCreateError> {
         #[allow(unused_mut)]
         //options.set_optimization_level(shaderc::OptimizationLevel::Zero);
@@ -498,7 +507,7 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
         shader: &ShaderCode<'entry>,
         debug_name: String,
         stage: ShaderStage,
-        options: Option<&shaderc::CompileOptions>
+        options: Option<&shaderc::CompileOptions>,
     ) -> Result<CompiledShaderModule, ShaderCreateError> {
         let data;
         let spirv = match &shader.data {
@@ -515,7 +524,7 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
                     shader.entry_point,
                     stage,
                     &debug_name,
-                    options
+                    options,
                 )?;
                 &data
             }
@@ -544,7 +553,13 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
         let mut modules = vec![];
 
         for (stage, code) in self.stages.drain() {
-            let module = Self::create_shader_module(device, &code, format!("[{}] {}", stage.to_string(), self.name), stage, self.options.as_ref())?;
+            let module = Self::create_shader_module(
+                device,
+                &code,
+                format!("[{}] {}", stage.to_string(), self.name),
+                stage,
+                self.options.as_ref(),
+            )?;
             modules.push(module);
         }
 

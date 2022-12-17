@@ -1,10 +1,10 @@
 mod ecs;
 mod game;
 mod plugin;
-mod window;
 mod time;
+mod window;
 
-use std::{sync::Arc};
+use std::sync::Arc;
 
 pub use ecs::*;
 pub use game::*;
@@ -29,12 +29,14 @@ impl crate::Plugin for CorePlugin {
         game.create_stage(POST_RENDER);
         game.create_stage(LAST);
 
-
         game.add_state(Time::new());
 
-        game.add_task(FIRST, Task::new("Update Delta Time", |time: &mut Time| {
-            time.update();
-        }));
+        game.add_task(
+            FIRST,
+            Task::new("Update Delta Time", |time: &mut Time| {
+                time.update();
+            }),
+        );
 
         game.add_state(World::new());
 

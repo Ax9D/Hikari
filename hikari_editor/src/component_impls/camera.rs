@@ -1,5 +1,5 @@
 use crate::components::EditorComponent;
-use hikari::{g3d::*};
+use hikari::g3d::*;
 use hikari_editor::*;
 use hikari_imgui::*;
 

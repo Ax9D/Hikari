@@ -15,7 +15,6 @@ pub const MAX_DESCRIPTOR_SETS: usize = 4;
 pub const MAX_BINDINGS_PER_SET: usize = 16;
 pub const MAX_COUNTS_PER_BINDING: usize = 5;
 
-
 #[derive(Copy, Clone, Default)]
 pub struct DescriptorSetLayout {
     vk_layout: vk::DescriptorSetLayout,
@@ -72,7 +71,10 @@ impl DescriptorSetLayout {
         self.storage_buffer_mask
     }
     pub const fn all_mask(&self) -> u32 {
-        self.combined_image_sampler_mask() | self.storage_image_mask() | self.uniform_buffer_mask() | self.storage_buffer_mask()
+        self.combined_image_sampler_mask()
+            | self.storage_image_mask()
+            | self.uniform_buffer_mask()
+            | self.storage_buffer_mask()
     }
 
     pub fn binding(&self, id: u32) -> Option<(vk::DescriptorType, u32, vk::ShaderStageFlags)> {
@@ -152,7 +154,7 @@ impl DescriptorSetLayoutBuilder {
             vk::DescriptorType::STORAGE_BUFFER => {
                 self.storage_buffer_mask |= 1 << id;
             }
-            _=> todo!()
+            _ => todo!(),
         }
         self.stage_flags[id as usize] |= stage_flags;
         self.counts[id as usize] = count;
@@ -571,7 +573,6 @@ impl DescriptorSetAllocator {
                 let buffer_state = &state.bindings[binding as usize].buffer_state;
 
                 if buffer_state.buffer != vk::Buffer::null() {
-
                     ubo_writes.push(BufferWrite {
                         binding,
                         buffer_info: *vk::DescriptorBufferInfo::builder()
@@ -590,7 +591,6 @@ impl DescriptorSetAllocator {
                 let buffer_state = &state.bindings[binding as usize].buffer_state;
 
                 if buffer_state.buffer != vk::Buffer::null() {
-
                     storage_buffer_writes.push(BufferWrite {
                         binding,
                         buffer_info: *vk::DescriptorBufferInfo::builder()
@@ -645,10 +645,10 @@ impl DescriptorSetAllocator {
 
         for write in &storage_buffer_writes {
             let mut vk_write = *vk::WriteDescriptorSet::builder()
-            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-            .dst_set(set)
-            .dst_binding(write.binding)
-            .dst_array_element(0);
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .dst_set(set)
+                .dst_binding(write.binding)
+                .dst_array_element(0);
 
             vk_write.p_buffer_info = &write.buffer_info;
             vk_write.descriptor_count = 1;

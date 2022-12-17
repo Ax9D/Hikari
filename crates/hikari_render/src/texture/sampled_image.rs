@@ -234,14 +234,12 @@ impl SampledImage {
         height: u32,
         depth: u32,
         vkconfig: &ImageConfig,
-    ) -> anyhow::Result<
-        (
-            vk::Image,
-            gpu_allocator::vulkan::Allocation,
-            vk::Sampler,
-            Vec<vk::ImageView>,
-        )
-    > {
+    ) -> anyhow::Result<(
+        vk::Image,
+        gpu_allocator::vulkan::Allocation,
+        vk::Sampler,
+        Vec<vk::ImageView>,
+    )> {
         let image_create_info = vk::ImageCreateInfo::builder()
             .image_type(vkconfig.image_type)
             .format(vkconfig.format)
@@ -269,28 +267,33 @@ impl SampledImage {
             gpu_allocator::MemoryLocation::GpuOnly,
         )?;
 
-        if !(vkconfig.initial_layout == vk::ImageLayout::UNDEFINED || vkconfig.initial_layout == vk::ImageLayout::PREINITIALIZED) {
+        if !(vkconfig.initial_layout == vk::ImageLayout::UNDEFINED
+            || vkconfig.initial_layout == vk::ImageLayout::PREINITIALIZED)
+        {
             let device_raw = device.raw();
-            unsafe { 
+            unsafe {
                 device.submit_commands_immediate(|cmd| {
-                crate::barrier::image_memory_barrier(device_raw, cmd, image, 
-                    vk::ImageSubresourceRange {
-                        aspect_mask: format_to_aspect_flags(vkconfig.format),
-                        base_mip_level: 0,
-                        level_count: vkconfig.mip_levels,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    }
-                    ,
-                    vk::AccessFlags::empty(), 
-                    vk::AccessFlags::empty(), 
-                    vk::ImageLayout::UNDEFINED, 
-                    vkconfig.initial_layout,
-                     vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-                    vk::PipelineStageFlags::TOP_OF_PIPE);
+                    crate::barrier::image_memory_barrier(
+                        device_raw,
+                        cmd,
+                        image,
+                        vk::ImageSubresourceRange {
+                            aspect_mask: format_to_aspect_flags(vkconfig.format),
+                            base_mip_level: 0,
+                            level_count: vkconfig.mip_levels,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        },
+                        vk::AccessFlags::empty(),
+                        vk::AccessFlags::empty(),
+                        vk::ImageLayout::UNDEFINED,
+                        vkconfig.initial_layout,
+                        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                        vk::PipelineStageFlags::TOP_OF_PIPE,
+                    );
 
                     Ok(())
-            })?;
+                })?;
             }
         }
 

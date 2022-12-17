@@ -1,5 +1,5 @@
-pub mod pbr;
+pub mod debug;
 pub mod depth_prepass;
 pub mod fxaa;
+pub mod pbr;
 pub mod shadow;
-pub mod debug;

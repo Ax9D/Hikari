@@ -4,7 +4,9 @@ use ash::{prelude::VkResult, vk};
 use vec_map::VecMap;
 use vk_sync_fork::AccessType;
 
-use crate::{graph::pass::AttachmentKind, renderpass::PhysicalRenderpass, texture::SampledImage, Buffer};
+use crate::{
+    graph::pass::AttachmentKind, renderpass::PhysicalRenderpass, texture::SampledImage, Buffer,
+};
 
 use super::{pass::AnyPass, resources::GraphResources, Renderpass};
 
@@ -19,7 +21,7 @@ impl BarrierStorage {
     pub fn new() -> Self {
         Self {
             image_barriers: Vec::new(),
-            buffer_barriers: Vec::new()
+            buffer_barriers: Vec::new(),
         }
     }
     pub fn add_image_barrier(
@@ -94,7 +96,13 @@ impl BarrierStorage {
 
         self.image_barriers.push(barrier);
     }
-    pub fn add_buffer_barrier(&mut self, buffer: &dyn Buffer, previous_accesses: &[AccessType], next_accesses: &[AccessType], queue_index: u32) {
+    pub fn add_buffer_barrier(
+        &mut self,
+        buffer: &dyn Buffer,
+        previous_accesses: &[AccessType],
+        next_accesses: &[AccessType],
+        queue_index: u32,
+    ) {
         use vk_sync_fork as sync;
 
         let barrier = sync::BufferBarrier {
@@ -122,16 +130,15 @@ impl BarrierStorage {
 
         use crate::barrier;
         let barrier = *vk::BufferMemoryBarrier2KHR::builder()
-        .buffer(buffer)
-        .size(size)
-        .offset(offset)
-        .src_access_mask(barrier::to_sync2_access_flags(src_access_mask))
-        .dst_access_mask(barrier::to_sync2_access_flags(dst_access_mask))
-        .src_stage_mask(barrier::to_sync2_stage_flags(src_stage_mask))
-        .dst_stage_mask(barrier::to_sync2_stage_flags(dst_stage_mask));
+            .buffer(buffer)
+            .size(size)
+            .offset(offset)
+            .src_access_mask(barrier::to_sync2_access_flags(src_access_mask))
+            .dst_access_mask(barrier::to_sync2_access_flags(dst_access_mask))
+            .src_stage_mask(barrier::to_sync2_stage_flags(src_stage_mask))
+            .dst_stage_mask(barrier::to_sync2_stage_flags(dst_stage_mask));
 
         self.buffer_barriers.push(barrier);
-
     }
     pub unsafe fn apply(&self, device: &Arc<crate::Device>, cmd: vk::CommandBuffer) {
         if self.image_barriers.is_empty() && self.buffer_barriers.is_empty() {
@@ -396,9 +403,9 @@ impl AllocationData {
             .collect();
 
         let mut prev_buffer_accesses: HashMap<_, Vec<AccessType>> = graph_resources
-        .buffer_handles()
-        .map(|(_, handle)| (handle, Vec::new()))
-        .collect();
+            .buffer_handles()
+            .map(|(_, handle)| (handle, Vec::new()))
+            .collect();
 
         for (ix, pass) in passes.iter().enumerate() {
             let mut current_image_accesses: HashMap<_, Vec<_>> = HashMap::new();
@@ -408,44 +415,48 @@ impl AllocationData {
 
             for input in pass.inputs() {
                 match input {
-                       crate::graph::pass::Input::ReadImage(handle, access) => current_image_accesses
+                    crate::graph::pass::Input::ReadImage(handle, access) => current_image_accesses
                         .entry(handle.clone())
                         .or_default()
                         .push(*access),
                     super::pass::Input::ReadStorageBuffer(handle, access) => {
-                        current_buffer_accesses.entry(handle.clone())
-                        .or_default()
-                        .push(*access)
-                    },
+                        current_buffer_accesses
+                            .entry(handle.clone())
+                            .or_default()
+                            .push(*access)
+                    }
                 }
             }
             for output in pass.outputs() {
                 match output {
-                    crate::graph::pass::Output::WriteImage(handle, access) => {     
+                    crate::graph::pass::Output::WriteImage(handle, access) => {
                         current_image_accesses
+                            .entry(handle.clone())
+                            .or_default()
+                            .push(*access)
+                    }
+                    crate::graph::pass::Output::DrawImage(handle, config) => current_image_accesses
                         .entry(handle.clone())
                         .or_default()
-                        .push(*access)
-                    }
-                    crate::graph::pass::Output::DrawImage(handle, config) => {
-                        current_image_accesses
-                        .entry(handle.clone())
-                        .or_default()
-                        .push(config.access)
-                    }
+                        .push(config.access),
                     super::pass::Output::WriteStorageBuffer(handle, access) => {
                         current_buffer_accesses
-                        .entry(handle.clone())
-                        .or_default()
-                        .push(*access)
-                    },
+                            .entry(handle.clone())
+                            .or_default()
+                            .push(*access)
+                    }
                 };
             }
             for (handle, current_accesses) in current_image_accesses {
                 let prev_image_accesses = prev_image_accesses.get_mut(&handle).unwrap();
 
                 if crate::barrier::is_hazard(prev_image_accesses, &current_accesses) {
-                    println!("{} {:?} {:?}", pass.name(), prev_image_accesses, current_accesses);
+                    println!(
+                        "{} {:?} {:?}",
+                        pass.name(),
+                        prev_image_accesses,
+                        current_accesses
+                    );
                     //Add Transition
                     barrier_storage.add_image_barrier(
                         graph_resources.get_image(&handle).unwrap(),
@@ -461,7 +472,12 @@ impl AllocationData {
                 let prev_buffer_accesses = prev_buffer_accesses.get_mut(&handle).unwrap();
 
                 if crate::barrier::is_hazard(prev_buffer_accesses, &current_accesses) {
-                    println!("{} {:?} {:?}", pass.name(), prev_buffer_accesses, current_accesses);
+                    println!(
+                        "{} {:?} {:?}",
+                        pass.name(),
+                        prev_buffer_accesses,
+                        current_accesses
+                    );
                     //Add Transition
                     barrier_storage.add_buffer_barrier(
                         graph_resources.get_dyn_buffer(&handle).unwrap(),

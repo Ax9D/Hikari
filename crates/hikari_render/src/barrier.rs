@@ -161,7 +161,7 @@ pub fn is_hazard(prev_accesses: &[AccessType], next_accesses: &[AccessType]) -> 
 pub struct AccessInfo {
     pub stage_mask: vk::PipelineStageFlags,
     pub access_mask: vk::AccessFlags,
-    pub image_layout: vk::ImageLayout
+    pub image_layout: vk::ImageLayout,
 }
 
 pub fn get_access_info(access_type: AccessType) -> AccessInfo {

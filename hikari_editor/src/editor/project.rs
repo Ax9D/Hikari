@@ -2,7 +2,8 @@ use std::path::Path;
 
 use hikari::{
     asset::{AssetManager, Handle, LoadStatus},
-    core::{World}, g3d::Camera,
+    core::World,
+    g3d::Camera,
 };
 use hikari_editor::{project::Project, Scene, SCENE_EXTENSION};
 use std::path::PathBuf;
@@ -12,7 +13,7 @@ use crate::{components::EditorComponents, imgui};
 use hikari_editor::*;
 use hikari_imgui::*;
 
-use super::{Editor, meta::EditorOnly};
+use super::{meta::EditorOnly, Editor};
 
 #[derive(Default)]
 pub struct ProjectManager {
@@ -64,7 +65,10 @@ impl SceneCreator {
             !valid || path_string.is_empty() || self.name.is_empty(),
             || {
                 if ui.button("Create") {
-                    let path = self.path.strip_prefix(std::env::current_dir().unwrap()).unwrap();
+                    let path = self
+                        .path
+                        .strip_prefix(std::env::current_dir().unwrap())
+                        .unwrap();
                     let name = self.name.clone();
 
                     let mut full_path = path.join(name);
@@ -94,12 +98,11 @@ impl ProjectManager {
         let file_clone = file.as_ref().to_owned();
 
         let proj_dir = file_clone.parent().unwrap();
-        
+
         let asset_manager = state.get::<AssetManager>().unwrap();
 
         asset_manager.set_asset_dir(proj_dir)?;
         std::env::set_current_dir(proj_dir)?;
-        
 
         match Project::open(file) {
             Ok(project) => {
@@ -119,14 +122,14 @@ impl ProjectManager {
                 log::error!("Failed to load project: {}", err);
             }
         }
-        
+
         Ok(())
     }
     pub fn set_scene(&mut self, handle: Handle<Scene>, state: EngineState) -> anyhow::Result<()> {
         let components = state.get::<EditorComponents>().unwrap();
         let mut world = state.get_mut::<World>().unwrap();
         let manager = state.get::<AssetManager>().unwrap();
-        
+
         manager.request_load(&handle, None, false)?;
         manager.wait_for_load(&handle);
 
@@ -143,7 +146,7 @@ impl ProjectManager {
                 }
             }
         }
-        
+
         std::mem::swap::<World>(&mut world, &mut new_world);
         self.current_scene = Some(handle.clone());
 
@@ -182,11 +185,11 @@ fn new_scene() -> Scene {
     let mut world = World::new();
     let camera = world.create_entity();
 
-    world.add_component(camera, (EditorOnly, Camera::default())).unwrap();
+    world
+        .add_component(camera, (EditorOnly, Camera::default()))
+        .unwrap();
 
-    Scene {
-        world
-    }
+    Scene { world }
 }
 pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
     let project_manager = &mut editor.project_manager;

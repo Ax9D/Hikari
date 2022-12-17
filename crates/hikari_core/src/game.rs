@@ -83,13 +83,9 @@ impl Game {
         task_name.push_str("_asset_update");
         self.add_task(
             crate::LAST,
-            Task::new(
-                &task_name,
-                |asset_manager: &AssetManager| {
-                    asset_manager
-                        .update::<T>();
-                },
-            ),
+            Task::new(&task_name, |asset_manager: &AssetManager| {
+                asset_manager.update::<T>();
+            }),
         );
         self
     }
@@ -119,11 +115,13 @@ impl Game {
             .expect("Failed to create update schedule");
 
         let asset_manager = {
-        let threadpool = self.state.get::<std::sync::Arc<rayon::ThreadPool>>();
-        self.asset_manager_builder.thread_pool(&threadpool);
-        self.asset_manager_builder.build().expect("Failed to create asset manager")
+            let threadpool = self.state.get::<std::sync::Arc<rayon::ThreadPool>>();
+            self.asset_manager_builder.thread_pool(&threadpool);
+            self.asset_manager_builder
+                .build()
+                .expect("Failed to create asset manager")
         };
-        
+
         self.state.add_state(asset_manager);
 
         let mut state = self.state.build();

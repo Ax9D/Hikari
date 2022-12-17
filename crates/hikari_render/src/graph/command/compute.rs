@@ -1,31 +1,36 @@
-use std::{sync::Arc, ops::Range};
+use std::{ops::Range, sync::Arc};
 
 use ash::vk;
 
-use crate::{CommandBuffer, Buffer, SampledImage};
+use crate::{Buffer, CommandBuffer, SampledImage};
 
 use super::PipelineLookup;
 
 pub struct ComputepassCommands<'cmd, 'graph> {
     cmd: &'cmd mut CommandBuffer<'graph>,
-    pipeline_ctx: PipelineContext
+    pipeline_ctx: PipelineContext,
 }
 
 struct PipelineContext {
     shader: Option<Arc<crate::Shader>>,
-    pipeline_dirty: bool
+    pipeline_dirty: bool,
 }
 impl PipelineContext {
     pub fn new() -> Self {
         Self {
             shader: None,
-            pipeline_dirty: false
+            pipeline_dirty: false,
         }
     }
     pub fn set_shader(&mut self, shader: &Arc<crate::Shader>) -> Option<Arc<crate::Shader>> {
         self.shader.replace(shader.clone())
     }
-    pub fn flush(&mut self, device: &Arc<crate::Device>, cmd: vk::CommandBuffer, pipeline_lookup: &mut PipelineLookup) {
+    pub fn flush(
+        &mut self,
+        device: &Arc<crate::Device>,
+        cmd: vk::CommandBuffer,
+        pipeline_lookup: &mut PipelineLookup,
+    ) {
         hikari_dev::profile_function!();
         if self.pipeline_dirty {
             if let Some(shader) = &self.shader {
@@ -49,7 +54,7 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
     pub fn new(cmd: &'cmd mut CommandBuffer<'graph>) -> Self {
         Self {
             cmd,
-            pipeline_ctx: PipelineContext::new()
+            pipeline_ctx: PipelineContext::new(),
         }
     }
     #[inline]
@@ -63,29 +68,62 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
     #[inline]
     pub fn set_image_mip(&mut self, image: &SampledImage, mip_level: u32, set: u32, binding: u32) {
         self.cmd.set_image_mip(image, mip_level, set, binding)
-    }    
+    }
     #[inline]
-    pub fn set_image_view_and_sampler(&mut self, image_view: vk::ImageView, sampler: vk::Sampler, set: u32, binding: u32, index: usize) {
-        self.cmd.set_image_view_and_sampler(image_view, sampler, set, binding, index)
+    pub fn set_image_view_and_sampler(
+        &mut self,
+        image_view: vk::ImageView,
+        sampler: vk::Sampler,
+        set: u32,
+        binding: u32,
+        index: usize,
+    ) {
+        self.cmd
+            .set_image_view_and_sampler(image_view, sampler, set, binding, index)
     }
     #[inline]
     pub fn set_image_array(&mut self, image: &SampledImage, set: u32, binding: u32, index: usize) {
         self.cmd.set_image_array(image, set, binding, index)
     }
     #[inline]
-    pub fn set_image_mip_array(&mut self, image: &SampledImage, mip_level: u32, set: u32, binding: u32, index: usize) {
-        self.cmd.set_image_mip_array(image, mip_level, set, binding, index)
+    pub fn set_image_mip_array(
+        &mut self,
+        image: &SampledImage,
+        mip_level: u32,
+        set: u32,
+        binding: u32,
+        index: usize,
+    ) {
+        self.cmd
+            .set_image_mip_array(image, mip_level, set, binding, index)
     }
     #[inline]
-    pub fn apply_image_barrier(&mut self, image: &SampledImage, previous_accesses: &[crate::vk_sync::AccessType], next_accesses: &[crate::vk_sync::AccessType], previous_layout: crate::vk_sync::ImageLayout, next_layout: crate::vk_sync::ImageLayout, range: vk::ImageSubresourceRange) {
-        self.cmd.apply_image_barrier(image, previous_accesses, next_accesses, previous_layout, next_layout, range)
+    pub fn apply_image_barrier(
+        &mut self,
+        image: &SampledImage,
+        previous_accesses: &[crate::vk_sync::AccessType],
+        next_accesses: &[crate::vk_sync::AccessType],
+        previous_layout: crate::vk_sync::ImageLayout,
+        next_layout: crate::vk_sync::ImageLayout,
+        range: vk::ImageSubresourceRange,
+    ) {
+        self.cmd.apply_image_barrier(
+            image,
+            previous_accesses,
+            next_accesses,
+            previous_layout,
+            next_layout,
+            range,
+        )
     }
-    pub fn set_buffer<B: Buffer>(&mut self,
+    pub fn set_buffer<B: Buffer>(
+        &mut self,
         buffer: &B,
         span: Range<usize>,
         set: u32,
-        binding: u32) {
-        self.cmd.set_buffer(buffer, span, set, binding);   
+        binding: u32,
+    ) {
+        self.cmd.set_buffer(buffer, span, set, binding);
     }
     pub fn set_shader(&mut self, shader: &Arc<crate::Shader>) {
         if let Some(old_shader) = self.pipeline_ctx.set_shader(shader) {
@@ -95,7 +133,7 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
         }
 
         self.pipeline_ctx.pipeline_dirty = true;
-    }    
+    }
     pub fn push_constants<T: Copy>(&mut self, data: &T, offset: usize) {
         self.cmd
             .saved_state
@@ -108,10 +146,13 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
 
         self.flush_compute_state();
 
-        unsafe { 
-            self.cmd.device.raw().cmd_dispatch(cmd, n_workgroups.0, n_workgroups.1, n_workgroups.2);
+        unsafe {
+            self.cmd
+                .device
+                .raw()
+                .cmd_dispatch(cmd, n_workgroups.0, n_workgroups.1, n_workgroups.2);
         }
-    } 
+    }
     fn flush_compute_state(&mut self) {
         hikari_dev::profile_function!();
 

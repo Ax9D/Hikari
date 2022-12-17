@@ -1,4 +1,4 @@
-use std::any::{TypeId, Any};
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -15,9 +15,7 @@ impl<T> Clone for GpuHandle<T> {
         }
     }
 }
-impl<T> Copy for GpuHandle<T> {
-
-}
+impl<T> Copy for GpuHandle<T> {}
 impl<T> std::hash::Hash for GpuHandle<T> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
@@ -43,8 +41,8 @@ impl<T: 'static> Into<ErasedHandle> for GpuHandle<T> {
 
 use std::fmt::Debug;
 
-use crate::Buffer;
 use crate::texture::SampledImage;
+use crate::Buffer;
 
 use super::ImageSize;
 
@@ -213,19 +211,26 @@ impl<T: Resource> Storage<T> {
 type GenericStorage = HashMap<TypeId, Box<dyn Any + Send + Sync + 'static>>;
 pub struct GenericBufferStorage {
     storages: GenericStorage,
-    untyped_fetchers: HashMap<TypeId, Box<dyn for<'a> Fn(&'a GenericStorage, &ErasedHandle) -> Option<&'a dyn Buffer> + Send + Sync>>
+    untyped_fetchers: HashMap<
+        TypeId,
+        Box<
+            dyn for<'a> Fn(&'a GenericStorage, &ErasedHandle) -> Option<&'a dyn Buffer>
+                + Send
+                + Sync,
+        >,
+    >,
 }
 
 impl GenericBufferStorage {
     pub fn new() -> Self {
         Self {
             storages: Default::default(),
-            untyped_fetchers: Default::default()
+            untyped_fetchers: Default::default(),
         }
     }
     pub fn add<B: Buffer + Send + Sync + 'static>(&mut self, data: B) -> GpuHandle<B> {
         // let storage = self.storages.entry(TypeId::of::<B>()).or_insert_with(|| Box::new(Storage::<B>::new()));
-        
+
         if let Some(storage) = self.storages.get_mut(&TypeId::of::<B>()) {
             let storage = storage.downcast_mut::<Storage<B>>().unwrap();
             return storage.add(data, ());
@@ -233,19 +238,22 @@ impl GenericBufferStorage {
 
         let mut storage = Storage::<B>::new();
         let handle = storage.add(data, ());
-        self.storages.insert(TypeId::of::<B>(), Box::new(storage));  
+        self.storages.insert(TypeId::of::<B>(), Box::new(storage));
 
-        self.untyped_fetchers.insert(TypeId::of::<B>(), Box::new(|storage, handle| -> Option<&dyn Buffer> {
-            let storage = storage.get(&handle.type_id).unwrap();
-            let storage = storage.downcast_ref::<Storage<B>>().unwrap();
+        self.untyped_fetchers.insert(
+            TypeId::of::<B>(),
+            Box::new(|storage, handle| -> Option<&dyn Buffer> {
+                let storage = storage.get(&handle.type_id).unwrap();
+                let storage = storage.downcast_ref::<Storage<B>>().unwrap();
 
-            storage.get_from_erased(handle).map(|buffer| {
-                let downcasted: &dyn Buffer = buffer;
+                storage.get_from_erased(handle).map(|buffer| {
+                    let downcasted: &dyn Buffer = buffer;
 
-                downcasted
-            })
-        }));
-        
+                    downcasted
+                })
+            }),
+        );
+
         handle
     }
     pub fn get<B: Buffer + Send + Sync + 'static>(&self, handle: &GpuHandle<B>) -> Option<&B> {
@@ -253,7 +261,10 @@ impl GenericBufferStorage {
         let storage = storage.downcast_ref::<Storage<B>>().unwrap();
         storage.get(handle)
     }
-    pub fn get_mut<B: Buffer + Send + Sync + 'static>(&mut self, handle: &GpuHandle<B>) -> Option<&mut B> {
+    pub fn get_mut<B: Buffer + Send + Sync + 'static>(
+        &mut self,
+        handle: &GpuHandle<B>,
+    ) -> Option<&mut B> {
         let storage = self.storages.get_mut(&TypeId::of::<B>())?;
         let storage = storage.downcast_mut::<Storage<B>>().unwrap();
         storage.get_mut(handle)

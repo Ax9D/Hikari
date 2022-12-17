@@ -23,7 +23,7 @@ pub mod graphics;
 pub struct ImageSize {
     pub x: SizeMode,
     pub y: SizeMode,
-    pub z: SizeMode
+    pub z: SizeMode,
 }
 
 impl ImageSize {
@@ -32,12 +32,20 @@ impl ImageSize {
     }
     pub fn absolute_xy(x: u32, y: u32) -> Self {
         Self::absolute_xyz(x, y, 1)
-    } 
+    }
     pub fn absolute_xyz(x: u32, y: u32, z: u32) -> Self {
-        ImageSize { x: SizeMode::Absolute(x), y: SizeMode::Absolute(y), z: SizeMode::Absolute(z)}
+        ImageSize {
+            x: SizeMode::Absolute(x),
+            y: SizeMode::Absolute(y),
+            z: SizeMode::Absolute(z),
+        }
     }
     pub fn relative_xy(x: f32, y: f32) -> Self {
-        ImageSize { x: SizeMode::RelativeX(x), y: SizeMode::RelativeY(y), z: SizeMode::Absolute(1) }
+        ImageSize {
+            x: SizeMode::RelativeX(x),
+            y: SizeMode::RelativeY(y),
+            z: SizeMode::Absolute(1),
+        }
     }
 }
 
@@ -47,7 +55,11 @@ impl ImageSize {
         (x, y)
     }
     pub fn get_physical_size_3d(&self, graph_size: (u32, u32)) -> (u32, u32, u32) {
-        (self.x.get_physical_size(graph_size), self.y.get_physical_size(graph_size), self.z.get_physical_size(graph_size))
+        (
+            self.x.get_physical_size(graph_size),
+            self.y.get_physical_size(graph_size),
+            self.z.get_physical_size(graph_size),
+        )
     }
 }
 #[derive(Debug, Clone, Copy)]
@@ -60,8 +72,8 @@ pub enum SizeMode {
 impl SizeMode {
     fn get_physical_size(&self, graph_size: (u32, u32)) -> u32 {
         match self {
-            SizeMode::RelativeX(ratio)  => (ratio * graph_size.0 as f32) as u32,
-            SizeMode::RelativeY(ratio) =>(ratio * graph_size.1 as f32) as u32,
+            SizeMode::RelativeX(ratio) => (ratio * graph_size.0 as f32) as u32,
+            SizeMode::RelativeY(ratio) => (ratio * graph_size.1 as f32) as u32,
             SizeMode::Absolute(value) => *value,
         }
     }

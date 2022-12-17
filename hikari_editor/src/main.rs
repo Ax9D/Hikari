@@ -28,8 +28,6 @@ mod widgets;
 
 //#[global_allocator]
 //static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
-
-const EDITOR_STAGE: &str = "EDITOR_STAGE";
 struct EditorPlugin {
     log_listener: editor::logging::LogListener,
 }
@@ -42,20 +40,27 @@ fn prepare_graph(
 ) -> EditorGraph {
     let draw_data = backend.shared_draw_data().clone();
 
-    let pass = Renderpass::<()>::new(
-        "Imgui",
-        ImageSize::default_xy(),
-    )
-    .cmd(move |cmd: &mut RenderpassCommands, _, record_info, ()| {
-        cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
-        cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
-        
-        renderer
-            .lock()
-            .render_from_shared(cmd.raw(), &draw_data)
-            .unwrap();
-    })
-    .present();
+    let pass = Renderpass::<()>::new("Imgui", ImageSize::default_xy())
+        .cmd(move |cmd: &mut RenderpassCommands, _, record_info, ()| {
+            cmd.set_viewport(
+                0.0,
+                0.0,
+                record_info.framebuffer_width as f32,
+                record_info.framebuffer_height as f32,
+            );
+            cmd.set_scissor(
+                0,
+                0,
+                record_info.framebuffer_width,
+                record_info.framebuffer_width,
+            );
+
+            renderer
+                .lock()
+                .render_from_shared(cmd.raw(), &draw_data)
+                .unwrap();
+        })
+        .present();
 
     let swapchain = gfx.swapchain().unwrap().lock();
     let (width, height) = swapchain.size();
@@ -86,7 +91,7 @@ impl Plugin for EditorPlugin {
         let swapchain = gfx.swapchain().unwrap().lock();
         let color_format = swapchain.color_format();
         let depth_format = swapchain.depth_format();
-        
+
         drop(swapchain);
         let renderer = imgui_support::Renderer::new(
             gfx.device(),
@@ -98,17 +103,17 @@ impl Plugin for EditorPlugin {
         .expect("Failed to create imgui renderer");
         let renderer = Arc::new(Mutex::new(renderer));
         imgui::Ui::initialize_texture_support(renderer.clone());
-        
+
         let graph = prepare_graph(gfx.as_mut(), &backend, renderer);
         drop(gfx);
-        
+
         let static_window: &'static winit::window::Window =
-        unsafe { std::mem::transmute(game.window()) };
-        
+            unsafe { std::mem::transmute(game.window()) };
+
         game.add_state(backend);
         game.add_state(graph);
         game.add_state(static_window);
-        
+
         let update_task = unsafe {
             Task::with_raw_function(
                 "EditorUpdate",
@@ -167,7 +172,7 @@ impl Plugin for EditorPlugin {
                 .get_mut::<imgui_support::Backend>()
                 .unwrap()
                 .handle_event(window, event);
-            
+
             match event {
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::Resized(size) => {
@@ -187,7 +192,11 @@ impl Plugin for EditorPlugin {
                 },
                 Event::LoopDestroyed => {
                     state.get_mut::<EditorGraph>().unwrap().prepare_exit();
-                    state.get::<AssetManager>().unwrap().save_db().expect("Failed to save Asset DB");
+                    state
+                        .get::<AssetManager>()
+                        .unwrap()
+                        .save_db()
+                        .expect("Failed to save Asset DB");
                 }
                 _ => {}
             }

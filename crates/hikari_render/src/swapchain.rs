@@ -394,8 +394,7 @@ impl Swapchain {
                 self.loader.queue_present(present_queue, &present_info)
             } else {
                 let unified_queue = self.device.unified_queue();
-                self.loader
-                    .queue_present(*unified_queue, &present_info)
+                self.loader.queue_present(*unified_queue, &present_info)
             }
         }
     }

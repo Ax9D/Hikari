@@ -4,15 +4,19 @@ use ash::{prelude::VkResult, vk};
 
 use crate::{
     descriptor::DescriptorPool,
-    graph::{command::{CommandBufferSavedState, render::PassRecordInfo, compute::ComputepassCommands}, CommandBuffer},
-    swapchain::Swapchain, ComputePass,
+    graph::{
+        command::{compute::ComputepassCommands, render::PassRecordInfo, CommandBufferSavedState},
+        CommandBuffer,
+    },
+    swapchain::Swapchain,
+    ComputePass,
 };
 
 use super::{
     allocation::AllocationData,
-    command::{PipelineLookup, DescriptorState},
+    command::{DescriptorState, PipelineLookup},
     graphics::Renderpass,
-    pass::{AnyPass},
+    pass::AnyPass,
     resources::GraphResources,
 };
 struct FrameData {
@@ -203,8 +207,17 @@ impl GraphExecutor {
                 }
                 AnyPass::Compute(pass) => {
                     hikari_dev::profile_scope!(pass.name());
-                    Self::execute_computepass(device, &mut cmd, args, size, ix, pass, resources, allocation_data)?;
-                },
+                    Self::execute_computepass(
+                        device,
+                        &mut cmd,
+                        args,
+                        size,
+                        ix,
+                        pass,
+                        resources,
+                        allocation_data,
+                    )?;
+                }
             }
         }
 
@@ -273,8 +286,17 @@ impl GraphExecutor {
                 }
                 AnyPass::Compute(pass) => {
                     hikari_dev::profile_scope!(pass.name());
-                    Self::execute_computepass(device, &mut cmd, args, size, ix, pass, resources, allocation_data)?;
-                },
+                    Self::execute_computepass(
+                        device,
+                        &mut cmd,
+                        args,
+                        size,
+                        ix,
+                        pass,
+                        resources,
+                        allocation_data,
+                    )?;
+                }
             }
         }
 
@@ -345,12 +367,12 @@ impl GraphExecutor {
 
             //rcmd.set_viewport(0.0, 0.0, width as f32, height as f32);
             //rcmd.set_scissor(0, 0, width, height);
-            
+
             let record_info = PassRecordInfo {
                 framebuffer_width: width,
                 framebuffer_height: height,
             };
-            
+
             (pass.record_fn.as_mut().unwrap())(&mut rcmd, resources, &record_info, args);
         }
         Ok(())
@@ -377,11 +399,11 @@ impl GraphExecutor {
 
             let record_info = PassRecordInfo {
                 framebuffer_width: size.0,
-                framebuffer_height: size.1
+                framebuffer_height: size.1,
             };
             (pass.record_fn.as_mut().unwrap())(&mut ccmd, resources, &record_info, args);
         }
-        
+
         Ok(())
     }
     // fn bind_resources<'cmd, 'graph, T: crate::Args>(cmd: &mut&'cmd mut CommandBuffer<'graph>, resources: &GraphResources, inputs: &[Input], outputs: &[Output]) {

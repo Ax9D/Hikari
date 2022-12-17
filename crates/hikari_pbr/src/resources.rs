@@ -1,8 +1,7 @@
+use std::sync::Arc;
 
-use std::sync::{Arc};
-
-use hikari_render::{buffer::UniformBuffer, SampledImage, Device};
-use crate::{WorldUBO, Settings};
+use crate::{Settings, WorldUBO};
+use hikari_render::{buffer::UniformBuffer, Device, SampledImage};
 
 pub struct RenderResources {
     device: Arc<Device>,
@@ -12,12 +11,12 @@ pub struct RenderResources {
     pub hi_z_images: Vec<SampledImage>,
 
     pub camera: Option<hikari_core::Entity>,
-    pub directional_light: Option<hikari_core::Entity>
+    pub directional_light: Option<hikari_core::Entity>,
 }
 
 impl RenderResources {
     pub fn new(device: &Arc<Device>, width: u32, height: u32) -> anyhow::Result<Self> {
-        Ok(RenderResources { 
+        Ok(RenderResources {
             device: device.clone(),
             settings: Settings::new(),
             viewport: (width as f32, height as f32),

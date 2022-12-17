@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use hikari::{asset::{AssetManager, Handle, LazyHandle}};
+use hikari::asset::{AssetManager, Handle, LazyHandle};
 use serde::{Deserialize, Serialize};
 
 use crate::scene::Scene;
@@ -20,7 +20,6 @@ impl Project {
             name,
             engine_version: env!("CARGO_PKG_VERSION").into(),
             scenes: vec![],
-
         }
     }
     pub fn open(path: impl AsRef<Path>) -> anyhow::Result<Self> {
@@ -75,7 +74,7 @@ impl Project {
 struct SerializedProject {
     name: String,
     engine_version: String,
-    scenes: Vec<LazyHandle<Scene>>
+    scenes: Vec<LazyHandle<Scene>>,
 }
 
 impl Into<Project> for SerializedProject {

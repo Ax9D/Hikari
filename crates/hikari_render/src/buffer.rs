@@ -71,15 +71,15 @@ pub fn create_index_buffer(
 //             .usage(usage | vk::BufferUsageFlags::TRANSFER_DST)
 //             .queue_family_indices(&[0])
 //             .sharing_mode(vk::SharingMode::EXCLUSIVE);
-    
+
 //         let inner;
 //         let requirements;
-    
+
 //         unsafe {
 //             inner = device.raw().create_buffer(&create_info, None)?;
 //             requirements = device.raw().get_buffer_memory_requirements(inner);
 //         }
-    
+
 //         let allocation = device.allocate_memory(AllocationCreateDesc {
 //             name,
 //             requirements,
@@ -294,7 +294,7 @@ impl<T: Copy> GpuBuffer<T> {
             inner,
             allocation,
             len,
-            _phantom: PhantomData
+            _phantom: PhantomData,
         })
     }
 
@@ -311,7 +311,8 @@ impl<T: Copy> GpuBuffer<T> {
             self.len,
             vk::BufferUsageFlags::TRANSFER_SRC,
             gpu_allocator::MemoryLocation::CpuToGpu,
-        ).unwrap();
+        )
+        .unwrap();
 
         upload_buffer.mapped_slice_mut()[0..data.len()].copy_from_slice(data);
 
@@ -382,10 +383,7 @@ pub struct UniformBuffer<T> {
 }
 
 impl<T: Copy> UniformBuffer<T> {
-    pub fn new(
-        device: &Arc<crate::Device>,
-        len: usize,
-    ) -> anyhow::Result<Self> {
+    pub fn new(device: &Arc<crate::Device>, len: usize) -> anyhow::Result<Self> {
         let inner = [
             CpuBuffer::new(
                 device,

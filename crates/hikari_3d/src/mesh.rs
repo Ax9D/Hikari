@@ -23,7 +23,7 @@ pub struct SubMesh {
 
 pub struct Mesh {
     pub sub_meshes: Vec<SubMesh>,
-    pub transform: Transform
+    pub transform: Transform,
 }
 
 pub fn default_normals(n: usize) -> Vec<Vec3> {

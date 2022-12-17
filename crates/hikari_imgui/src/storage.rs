@@ -33,11 +33,11 @@ impl Storage {
     pub fn insert<T: Any + Send + Sync>(&mut self, id: imgui::Id, data: T) -> Option<T> {
         let hash = hash(id, TypeId::of::<T>());
 
-        self.id_type_to_data.insert(hash, Box::new(data)).map(|any| *any.downcast::<T>().unwrap())
+        self.id_type_to_data
+            .insert(hash, Box::new(data))
+            .map(|any| *any.downcast::<T>().unwrap())
     }
-    pub fn get<T: Any + Send + Sync>(&mut self,
-    id: imgui::Id,
-    ) -> Option<&T> {
+    pub fn get<T: Any + Send + Sync>(&mut self, id: imgui::Id) -> Option<&T> {
         let hash = hash(id, TypeId::of::<T>());
 
         let data = self.id_type_to_data.get(&hash);

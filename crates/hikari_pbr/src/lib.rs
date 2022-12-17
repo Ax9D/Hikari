@@ -2,28 +2,28 @@ use hikari_3d::ShaderLibrary;
 use hikari_asset::AssetManager;
 use hikari_core::{Plugin, World};
 
-mod passes;
-mod util;
-mod world_renderer;
-mod world;
 mod light;
-mod resources;
 mod packet;
+mod passes;
+mod resources;
+mod util;
+mod world;
+mod world_renderer;
 
 use hikari_render::Gfx;
+use light::*;
 use resources::RenderResources;
+pub use resources::*;
 #[cfg(not(feature = "editor"))]
 use winit::event::{Event, WindowEvent};
 use world::*;
-use light::*;
-pub use resources::*;
 pub use world_renderer::WorldRenderer;
 
 type Args = (World, RenderResources, ShaderLibrary, AssetManager);
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct DebugSettings {
-    pub show_shadow_cascades: bool
+    pub show_shadow_cascades: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -32,7 +32,7 @@ pub enum ShadowResolution {
     D512,
     D1024,
     D2048,
-    D4096
+    D4096,
 }
 
 impl ShadowResolution {
@@ -52,12 +52,17 @@ pub struct Settings {
     pub fxaa: bool,
     pub vsync: bool,
     pub directional_shadow_map_resolution: ShadowResolution,
-    pub debug: DebugSettings
+    pub debug: DebugSettings,
 }
 
 impl Settings {
     fn new() -> Self {
-        Self { fxaa: true, vsync: true, directional_shadow_map_resolution: ShadowResolution::D2048, debug: DebugSettings::default() }
+        Self {
+            fxaa: true,
+            vsync: true,
+            directional_shadow_map_resolution: ShadowResolution::D2048,
+            debug: DebugSettings::default(),
+        }
     }
 }
 pub struct PBRPlugin {

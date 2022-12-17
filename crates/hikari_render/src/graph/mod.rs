@@ -7,8 +7,8 @@ mod resources;
 mod runtime;
 mod storage;
 
-use crate::Buffer;
 use crate::texture::SampledImage;
+use crate::Buffer;
 use ash::prelude::VkResult;
 use parking_lot::Mutex;
 
@@ -78,7 +78,11 @@ impl<'a, T: Args> GraphBuilder<'a, T> {
             .map_err(|err| GraphCreationError::AllocationFailed(err.to_string()))?;
         Ok(self.resources.add_image(name.to_string(), image, size))
     }
-    pub fn add_buffer<B: Buffer + Send + Sync + 'static>(&mut self, name: &str, buffer: B) -> GpuHandle<B> {
+    pub fn add_buffer<B: Buffer + Send + Sync + 'static>(
+        &mut self,
+        name: &str,
+        buffer: B,
+    ) -> GpuHandle<B> {
         self.resources.add_buffer(name.to_owned(), buffer)
     }
     pub fn resources(&self) -> &GraphResources {
@@ -272,11 +276,7 @@ impl<T: Args> Graph<T> {
     pub fn size(&self) -> (u32, u32) {
         self.size
     }
-    pub fn resize(
-        &mut self,
-        new_width: u32,
-        new_height: u32,
-    ) -> anyhow::Result<()> {
+    pub fn resize(&mut self, new_width: u32, new_height: u32) -> anyhow::Result<()> {
         assert!(!(new_width == 0 || new_height == 0));
 
         self.prepare_exit();

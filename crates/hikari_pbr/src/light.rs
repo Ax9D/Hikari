@@ -1,4 +1,4 @@
-use crate::passes::shadow::{N_CASCADES};
+use crate::passes::shadow::N_CASCADES;
 
 #[repr(C)]
 #[derive(Copy, Clone, Default)]
@@ -6,14 +6,14 @@ pub struct DirLight {
     pub intensity: f32,
     pub size: f32,
     pub normal_bias: f32,
-    pub max_shadow_distance: f32, 
+    pub max_shadow_distance: f32,
     pub shadow_fade: f32,
     pub cascade_split_lambda: f32,
     _pad: [f32; 2],
     pub color: hikari_math::Vec3A,
     pub direction: hikari_math::Vec3A,
     pub up_direction: hikari_math::Vec3A,
-    pub cascades: [ShadowCascade; N_CASCADES]
+    pub cascades: [ShadowCascade; N_CASCADES],
 }
 
 #[repr(C)]
@@ -23,7 +23,7 @@ pub struct ShadowCascade {
     pub map_texel_size: f32,
     pub atlas_uv_offset: hikari_math::Vec2,
     pub atlas_size_ratio: hikari_math::Vec2,
-    _pad: [f32; 2]
+    _pad: [f32; 2],
 }
 
 #[repr(C)]
@@ -34,5 +34,5 @@ pub struct CascadeRenderInfo {
     far: f32,
     _pad: f32,
     view: [f32; 16],
-    view_proj: [f32; 16]
+    view_proj: [f32; 16],
 }

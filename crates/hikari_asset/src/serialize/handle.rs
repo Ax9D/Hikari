@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use parking_lot::{RwLockUpgradableReadGuard};
+use parking_lot::RwLockUpgradableReadGuard;
 use serde::{
     de::{self, Visitor},
     ser::SerializeStruct,
@@ -104,19 +104,19 @@ impl<'de, T: Asset> Visitor<'de> for HandleVisitor<T> {
         let asset_manager = crate::manager::get_asset_manager();
 
         let handle = if self.lazy {
-            asset_manager
-            .load_lazy(&path, None)
+            asset_manager.load_lazy(&path, None)
         } else {
             asset_manager.load(&path, None, false)
         };
 
-        let handle = handle
-            .map_err(|err| de::Error::custom(&format!("Failed to load asset: {}", err)))?;
+        let handle =
+            handle.map_err(|err| de::Error::custom(&format!("Failed to load asset: {}", err)))?;
 
         let asset_db = asset_manager.asset_db().upgradable_read();
         let loader_uuid = asset_db
             .handle_to_uuid(&handle.clone_erased_as_weak())
-            .unwrap().clone();
+            .unwrap()
+            .clone();
 
         //assert!(&uuid == loader_uuid, "{}", path.display());
 
@@ -131,16 +131,13 @@ impl<'de, T: Asset> Visitor<'de> for HandleVisitor<T> {
     }
 }
 
-
 pub struct LazyHandle<T> {
-    inner: Handle<T>
+    inner: Handle<T>,
 }
 
 impl<T: Asset> From<Handle<T>> for LazyHandle<T> {
     fn from(inner: Handle<T>) -> Self {
-        Self {
-            inner
-        }
+        Self { inner }
     }
 }
 impl<T: Asset> Into<Handle<T>> for LazyHandle<T> {
@@ -163,7 +160,8 @@ impl<'de, T: Asset> Deserialize<'de> for LazyHandle<T> {
     where
         D: serde::Deserializer<'de>,
     {
-        let handle = deserializer.deserialize_struct("Handle", &["uuid", "path"], HandleVisitor::lazy())?;
+        let handle =
+            deserializer.deserialize_struct("Handle", &["uuid", "path"], HandleVisitor::lazy())?;
         Ok(handle.into())
     }
 }

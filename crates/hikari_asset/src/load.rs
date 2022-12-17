@@ -1,7 +1,8 @@
 use std::{
     any::Any,
     io::Read,
-    path::{Path, PathBuf}, sync::Arc,
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use crate::{Asset, AssetManager, IO};

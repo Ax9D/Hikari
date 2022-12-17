@@ -78,8 +78,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut last_time = std::time::Instant::now();
     let mut state = true;
 
-    let _blue_target =
-        gb.create_image("blue", rg::ImageConfig::color2d(), rg::ImageSize::default_xy())?;
+    let _blue_target = gb.create_image(
+        "blue",
+        rg::ImageConfig::color2d(),
+        rg::ImageSize::default_xy(),
+    )?;
 
     // gb.add_renderpass(
     //     rg::Renderpass::new("Blue", rg::ImageSize::default(), move |cmd, _, _, _| {
@@ -90,44 +93,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // );
 
     gb.add_renderpass(
-        rg::Renderpass::<(f32, i32)>::new(
-            "Triangle",
-            rg::ImageSize::default_xy(),
-        )
-        .cmd(move |cmd, _, record_info, (x, y)| {
-            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
-            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
-            
-            cmd.set_shader(&shader);
+        rg::Renderpass::<(f32, i32)>::new("Triangle", rg::ImageSize::default_xy())
+            .cmd(move |cmd, _, record_info, (x, y)| {
+                cmd.set_viewport(
+                    0.0,
+                    0.0,
+                    record_info.framebuffer_width as f32,
+                    record_info.framebuffer_height as f32,
+                );
+                cmd.set_scissor(
+                    0,
+                    0,
+                    record_info.framebuffer_width,
+                    record_info.framebuffer_width,
+                );
 
-            let now = std::time::Instant::now();
-            if now - last_time > std::time::Duration::from_secs(1) {
-                last_time = now;
-                //state = !state;
-            }
+                cmd.set_shader(&shader);
 
-            if state {
-                cmd.set_rasterizer_state(rg::RasterizerState {
-                    polygon_mode: rg::PolygonMode::Fill,
-                    ..Default::default()
-                });
-            } else {
-                cmd.set_rasterizer_state(rg::RasterizerState {
-                    polygon_mode: rg::PolygonMode::Line,
-                    ..Default::default()
-                });
-            }
+                let now = std::time::Instant::now();
+                if now - last_time > std::time::Duration::from_secs(1) {
+                    last_time = now;
+                    //state = !state;
+                }
 
-            cmd.draw(0..3, 0..1);
+                if state {
+                    cmd.set_rasterizer_state(rg::RasterizerState {
+                        polygon_mode: rg::PolygonMode::Fill,
+                        ..Default::default()
+                    });
+                } else {
+                    cmd.set_rasterizer_state(rg::RasterizerState {
+                        polygon_mode: rg::PolygonMode::Line,
+                        ..Default::default()
+                    });
+                }
 
-            frame_count += 1;
-        })
-        // .sample_image(
-        //     &blue_target,
-        //     rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-        //     3,
-        // )
-        .present(),
+                cmd.draw(0..3, 0..1);
+
+                frame_count += 1;
+            })
+            // .sample_image(
+            //     &blue_target,
+            //     rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+            //     3,
+            // )
+            .present(),
     );
 
     let mut graph = gb.build()?;

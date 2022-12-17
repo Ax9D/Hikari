@@ -1,13 +1,18 @@
-use hikari_asset::AssetManager;
-use hikari_core::{World, Entity};
 use hikari_3d::*;
+use hikari_asset::AssetManager;
+use hikari_core::{Entity, World};
 use hikari_math::*;
 use hikari_render::*;
 
 #[cfg(feature = "editor")]
 use hikari_render::{AccessType, Renderpass};
 
-use crate::{Args, RenderResources, Settings, world::WorldUBO, util, passes::{self}};
+use crate::{
+    passes::{self},
+    util,
+    world::WorldUBO,
+    Args, RenderResources, Settings,
+};
 
 pub struct WorldRenderer {
     graph: hikari_render::Graph<Args>,
@@ -23,55 +28,72 @@ impl WorldRenderer {
     ) -> anyhow::Result<Self> {
         let res = RenderResources::new(gfx.device(), width, height)?;
         let graph = Self::build_graph(gfx, width, height, shader_library, &res)?;
-        Ok(
-        Self {
-            graph,
-            res
-        })
+        Ok(Self { graph, res })
     }
     fn build_graph(
         gfx: &mut Gfx,
         width: u32,
         height: u32,
-        shader_library: &mut ShaderLibrary, res: &RenderResources) -> anyhow::Result<hikari_render::Graph<Args>> {
+        shader_library: &mut ShaderLibrary,
+        res: &RenderResources,
+    ) -> anyhow::Result<hikari_render::Graph<Args>> {
         let device = gfx.device().clone();
         let mut graph = GraphBuilder::<Args>::new(gfx, width, height);
         let depth_prepass = passes::depth_prepass::build_pass(&device, &mut graph, shader_library)?;
-        let (shadow_cascades, cascade_render_buffer) = passes::shadow::build_pass(&device, &mut graph, shader_library, &res.settings, &depth_prepass)?;
-        let pbr_output = passes::pbr::build_pass(&device, &mut graph, shader_library, &shadow_cascades, &cascade_render_buffer, &depth_prepass)?;
+        let (shadow_cascades, cascade_render_buffer) = passes::shadow::build_pass(
+            &device,
+            &mut graph,
+            shader_library,
+            &res.settings,
+            &depth_prepass,
+        )?;
+        let pbr_output = passes::pbr::build_pass(
+            &device,
+            &mut graph,
+            shader_library,
+            &shadow_cascades,
+            &cascade_render_buffer,
+            &depth_prepass,
+        )?;
         #[cfg(feature = "editor")]
-        let _fxaa_output = passes::fxaa::build_pass(&device, &mut graph, shader_library, &pbr_output)?;
+        let _fxaa_output =
+            passes::fxaa::build_pass(&device, &mut graph, shader_library, &pbr_output)?;
 
         #[cfg(not(feature = "editor"))]
         passes::fxaa::build_pass(&device, &mut graph, shader_library, &pbr_output)?;
 
         #[cfg(feature = "editor")]
         {
-        //let debug = passes::debug::build_pass(&device, &mut graph, shader_library, &depth_prepass, &shadow_cascades)?;
-        
-        let fake_pass = Renderpass::new("DummyTransitionForImGui", ImageSize::default_xy())
-        .read_image(
-            &_fxaa_output,
-            AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-        );
+            //let debug = passes::debug::build_pass(&device, &mut graph, shader_library, &depth_prepass, &shadow_cascades)?;
 
-        // for rt in debug {
-        //     fake_pass = fake_pass.read_image(&rt, AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer);
-        // }
+            let fake_pass = Renderpass::new("DummyTransitionForImGui", ImageSize::default_xy())
+                .read_image(
+                    &_fxaa_output,
+                    AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+                );
 
-        graph.add_renderpass(
-            fake_pass
-        );
+            // for rt in debug {
+            //     fake_pass = fake_pass.read_image(&rt, AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer);
+            // }
+
+            graph.add_renderpass(fake_pass);
         }
 
         Ok(graph.build()?)
     }
-    pub fn update_settings(&mut self, gfx: &mut Gfx, shader_library: &mut ShaderLibrary, mut update_fn: impl FnMut(&mut Settings)) -> anyhow::Result<()> {
+    pub fn update_settings(
+        &mut self,
+        gfx: &mut Gfx,
+        shader_library: &mut ShaderLibrary,
+        mut update_fn: impl FnMut(&mut Settings),
+    ) -> anyhow::Result<()> {
         let old_settings = self.res.settings.clone();
 
         (update_fn)(&mut self.res.settings);
 
-        if self.res.settings.directional_shadow_map_resolution != old_settings.directional_shadow_map_resolution {
+        if self.res.settings.directional_shadow_map_resolution
+            != old_settings.directional_shadow_map_resolution
+        {
             let (width, height) = self.graph.size();
 
             self.graph.finish()?;
@@ -138,10 +160,9 @@ impl WorldRenderer {
                     ubo_data.dir_light.shadow_fade = shadow.fade;
                     ubo_data.dir_light.max_shadow_distance = shadow.max_shadow_distance;
                     passes::shadow::compute_cascades(&mut ubo_data, &res.settings);
-                    }
+                }
             }
         }
-
 
         world_ubo.mapped_slice_mut()[0] = ubo_data;
     }
@@ -193,11 +214,7 @@ impl WorldRenderer {
 
         self.res.on_resize(width, height)
     }
-    pub fn resize_and_set_viewport(
-        &mut self,
-        width: f32,
-        height: f32,
-    ) -> anyhow::Result<()> {
+    pub fn resize_and_set_viewport(&mut self, width: f32, height: f32) -> anyhow::Result<()> {
         self.set_viewport(width, height);
         self.resize(width.round() as u32, height.round() as u32)
     }

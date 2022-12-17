@@ -1,10 +1,14 @@
 use std::{
-    collections::{hash_map::Iter, HashMap}, sync::Arc,
+    collections::{hash_map::Iter, HashMap},
+    sync::Arc,
 };
 
 use crate::{texture::SampledImage, Buffer};
 
-use super::{storage::{Storage, GenericBufferStorage, ErasedHandle}, GpuHandle, ImageSize};
+use super::{
+    storage::{ErasedHandle, GenericBufferStorage, Storage},
+    GpuHandle, ImageSize,
+};
 
 pub type HandlesIter<'a> = Iter<'a, String, GpuHandle<SampledImage>>;
 pub type BufferHandlesIter<'a> = Iter<'a, String, ErasedHandle>;
@@ -12,7 +16,7 @@ pub struct GraphResources {
     images: Storage<SampledImage>,
     buffers: GenericBufferStorage,
     img_handles: HashMap<String, GpuHandle<SampledImage>>,
-    buffer_handles: HashMap<String, ErasedHandle>
+    buffer_handles: HashMap<String, ErasedHandle>,
 }
 impl GraphResources {
     pub fn new() -> Self {
@@ -23,7 +27,7 @@ impl GraphResources {
             images: image_storage,
             buffers,
             img_handles: HashMap::default(),
-            buffer_handles: HashMap::default()
+            buffer_handles: HashMap::default(),
         }
     }
     pub fn add_image(
@@ -41,7 +45,11 @@ impl GraphResources {
             panic!("Image with name {} already exists", name);
         }
     }
-    pub fn add_buffer<B: Buffer + Send + Sync + 'static>(&mut self, name: String, buffer: B) -> GpuHandle<B> {
+    pub fn add_buffer<B: Buffer + Send + Sync + 'static>(
+        &mut self,
+        name: String,
+        buffer: B,
+    ) -> GpuHandle<B> {
         if self.buffer_handles.get(&name).is_none() {
             let handle = self.buffers.add(buffer);
 
@@ -76,14 +84,22 @@ impl GraphResources {
     }
 
     #[inline]
-    pub fn get_buffer<B: Buffer + Send + Sync + 'static>(&self, handle: &GpuHandle<B>) -> Option<&B> {
+    pub fn get_buffer<B: Buffer + Send + Sync + 'static>(
+        &self,
+        handle: &GpuHandle<B>,
+    ) -> Option<&B> {
         self.buffers.get(handle)
     }
     pub fn get_buffer_by_name<B: Buffer + Send + Sync + 'static>(&self, name: &str) -> Option<&B> {
         self.buffers.get(&self.get_buffer_handle(name)?)
     }
-    pub fn get_buffer_handle<B: Buffer + Send + Sync + 'static>(&self, name: &str) -> Option<GpuHandle<B>> {
-        self.buffer_handles.get(name).map(|erased| erased.clone().into_typed::<B>().unwrap())
+    pub fn get_buffer_handle<B: Buffer + Send + Sync + 'static>(
+        &self,
+        name: &str,
+    ) -> Option<GpuHandle<B>> {
+        self.buffer_handles
+            .get(name)
+            .map(|erased| erased.clone().into_typed::<B>().unwrap())
     }
     #[inline]
     pub(crate) fn get_dyn_buffer(&self, handle: &ErasedHandle) -> Option<&dyn Buffer> {
@@ -115,8 +131,10 @@ impl GraphResources {
         for handle in self.img_handles.values() {
             let (image, size) = self.images.get_with_metadata_mut(handle).unwrap();
             let config = *image.config();
-            let (new_width, new_height, new_depth) = size.get_physical_size_3d((new_width, new_height));
-            let new_image = SampledImage::with_dimensions(device, new_width, new_height, new_depth, config)?;
+            let (new_width, new_height, new_depth) =
+                size.get_physical_size_3d((new_width, new_height));
+            let new_image =
+                SampledImage::with_dimensions(device, new_width, new_height, new_depth, config)?;
 
             let old_image = std::mem::replace(image, new_image);
         }

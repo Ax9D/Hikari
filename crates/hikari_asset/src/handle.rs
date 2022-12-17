@@ -109,7 +109,7 @@ impl ErasedHandle {
     pub fn clone_weak(&self) -> Self {
         Self {
             raw: self.raw.clone_weak(),
-            type_id: self.type_id
+            type_id: self.type_id,
         }
     }
     pub fn is_weak(&self) -> bool {

@@ -1,4 +1,4 @@
-use winit::event::{WindowEvent};
+use winit::event::WindowEvent;
 
 pub type KeyCode = winit::event::VirtualKeyCode;
 pub type KeyState = winit::event::ElementState;
@@ -47,11 +47,13 @@ impl KeyboardState {
     }
     #[inline]
     pub fn was_just_pressed(&self, key: KeyCode) -> bool {
-        self.get_key_state(key) == KeyState::Pressed && self.get_last_key_state(key) == KeyState::Released
+        self.get_key_state(key) == KeyState::Pressed
+            && self.get_last_key_state(key) == KeyState::Released
     }
     #[inline]
     pub fn was_just_released(&self, key: KeyCode) -> bool {
-        self.get_key_state(key) == KeyState::Released && self.get_last_key_state(key) == KeyState::Pressed
+        self.get_key_state(key) == KeyState::Released
+            && self.get_last_key_state(key) == KeyState::Pressed
     }
 }
 
@@ -60,7 +62,16 @@ pub fn was_just_pressed() {
     use winit::event::*;
     #[allow(deprecated)]
     fn dummy_event(code: KeyCode, state: KeyState) -> WindowEvent<'static> {
-        WindowEvent::KeyboardInput { device_id: unsafe {DeviceId::dummy()}, input: KeyboardInput { scancode: 0, state, virtual_keycode: Some(code), modifiers: ModifiersState::empty() }, is_synthetic: true }
+        WindowEvent::KeyboardInput {
+            device_id: unsafe { DeviceId::dummy() },
+            input: KeyboardInput {
+                scancode: 0,
+                state,
+                virtual_keycode: Some(code),
+                modifiers: ModifiersState::empty(),
+            },
+            is_synthetic: true,
+        }
     }
     let mut keyboard = KeyboardState::new();
     keyboard.update(&dummy_event(KeyCode::A, KeyState::Released));

@@ -2,10 +2,10 @@ use crate::Component;
 
 pub type Entity = hecs::Entity;
 
-use hecs::{DynamicBundle};
+use hecs::DynamicBundle;
 pub use hecs::{
-    CommandBuffer, ComponentError, ComponentRef, EntityRef, MissingComponent, NoSuchEntity, Query, QueryBorrow,
-    QueryItem, QueryMut, QueryOne, Ref, RefMut, With, Without,
+    CommandBuffer, ComponentError, ComponentRef, EntityRef, MissingComponent, NoSuchEntity, Query,
+    QueryBorrow, QueryItem, QueryMut, QueryOne, Ref, RefMut, With, Without,
 };
 use hikari_math::Transform;
 pub struct World {

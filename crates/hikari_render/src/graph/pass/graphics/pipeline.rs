@@ -44,7 +44,7 @@ impl Default for PolygonMode {
 pub enum CullMode {
     None = 0,
     Front = 1,
-    Back = 2
+    Back = 2,
 }
 impl CullMode {
     pub fn into_vk(&self) -> vk::CullModeFlags {
@@ -207,7 +207,7 @@ impl Hash for RasterizerState {
         self.polygon_mode.hash(state);
         self.depth_clamp_enable.hash(state);
         self.rasterizer_discard_enable.hash(state);
-        self.depth_bias_enable.hash(state); 
+        self.depth_bias_enable.hash(state);
 
         bad_float_hash(self.depth_bias_constant_factor, state);
         bad_float_hash(self.depth_bias_clamp, state);

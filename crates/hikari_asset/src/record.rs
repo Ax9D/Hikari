@@ -1,7 +1,4 @@
-use std::{
-    any::{Any},
-    path::PathBuf,
-};
+use std::{any::Any, path::PathBuf};
 use type_uuid::TypeUuid;
 use uuid::Uuid;
 

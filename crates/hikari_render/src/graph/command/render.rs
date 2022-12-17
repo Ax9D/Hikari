@@ -127,16 +127,32 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         self.cmd.set_image_mip(image, mip_level, set, binding)
     }
     #[inline]
-    pub(crate) fn set_image_view_and_sampler(&mut self, image_view: vk::ImageView, sampler: vk::Sampler, set: u32, binding: u32, index: usize) {
-        self.cmd.set_image_view_and_sampler(image_view, sampler, set, binding, index)
+    pub(crate) fn set_image_view_and_sampler(
+        &mut self,
+        image_view: vk::ImageView,
+        sampler: vk::Sampler,
+        set: u32,
+        binding: u32,
+        index: usize,
+    ) {
+        self.cmd
+            .set_image_view_and_sampler(image_view, sampler, set, binding, index)
     }
     #[inline]
     pub fn set_image_array(&mut self, image: &SampledImage, set: u32, binding: u32, index: usize) {
         self.cmd.set_image_array(image, set, binding, index)
     }
     #[inline]
-    pub fn set_image_mip_array(&mut self, image: &SampledImage, mip_level: u32, set: u32, binding: u32, index: usize) {
-        self.cmd.set_image_mip_array(image, mip_level, set, binding, index)
+    pub fn set_image_mip_array(
+        &mut self,
+        image: &SampledImage,
+        mip_level: u32,
+        set: u32,
+        binding: u32,
+        index: usize,
+    ) {
+        self.cmd
+            .set_image_mip_array(image, mip_level, set, binding, index)
     }
     #[deprecated(note = "use `set_buffer` instead")]
     pub fn set_uniform_buffer<B: Buffer>(
@@ -148,11 +164,13 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
     ) {
         self.set_buffer(buffer, span, set, binding)
     }
-    pub fn set_buffer<B: Buffer>(&mut self,
+    pub fn set_buffer<B: Buffer>(
+        &mut self,
         buffer: &B,
         span: Range<usize>,
         set: u32,
-        binding: u32) {
+        binding: u32,
+    ) {
         self.cmd.set_buffer(buffer, span, set, binding)
     }
     pub fn set_vertex_buffer<B: Buffer>(&mut self, buffer: &B, binding: u32) {
@@ -319,7 +337,11 @@ impl PipelineContext {
         if self.pipeline_dirty {
             if self.psv.shader.is_some() {
                 let vk_pipeline = pipe_lookup
-                    .get_vk_graphics_pipeline(&self.psv, renderpass.pass, renderpass.n_color_attachments)
+                    .get_vk_graphics_pipeline(
+                        &self.psv,
+                        renderpass.pass,
+                        renderpass.n_color_attachments,
+                    )
                     .expect("Failed to create Pipeline");
                 unsafe {
                     hikari_dev::profile_scope!("Bind Pipeline");

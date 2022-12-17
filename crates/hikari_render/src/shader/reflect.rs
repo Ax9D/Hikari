@@ -98,11 +98,7 @@ impl ReflectionData {
         // let mut outputs = HashMap::new();
 
         let shader_module = spirv_reflect::ShaderModule::load_u32_data(spirv)?;
-        Ok(
-            Self {
-                raw: shader_module
-            }
-        )
+        Ok(Self { raw: shader_module })
         // let entry_point = None;
         // for input in shader_module.enumerate_input_variables(entry_point)? {
         //     inputs.insert(
@@ -164,7 +160,7 @@ impl ReflectionData {
         //         );
         //         },
         //         spirv_reflect::types::ReflectDescriptorType::UniformBuffer => {
-        //             uniform_buffers.insert(binding.name.clone(), 
+        //             uniform_buffers.insert(binding.name.clone(),
         //             UniformBuffer {
         //                 name: binding.name,
         //                 binding: binding.binding,

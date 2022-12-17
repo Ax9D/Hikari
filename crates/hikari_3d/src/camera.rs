@@ -1,12 +1,16 @@
 #[derive(Clone, Copy, Debug, type_uuid::TypeUuid)]
 #[uuid = "81dd6242-c4cd-4059-a3a0-ed1d0e44e68b"]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize), serde(default))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(default)
+)]
 pub struct Camera {
     pub near: f32,
     pub far: f32,
     pub exposure: f32,
     pub projection: Projection,
-    pub is_primary: bool
+    pub is_primary: bool,
 }
 
 impl Default for Camera {
@@ -16,7 +20,7 @@ impl Default for Camera {
             far: 1000.0,
             exposure: 1.0,
             projection: Projection::Perspective(45.0),
-            is_primary: false
+            is_primary: false,
         }
     }
 }
@@ -37,7 +41,9 @@ impl Camera {
                 self.near,
                 self.far,
             ),
-            Projection::Orthographic => hikari_math::Mat4::orthographic_rh(-width, width, -height, height, self.near, self.far),
+            Projection::Orthographic => hikari_math::Mat4::orthographic_rh(
+                -width, width, -height, height, self.near, self.far,
+            ),
         }
     }
 }

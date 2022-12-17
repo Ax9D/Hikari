@@ -1,4 +1,8 @@
-use std::{io::Read, io::Write, path::{Path, PathBuf}};
+use std::{
+    io::Read,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 pub struct Mode {
     pub create: bool,
@@ -55,36 +59,40 @@ pub trait IO: Send + Sync + 'static {
     fn remove_file(&self, path: &Path) -> Result<(), std::io::Error>;
     fn rename_file(&self, old: &Path, new: &Path) -> Result<(), std::io::Error>;
 
-    fn create_temp_file(&self, path: &Path, mode: &Mode) -> Result<(PathBuf, Box<dyn Write + Send + Sync + 'static>), std::io::Error> {
+    fn create_temp_file(
+        &self,
+        path: &Path,
+        mode: &Mode,
+    ) -> Result<(PathBuf, Box<dyn Write + Send + Sync + 'static>), std::io::Error> {
         loop {
             let random = rand::random::<u32>().to_string();
             let mut temp_path = path.to_owned();
             temp_path.set_extension(Path::new(&random));
 
-            let result = self.write_file(&temp_path, &Mode {
-                create: true,
-                create_new: true,
-                read: mode.read, 
-                write: mode.write,
-                append: mode.append,
-                truncate: mode.truncate,
-            });
-            
+            let result = self.write_file(
+                &temp_path,
+                &Mode {
+                    create: true,
+                    create_new: true,
+                    read: mode.read,
+                    write: mode.write,
+                    append: mode.append,
+                    truncate: mode.truncate,
+                },
+            );
+
             match result {
                 Ok(writer) => {
                     return Ok((temp_path, writer));
-                },
-                Err(err) => {
-                    match err.kind() {
-                        std::io::ErrorKind::AlreadyExists => continue,
-                        _ => return Err(err),
-                    }
                 }
+                Err(err) => match err.kind() {
+                    std::io::ErrorKind::AlreadyExists => continue,
+                    _ => return Err(err),
+                },
             }
-        } 
+        }
     }
 }
-
 
 pub struct PhysicalIO;
 

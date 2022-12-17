@@ -305,10 +305,7 @@ impl<'a, 'ui> Gizmo<'a, 'ui> {
     // }
 
     pub fn viewport(mut self, min: Vec2, max: Vec2) -> Self {
-        self.state.viewport = Viewport {
-            min,
-            max,
-        };
+        self.state.viewport = Viewport { min, max };
         self
     }
     pub fn mode(mut self, mode: Mode) -> Self {

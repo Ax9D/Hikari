@@ -1,16 +1,16 @@
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
-    sync::Arc, io::{Read, Cursor},
+    sync::Arc,
 };
 
 use hikari_asset::{Handle, LoadContext, Mode};
-use hikari_math::{Vec2, Vec3, Vec4, Quat};
+use hikari_math::{Quat, Vec2, Vec3, Vec4};
 
 use crate::{
     material::Material,
     texture::{Texture2D, TextureConfig},
-    SubMesh, Vertex,
+    SubMesh,
 };
 #[allow(unused)]
 struct ImportData {
@@ -25,11 +25,8 @@ impl ImportData {
         assert!(path.is_relative());
 
         let (document, buffers, _images) = gltf::import(path)?;
-        
-        let parent_path = path
-            .parent()
-            .unwrap_or_else(|| Path::new("./"))
-            .to_owned();
+
+        let parent_path = path.parent().unwrap_or_else(|| Path::new("./")).to_owned();
         Ok(Self {
             path: path.to_owned(),
             parent_path,
@@ -281,9 +278,14 @@ fn parse_texture_data(
             let data = &parent_buffer[start..end];
 
             match mime_type {
-                "image/png" | "image/jpeg" => {
-                    create_and_load_image_with_data(&data, texture, config, mime_type, gltf, load_context)
-                }
+                "image/png" | "image/jpeg" => create_and_load_image_with_data(
+                    &data,
+                    texture,
+                    config,
+                    mime_type,
+                    gltf,
+                    load_context,
+                ),
                 _ => Err(anyhow::anyhow!(
                     crate::error::Error::UnsupportedImageFormat(
                         mime_type.split(r"/").last().unwrap().to_string(),
@@ -313,9 +315,14 @@ fn parse_texture_data(
                 };
 
                 match mime_type {
-                    "image/png" | "image/jpeg" => {              
-                        create_and_load_image_with_data(&data, texture, config,  mime_type, gltf, load_context)
-                    }
+                    "image/png" | "image/jpeg" => create_and_load_image_with_data(
+                        &data,
+                        texture,
+                        config,
+                        mime_type,
+                        gltf,
+                        load_context,
+                    ),
                     _ => Err(anyhow::anyhow!(
                         crate::error::Error::UnsupportedImageFormat(
                             mime_type.split(r"/").last().unwrap().to_string(),
@@ -343,8 +350,15 @@ fn parse_texture_data(
         }
     }
 }
-fn create_and_load_image_with_data(data: &[u8], texture: &gltf::Texture, config: TextureConfig, mime_type: &str, import_data: &ImportData, load_context: &mut LoadContext) -> anyhow::Result<Handle<Texture2D>> {
-    let base_path =import_data.parent_path();
+fn create_and_load_image_with_data(
+    data: &[u8],
+    texture: &gltf::Texture,
+    config: TextureConfig,
+    mime_type: &str,
+    import_data: &ImportData,
+    load_context: &mut LoadContext,
+) -> anyhow::Result<Handle<Texture2D>> {
+    let base_path = import_data.parent_path();
     let texture_name = texture
         .name()
         .map(|name| name.to_owned())
@@ -354,19 +368,23 @@ fn create_and_load_image_with_data(data: &[u8], texture: &gltf::Texture, config:
 
     let mut new_texture_path = base_path.to_owned();
     new_texture_path.push(texture_name);
-    
+
     if new_texture_path.extension().is_none() {
         new_texture_path.set_extension(ext);
     }
-    
+
     if !new_texture_path.exists() {
-        let mut file = load_context.io().write_file(&new_texture_path, &Mode::create_and_write())?;
+        let mut file = load_context
+            .io()
+            .write_file(&new_texture_path, &Mode::create_and_write())?;
         file.write(&data)?;
         file.flush()?;
     }
 
-    let texture = load_context.asset_manager().load::<Texture2D>(new_texture_path, Some(config), false)?;
-
+    let texture =
+        load_context
+            .asset_manager()
+            .load::<Texture2D>(new_texture_path, Some(config), false)?;
 
     Ok(texture)
 }
@@ -484,18 +502,25 @@ fn load_mesh(
         .name()
         .unwrap_or(&format!("{}_mesh_{}", import_data.filename(), mesh.index()))
         .to_owned();
-    
-    let node = import_data.document().nodes().find(|node| node.mesh().map(|mesh| mesh.index()) == Some(mesh.index()));
-    
-    let transform = node.map(|node| node.transform()).unwrap_or(gltf::scene::Transform::Decomposed { 
-        translation: [0.0, 0.0, 0.0], rotation: Quat::IDENTITY.to_array(), scale: [1.0, 1.0, 1.0] 
-    });
+
+    let node = import_data
+        .document()
+        .nodes()
+        .find(|node| node.mesh().map(|mesh| mesh.index()) == Some(mesh.index()));
+
+    let transform =
+        node.map(|node| node.transform())
+            .unwrap_or(gltf::scene::Transform::Decomposed {
+                translation: [0.0, 0.0, 0.0],
+                rotation: Quat::IDENTITY.to_array(),
+                scale: [1.0, 1.0, 1.0],
+            });
 
     let (positions, rotation, scale) = transform.decomposed();
     let transform = hikari_math::Transform {
         position: Vec3::from(positions),
         rotation: Quat::from_array(rotation),
-        scale: Vec3::from(scale)
+        scale: Vec3::from(scale),
     };
 
     //println!("Loading model {}", name);
@@ -570,7 +595,10 @@ fn load_mesh(
         sub_meshes.push(submesh);
     }
 
-    Ok(crate::Mesh { sub_meshes, transform })
+    Ok(crate::Mesh {
+        sub_meshes,
+        transform,
+    })
 }
 
 pub fn load_scene(
@@ -603,15 +631,14 @@ pub fn load_scene(
                 far: ortho.zfar(),
                 exposure: 1.0,
                 projection: crate::Projection::Orthographic,
-                is_primary: false
+                is_primary: false,
             },
             gltf::camera::Projection::Perspective(persp) => crate::Camera {
                 near: persp.znear(),
                 far: persp.zfar().unwrap_or(1000.0),
                 exposure: 1.0,
                 projection: crate::Projection::Perspective(persp.yfov()),
-                is_primary: false
-                
+                is_primary: false,
             },
         })
         .unwrap_or(crate::Camera {
@@ -619,7 +646,7 @@ pub fn load_scene(
             far: 10_000.0,
             exposure: 1.0,
             projection: crate::Projection::Perspective(45.0),
-            is_primary: false
+            is_primary: false,
         });
 
     Ok(crate::Scene { meshes, camera })

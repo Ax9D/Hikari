@@ -288,61 +288,68 @@ fn depth_prepass(
         )
         .build();
     gb.add_renderpass(
-        rg::Renderpass::<Args>::new(
-            "DepthPrepass",
-            rg::ImageSize::default_xy()
-        )
-        .cmd(move |cmd, _, record_info, (scene, settings, _)| {
-            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
-            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+        rg::Renderpass::<Args>::new("DepthPrepass", rg::ImageSize::default_xy())
+            .cmd(move |cmd, _, record_info, (scene, settings, _)| {
+                cmd.set_viewport(
+                    0.0,
+                    0.0,
+                    record_info.framebuffer_width as f32,
+                    record_info.framebuffer_height as f32,
+                );
+                cmd.set_scissor(
+                    0,
+                    0,
+                    record_info.framebuffer_width,
+                    record_info.framebuffer_width,
+                );
 
-            cmd.set_shader(&shader);
-            cmd.set_vertex_input_layout(layout);
+                cmd.set_shader(&shader);
+                cmd.set_vertex_input_layout(layout);
 
-            cmd.set_depth_stencil_state(rg::DepthStencilState {
-                depth_test_enabled: true,
-                depth_write_enabled: true,
-                depth_compare_op: rg::CompareOp::Less,
-                ..Default::default()
-            });
+                cmd.set_depth_stencil_state(rg::DepthStencilState {
+                    depth_test_enabled: true,
+                    depth_write_enabled: true,
+                    depth_compare_op: rg::CompareOp::Less,
+                    ..Default::default()
+                });
 
-            let proj = scene
-                .camera
-                .get_projection_matrix(settings.width as f32, settings.height as f32);
-            let view = scene.camera.get_view_matrix();
-            let view_proj = (proj * view).to_cols_array();
+                let proj = scene
+                    .camera
+                    .get_projection_matrix(settings.width as f32, settings.height as f32);
+                let view = scene.camera.get_view_matrix();
+                let view_proj = (proj * view).to_cols_array();
 
-            ubo.get_mut().mapped_slice_mut()[0] = UBO { view_proj };
+                ubo.get_mut().mapped_slice_mut()[0] = UBO { view_proj };
 
-            cmd.set_buffer(ubo.get(), 0..1, 0, 0);
+                cmd.set_buffer(ubo.get(), 0..1, 0, 0);
 
-            for object in &scene.objects {
-                let transform = object.transform.get_matrix();
-                let model = &object.model;
-                for mesh in &model.meshes {
-                    {
-                        hikari_dev::profile_scope!("Set vertex and index buffers");
-                        cmd.set_vertex_buffer(&mesh.vertices, 0);
-                        cmd.set_index_buffer(&mesh.indices);
+                for object in &scene.objects {
+                    let transform = object.transform.get_matrix();
+                    let model = &object.model;
+                    for mesh in &model.meshes {
+                        {
+                            hikari_dev::profile_scope!("Set vertex and index buffers");
+                            cmd.set_vertex_buffer(&mesh.vertices, 0);
+                            cmd.set_index_buffer(&mesh.indices);
+                        }
+
+                        cmd.push_constants(&PushConstants { transform }, 0);
+
+                        // println!(
+                        //     "{:?} {:?} {:?} {:?}",
+                        //     albedo.raw().image(),
+                        //     roughness.raw().image(),
+                        //     metallic.raw().image(),
+                        //     normal.raw().image()
+                        // );
+
+                        cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
                     }
-
-                    cmd.push_constants(&PushConstants { transform }, 0);
-
-                    // println!(
-                    //     "{:?} {:?} {:?} {:?}",
-                    //     albedo.raw().image(),
-                    //     roughness.raw().image(),
-                    //     metallic.raw().image(),
-                    //     normal.raw().image()
-                    // );
-
-                    cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
                 }
-            }
 
-            ubo.next_frame();
-        })
-        .draw_image(&depth_output, rg::AttachmentConfig::depth_only_default()),
+                ubo.next_frame();
+            })
+            .draw_image(&depth_output, rg::AttachmentConfig::depth_only_default()),
     );
 
     depth_output
@@ -480,111 +487,118 @@ fn pbr_pass(
     //     )
     //     .expect("Failed to create PBR attachments");
     gb.add_renderpass(
-        rg::Renderpass::<Args>::new(
-            "PBR",
-            rg::ImageSize::default_xy(),
-        )
-        .cmd(move |cmd, res, record_info, (scene, settings, _)| {
-            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
-            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+        rg::Renderpass::<Args>::new("PBR", rg::ImageSize::default_xy())
+            .cmd(move |cmd, res, record_info, (scene, settings, _)| {
+                cmd.set_viewport(
+                    0.0,
+                    0.0,
+                    record_info.framebuffer_width as f32,
+                    record_info.framebuffer_height as f32,
+                );
+                cmd.set_scissor(
+                    0,
+                    0,
+                    record_info.framebuffer_width,
+                    record_info.framebuffer_width,
+                );
 
-            let proj = scene
-                .camera
-                .get_projection_matrix(settings.width as f32, settings.height as f32);
-            let view = scene.camera.get_view_matrix();
+                let proj = scene
+                    .camera
+                    .get_projection_matrix(settings.width as f32, settings.height as f32);
+                let view = scene.camera.get_view_matrix();
 
-            let view_proj = (proj * view).to_cols_array();
+                let view_proj = (proj * view).to_cols_array();
 
-            use hikari_math::Vec3;
-            let direction = scene.dir_light.transform.rotation * -Vec3::Y;
+                use hikari_math::Vec3;
+                let direction = scene.dir_light.transform.rotation * -Vec3::Y;
 
-            ubo.get_mut().mapped_slice_mut()[0] = UBO {
-                view_proj,
-                camera_position: scene.camera.transform.position.into(),
-                exposure: scene.camera.inner.exposure,
-                dir_light: DirLight {
-                    color: scene.dir_light.light.color.into(),
-                    direction: direction.into(),
-                    intensity: scene.dir_light.light.intensity,
-                },
-            };
+                ubo.get_mut().mapped_slice_mut()[0] = UBO {
+                    view_proj,
+                    camera_position: scene.camera.transform.position.into(),
+                    exposure: scene.camera.inner.exposure,
+                    dir_light: DirLight {
+                        color: scene.dir_light.light.color.into(),
+                        direction: direction.into(),
+                        intensity: scene.dir_light.light.intensity,
+                    },
+                };
 
-            cmd.set_shader(&shader);
+                cmd.set_shader(&shader);
 
-            cmd.set_vertex_input_layout(layout);
+                cmd.set_vertex_input_layout(layout);
 
-            cmd.set_depth_stencil_state(rg::DepthStencilState {
-                depth_test_enabled: true,
-                depth_write_enabled: false,
-                depth_compare_op: rg::CompareOp::Equal,
-                ..Default::default()
-            });
+                cmd.set_depth_stencil_state(rg::DepthStencilState {
+                    depth_test_enabled: true,
+                    depth_write_enabled: false,
+                    depth_compare_op: rg::CompareOp::Equal,
+                    ..Default::default()
+                });
 
-            cmd.set_buffer(ubo.get(), 0..1, 0, 0);
+                cmd.set_buffer(ubo.get(), 0..1, 0, 0);
 
-            {
-                hikari_dev::profile_scope!("Render scene");
-                for object in &scene.objects {
-                    let transform = object.transform.get_matrix();
-                    let model = &object.model;
-                    for mesh in &model.meshes {
-                        {
-                            hikari_dev::profile_scope!("Set vertex and index buffers");
-                            cmd.set_vertex_buffer(&mesh.vertices, 0);
-                            cmd.set_index_buffer(&mesh.indices);
+                {
+                    hikari_dev::profile_scope!("Render scene");
+                    for object in &scene.objects {
+                        let transform = object.transform.get_matrix();
+                        let model = &object.model;
+                        for mesh in &model.meshes {
+                            {
+                                hikari_dev::profile_scope!("Set vertex and index buffers");
+                                cmd.set_vertex_buffer(&mesh.vertices, 0);
+                                cmd.set_index_buffer(&mesh.indices);
+                            }
+                            let material = Material {
+                                albedo: mesh.material.albedo_factor,
+                                roughness: mesh.material.roughness_factor,
+                                metallic: mesh.material.metallic_factor,
+                                albedo_uv_set: mesh.material.albedo_set,
+                                roughness_uv_set: mesh.material.roughness_set,
+                                metallic_uv_set: mesh.material.metallic_set,
+                                normal_uv_set: mesh.material.normal_set,
+                            };
+
+                            let pc = PushConstants {
+                                transform,
+                                material,
+                            };
+
+                            cmd.push_constants(&pc, 0);
+
+                            let albedo = mesh.material.albedo.as_ref().unwrap_or(&checkerboard);
+                            let roughness = mesh.material.roughness.as_ref().unwrap_or(&black);
+                            let metallic = mesh.material.metallic.as_ref().unwrap_or(&black);
+                            let normal = mesh.material.normal.as_ref().unwrap_or(&black);
+
+                            // println!(
+                            //     "{:?} {:?} {:?} {:?}",
+                            //     albedo.raw().image(),
+                            //     roughness.raw().image(),
+                            //     metallic.raw().image(),
+                            //     normal.raw().image()
+                            // );
+                            cmd.set_image(albedo.raw(), 1, 0);
+                            cmd.set_image(roughness.raw(), 1, 1);
+                            cmd.set_image(metallic.raw(), 1, 2);
+                            cmd.set_image(normal.raw(), 1, 3);
+
+                            cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
                         }
-                        let material = Material {
-                            albedo: mesh.material.albedo_factor,
-                            roughness: mesh.material.roughness_factor,
-                            metallic: mesh.material.metallic_factor,
-                            albedo_uv_set: mesh.material.albedo_set,
-                            roughness_uv_set: mesh.material.roughness_set,
-                            metallic_uv_set: mesh.material.metallic_set,
-                            normal_uv_set: mesh.material.normal_set,
-                        };
-
-                        let pc = PushConstants {
-                            transform,
-                            material,
-                        };
-
-                        cmd.push_constants(&pc, 0);
-
-                        let albedo = mesh.material.albedo.as_ref().unwrap_or(&checkerboard);
-                        let roughness = mesh.material.roughness.as_ref().unwrap_or(&black);
-                        let metallic = mesh.material.metallic.as_ref().unwrap_or(&black);
-                        let normal = mesh.material.normal.as_ref().unwrap_or(&black);
-
-                        // println!(
-                        //     "{:?} {:?} {:?} {:?}",
-                        //     albedo.raw().image(),
-                        //     roughness.raw().image(),
-                        //     metallic.raw().image(),
-                        //     normal.raw().image()
-                        // );
-                        cmd.set_image(albedo.raw(), 1, 0);
-                        cmd.set_image(roughness.raw(), 1, 1);
-                        cmd.set_image(metallic.raw(), 1, 2);
-                        cmd.set_image(normal.raw(), 1, 3);
-
-                        cmd.draw_indexed(0..mesh.indices.capacity(), 0, 0..1);
                     }
                 }
-            }
-            ubo.next_frame();
-        })
-        .draw_image(&color_output, rg::AttachmentConfig::color_default(0))
-        .draw_image(
-            &depth_prepass,
-            rg::AttachmentConfig {
-                kind: rg::AttachmentKind::DepthOnly,
-                access: rg::AccessType::DepthStencilAttachmentRead,
-                load_op: rg::vk::AttachmentLoadOp::LOAD,
-                store_op: rg::vk::AttachmentStoreOp::STORE,
-                stencil_load_op: rg::vk::AttachmentLoadOp::DONT_CARE,
-                stencil_store_op: rg::vk::AttachmentStoreOp::DONT_CARE,
-            },
-        ),
+                ubo.next_frame();
+            })
+            .draw_image(&color_output, rg::AttachmentConfig::color_default(0))
+            .draw_image(
+                &depth_prepass,
+                rg::AttachmentConfig {
+                    kind: rg::AttachmentKind::DepthOnly,
+                    access: rg::AccessType::DepthStencilAttachmentRead,
+                    load_op: rg::vk::AttachmentLoadOp::LOAD,
+                    store_op: rg::vk::AttachmentStoreOp::STORE,
+                    stencil_load_op: rg::vk::AttachmentLoadOp::DONT_CARE,
+                    stencil_store_op: rg::vk::AttachmentStoreOp::DONT_CARE,
+                },
+            ),
     );
 
     color_output
@@ -649,30 +663,40 @@ fn fxaa_pass(
         )
         .expect("Failed to create fxaa output");
     gb.add_renderpass(
-        rg::Renderpass::<Args>::new(
-            "FXAA",
-            rg::ImageSize::default_xy(),
-        )
-        .draw_image(&output, rg::AttachmentConfig::color_default(0))
-        .read_image(&pbr_pass, rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer)
-        .cmd(move |cmd, res, record_info, (_, settings, _)| {
-            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
-            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+        rg::Renderpass::<Args>::new("FXAA", rg::ImageSize::default_xy())
+            .draw_image(&output, rg::AttachmentConfig::color_default(0))
+            .read_image(
+                &pbr_pass,
+                rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+            )
+            .cmd(move |cmd, res, record_info, (_, settings, _)| {
+                cmd.set_viewport(
+                    0.0,
+                    0.0,
+                    record_info.framebuffer_width as f32,
+                    record_info.framebuffer_height as f32,
+                );
+                cmd.set_scissor(
+                    0,
+                    0,
+                    record_info.framebuffer_width,
+                    record_info.framebuffer_width,
+                );
 
-            cmd.set_shader(&shader);
+                cmd.set_shader(&shader);
 
-            let pbr_image = res.get_image(&pbr_pass).unwrap();
-            cmd.set_image(pbr_image, 0, 0);
-            cmd.push_constants(
-                &PushConstants {
-                    res: hikari_math::vec2(settings.width as f32, settings.height as f32),
-                    enabled: settings.fxaa as _,
-                },
-                0,
-            );
+                let pbr_image = res.get_image(&pbr_pass).unwrap();
+                cmd.set_image(pbr_image, 0, 0);
+                cmd.push_constants(
+                    &PushConstants {
+                        res: hikari_math::vec2(settings.width as f32, settings.height as f32),
+                        enabled: settings.fxaa as _,
+                    },
+                    0,
+                );
 
-            cmd.draw(0..6, 0..1);
-        })
+                cmd.draw(0..6, 0..1);
+            }),
     );
 
     output
@@ -699,19 +723,26 @@ fn imgui_pass(
         )
         .expect("Failed to create imgui image");
     gb.add_renderpass(
-        rg::Renderpass::<Args>::new(
-            "ImguiRenderer",
-            rg::ImageSize::default_xy(),
-        )
-        .cmd(move |cmd, _, record_info, (_, _, draw_data)| {
-            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
-            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
-            
-            renderer
-                .render(cmd.raw(), draw_data)
-                .expect("Failed to render imgui");
-        })
-        .draw_image(&imgui_image, rg::AttachmentConfig::color_default(0)),
+        rg::Renderpass::<Args>::new("ImguiRenderer", rg::ImageSize::default_xy())
+            .cmd(move |cmd, _, record_info, (_, _, draw_data)| {
+                cmd.set_viewport(
+                    0.0,
+                    0.0,
+                    record_info.framebuffer_width as f32,
+                    record_info.framebuffer_height as f32,
+                );
+                cmd.set_scissor(
+                    0,
+                    0,
+                    record_info.framebuffer_width,
+                    record_info.framebuffer_width,
+                );
+
+                renderer
+                    .render(cmd.raw(), draw_data)
+                    .expect("Failed to render imgui");
+            })
+            .draw_image(&imgui_image, rg::AttachmentConfig::color_default(0)),
     );
 
     imgui_image
@@ -943,37 +974,47 @@ fn composite_pass(
 
     gb.add_renderpass(
         rg::Renderpass::<Args>::new("CompositePass", rg::ImageSize::default_xy())
-        .read_image(
-            &pbr_output,
-            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-        )
-        .read_image(
-            &imgui_output,
-            rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-        )
-        .cmd(move |cmd, res, record_info, _| {
-            cmd.set_viewport(0.0, 0.0, record_info.framebuffer_width as f32, record_info.framebuffer_height as f32);
-            cmd.set_scissor(0, 0, record_info.framebuffer_width, record_info.framebuffer_width);
+            .read_image(
+                &pbr_output,
+                rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+            )
+            .read_image(
+                &imgui_output,
+                rg::AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+            )
+            .cmd(move |cmd, res, record_info, _| {
+                cmd.set_viewport(
+                    0.0,
+                    0.0,
+                    record_info.framebuffer_width as f32,
+                    record_info.framebuffer_height as f32,
+                );
+                cmd.set_scissor(
+                    0,
+                    0,
+                    record_info.framebuffer_width,
+                    record_info.framebuffer_width,
+                );
 
-            let pbr_image = res.get_image(&pbr_output).unwrap();
-            let imgui_image = res.get_image(&imgui_output).unwrap();
+                let pbr_image = res.get_image(&pbr_output).unwrap();
+                let imgui_image = res.get_image(&imgui_output).unwrap();
 
-            cmd.set_image(pbr_image, 0, 0);
-            cmd.set_image(imgui_image, 0, 1);
+                cmd.set_image(pbr_image, 0, 0);
+                cmd.set_image(imgui_image, 0, 1);
 
-            cmd.set_shader(&shader);
-            // cmd.set_blend_state(rg::BlendState {
-            //     enabled: true,
-            //     src_color_blend_factor: rg::BlendFactor::SrcAlpha,
-            //     dst_color_blend_factor: rg::BlendFactor::OneMinusSrcAlpha,
-            //     color_blend_op: rg::BlendOp::Add,
-            //     src_alpha_blend_factor: rg::BlendFactor::One,
-            //     dst_alpha_blend_factor: rg::BlendFactor::Zero,
-            //     alpha_blend_op: rg::BlendOp::Add
-            // });
-            cmd.draw(0..6, 0..1);
-        })
-        .present(),
+                cmd.set_shader(&shader);
+                // cmd.set_blend_state(rg::BlendState {
+                //     enabled: true,
+                //     src_color_blend_factor: rg::BlendFactor::SrcAlpha,
+                //     dst_color_blend_factor: rg::BlendFactor::OneMinusSrcAlpha,
+                //     color_blend_op: rg::BlendOp::Add,
+                //     src_alpha_blend_factor: rg::BlendFactor::One,
+                //     dst_alpha_blend_factor: rg::BlendFactor::Zero,
+                //     alpha_blend_op: rg::BlendOp::Add
+                // });
+                cmd.draw(0..6, 0..1);
+            })
+            .present(),
     );
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1053,7 +1094,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 far: 10000.0,
                 exposure: 1.0,
                 projection: hikari_3d::Projection::Perspective(45.0),
-                is_primary: true
+                is_primary: true,
             },
         },
         dir_light: Light {

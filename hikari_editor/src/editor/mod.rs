@@ -1,10 +1,10 @@
 use self::{
     content_browser::ContentBrowser,
+    debugger::Debugger,
     logging::{LogListener, Logging},
     outliner::Outliner,
     project::ProjectManager,
     properties::Properties,
-    debugger::Debugger,
     viewport::Viewport,
 };
 use crate::{component_impls, components::EditorComponents, imgui};
@@ -17,17 +17,16 @@ use hikari_editor::*;
 pub mod logging;
 
 //mod utils;
+mod camera;
 mod content_browser;
+mod debugger;
+mod icons;
 pub mod meta;
 mod outliner;
 mod project;
 mod properties;
-mod debugger;
-mod viewport;
-mod icons;
 mod render_settings;
-mod camera;
-
+mod viewport;
 
 struct Clipboard(clipboard::ClipboardContext);
 impl Clipboard {
@@ -58,6 +57,7 @@ pub enum RenameState {
 }
 pub struct Editor {
     outliner: Outliner,
+    #[allow(unused)]
     properties: Properties,
     viewport: Viewport,
     content_browser: ContentBrowser,
@@ -132,11 +132,14 @@ impl Editor {
         ctx.style_mut().frame_rounding = 2.0;
         ctx.io_mut().config_flags = imgui::ConfigFlags::DOCKING_ENABLE;
 
-        ctx.fonts().add_font(&[imgui::FontSource::TtfData {
-            data: include_bytes!("../../../engine_assets/fonts/Roboto/Roboto-Regular.ttf"),
-            size_pixels: 13.0 * config.hidpi_factor * 1.5,
-            config: None,
-        }, icons::icon_ttf(config.hidpi_factor)]);
+        ctx.fonts().add_font(&[
+            imgui::FontSource::TtfData {
+                data: include_bytes!("../../../engine_assets/fonts/Roboto/Roboto-Regular.ttf"),
+                size_pixels: 13.0 * config.hidpi_factor * 1.5,
+                config: None,
+            },
+            icons::icon_ttf(config.hidpi_factor),
+        ]);
 
         if let Some(clipboard) = Clipboard::new() {
             ctx.set_clipboard_backend(clipboard);
@@ -229,11 +232,10 @@ impl Editor {
         properties::draw(ui, self, state).unwrap();
         logging::draw(ui, self);
         debugger::draw(ui, self, state).unwrap();
-        
+
         if self.show_demo {
             ui.show_demo_window(&mut self.show_demo);
         }
-
     }
     pub fn file_menu(&mut self, ui: &imgui::Ui, state: EngineState) -> anyhow::Result<()> {
         let mut open = false;
