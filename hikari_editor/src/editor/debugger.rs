@@ -102,8 +102,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                     let size = estimate_asset_size(&asset_db)?;
                     let human_size = human_bytes(size);
                     let mut storage = ui.storage();
-                    let size = storage.get_or_insert_with(imgui::Id::Int(ASSET_FILE_SIZE, ui), || String::new());
-                    *size = human_size;
+                    storage.insert(imgui::Id::Int(ASSET_FILE_SIZE, ui), human_size);
                 }
 
                 ui.text(format!("Asset Count: {}", asset_db.records().len()));
