@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use hikari::asset::AssetManager;
 use hikari::g3d::Plugin3D;
 use hikari::pbr::PBRPlugin;
 use hikari::render::imgui_support::Renderer;
@@ -85,7 +86,7 @@ impl Plugin for EditorPlugin {
         let swapchain = gfx.swapchain().unwrap().lock();
         let color_format = swapchain.color_format();
         let depth_format = swapchain.depth_format();
-
+        
         drop(swapchain);
         let renderer = imgui_support::Renderer::new(
             gfx.device(),
@@ -97,17 +98,17 @@ impl Plugin for EditorPlugin {
         .expect("Failed to create imgui renderer");
         let renderer = Arc::new(Mutex::new(renderer));
         imgui::Ui::initialize_texture_support(renderer.clone());
-
+        
         let graph = prepare_graph(gfx.as_mut(), &backend, renderer);
         drop(gfx);
-
+        
         let static_window: &'static winit::window::Window =
-            unsafe { std::mem::transmute(game.window()) };
-
+        unsafe { std::mem::transmute(game.window()) };
+        
         game.add_state(backend);
         game.add_state(graph);
         game.add_state(static_window);
-
+        
         let update_task = unsafe {
             Task::with_raw_function(
                 "EditorUpdate",
@@ -122,6 +123,7 @@ impl Plugin for EditorPlugin {
             )
         };
         game.add_task(POST_RENDER, update_task);
+
         #[allow(unused_variables)]
         game.add_task(
             POST_RENDER,
@@ -152,6 +154,14 @@ impl Plugin for EditorPlugin {
             .after("EditorUpdate"),
         );
 
+        game.create_init_stage("EDITOR_INIT");
+        // game.add_init_task("EDITOR_INIT", Task::new("SetPanicHook", |asset_manager: &AssetManager| {
+        //     let asset_manager = asset_manager.clone();
+        //     std::panic::set_hook(Box::new(move |_| {
+        //         asset_manager.save_db().expect("Failed to save Asset DB");
+        //     }));
+        // }));
+
         game.add_platform_event_hook(|state, window, event, control| {
             state
                 .get_mut::<imgui_support::Backend>()
@@ -177,6 +187,7 @@ impl Plugin for EditorPlugin {
                 },
                 Event::LoopDestroyed => {
                     state.get_mut::<EditorGraph>().unwrap().prepare_exit();
+                    state.get::<AssetManager>().unwrap().save_db().expect("Failed to save Asset DB");
                 }
                 _ => {}
             }
@@ -184,8 +195,27 @@ impl Plugin for EditorPlugin {
     }
 }
 
+fn spawn_deadlock_detector() {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let deadlocks = parking_lot::deadlock::check_deadlock();
+        if deadlocks.is_empty() {
+            continue;
+        }
+        println!("{} deadlocks detected", deadlocks.len());
+        for (i, threads) in deadlocks.iter().enumerate() {
+            println!("Deadlock #{}", i);
+            for t in threads {
+                println!("Thread Id {:#?}", t.thread_id());
+                println!("{:#?}", t.backtrace());
+            }
+        }
+    });
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let log_listener = editor::logging::init()?;
+
+    spawn_deadlock_detector();
 
     let window = winit::window::WindowBuilder::new()
         .with_title("Hikari Editor")
