@@ -26,6 +26,7 @@ members = [
 
 [profile.release]
 debug = true
+debug-assertions = true
 
 [dependencies]
 hikari_core = {path = "crates/hikari_core"}
