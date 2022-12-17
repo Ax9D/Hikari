@@ -77,6 +77,17 @@ impl AssetDB {
             None => self.register_new_handle::<T>(handle.clone(), path, settings),
         }
     }
+    pub(crate) fn fix_uuid(&mut self, current: &Uuid, fixed: Uuid) -> Option<()> {
+        let record_ix = self.uuid_to_record.get(current)?;
+        self.records[*record_ix].uuid = fixed;
+
+        let removed = self.uuid_to_handle.remove(current);
+        if let Some(removed) = removed {
+            self.uuid_to_handle.insert(fixed, removed);
+        }
+
+        Some(())
+    }
     #[allow(unused)]
     pub(crate) fn remove_handle(&mut self, handle: ErasedHandle) -> anyhow::Result<()> {
         assert!(handle.is_weak());
@@ -171,5 +182,9 @@ impl AssetDB {
 
             will_retain
         });
+    }
+    /// Returns a list of records in no particular order
+    pub fn records(&self) -> &[Record] {
+        &self.records
     }
 }
