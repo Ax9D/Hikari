@@ -1,0 +1,23 @@
+albedo:
+  uuid: 30e6b619-3295-4d51-a7c7-993adbbd3690
+  path: ../../Hikari/engine_assets/models/sponza/1998971870295487297.png
+albedo_set: 0
+albedo_factor:
+- 0.588
+- 0.588
+- 0.588
+- 1.0
+roughness:
+  uuid: e6fc2207-7b94-47c0-a270-53323aac9a77
+  path: ../../Hikari/engine_assets/models/sponza/13409925532914268225.png
+roughness_set: 0
+roughness_factor: 1.0
+metallic:
+  uuid: e6fc2207-7b94-47c0-a270-53323aac9a77
+  path: ../../Hikari/engine_assets/models/sponza/13409925532914268225.png
+metallic_set: 0
+metallic_factor: 1.0
+normal:
+  uuid: 7d6e587d-4cb9-4331-9be0-a064657d3874
+  path: ../../Hikari/engine_assets/models/sponza/12329509035612604735.png
+normal_set: 0

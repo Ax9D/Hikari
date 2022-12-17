@@ -1,0 +1,15 @@
+albedo: null
+albedo_set: -1
+albedo_factor:
+- 0.588
+- 0.588
+- 0.588
+- 1.0
+roughness: null
+roughness_set: -1
+roughness_factor: 1.0
+metallic: null
+metallic_set: -1
+metallic_factor: 0.0
+normal: null
+normal_set: -1
