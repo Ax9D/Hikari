@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 imgui = {version = "0.9", features = ["docking", "tables-api"]}
-imgui-rs-vulkan-renderer = { path = "../../../imgui-rs-vulkan-renderer", features = ["gpu-allocator"], optional=true }
+imgui-rs-vulkan-renderer = { version = "1.6", features = ["gpu-allocator"], optional=true }
 imgui-winit-support = { version = "0.9", optional=true }
 arrayvec = "0.7"
 nohash-hasher = "0.2"
