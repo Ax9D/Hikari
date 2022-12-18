@@ -41,7 +41,10 @@ jobs:
 
       - name: Install XCB Stuff
         run: sudo apt install libxcb-shape0-dev libxcb-xfixes0-dev
-      
+        
+      - name: Install GTK
+        run: sudo apt install libgtk-3-dev
+
       - name: Build everything
         uses: actions-rs/cargo@v1
         with:
