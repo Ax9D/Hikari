@@ -20,7 +20,9 @@ use ash::extensions::khr::Surface;
 use ash::prelude::VkResult;
 use ash::{vk, Entry};
 use parking_lot::Mutex;
+
 use winit::window::Window;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 
 use crate::swapchain::SurfaceData;
 use crate::swapchain::Swapchain;
@@ -109,21 +111,23 @@ pub struct Gfx {
 }
 impl Gfx {
     fn get_extensions(window: Option<&Window>, debug: bool) -> Vec<*const i8> {
-        //let mut base_extensions = ash_window::enumerate_required_extensions(window).unwrap();
+        let mut extensions = Vec::new();
 
-        let mut base_extensions = if let Some(window) = window {
-            ash_window::enumerate_required_extensions(window).unwrap()
-        } else {
-            vec![]
-        };
+        if let Some(window) = window {
+            let window_extensions = ash_window::enumerate_required_extensions(window.raw_display_handle()).unwrap();
 
+            for extension in window_extensions {
+                extensions.push(unsafe { CStr::from_ptr(*extension) });
+            }
+        } 
+        
         if debug {
-            base_extensions.push(DebugUtils::name());
+            extensions.push(DebugUtils::name());
         }
 
-        log::debug!("Instance extensions: \n {:?}", base_extensions);
+        log::debug!("Instance extensions: \n {:?}", extensions);
 
-        base_extensions.iter().map(|x| x.as_ptr()).collect()
+        extensions.iter().map(|x| x.as_ptr()).collect()
     }
     fn create_instance(
         entry: &Entry,
@@ -180,7 +184,7 @@ impl Gfx {
         instance: &ash::Instance,
         window: &Window,
     ) -> Result<vk::SurfaceKHR, ash::vk::Result> {
-        unsafe { ash_window::create_surface(entry, instance, window, None) }
+        unsafe { ash_window::create_surface(entry, instance, window.raw_display_handle(), window.raw_window_handle(), None) }
     }
     fn new_inner(
         window: Option<&Window>,
@@ -190,7 +194,7 @@ impl Gfx {
 
         log::debug!("Available instance extension properties: ");
         entry
-            .enumerate_instance_extension_properties()?
+            .enumerate_instance_extension_properties(None)?
             .iter()
             .for_each(|prop| {
                 log::debug!("{:?}", unsafe {

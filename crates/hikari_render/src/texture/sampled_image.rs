@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{sync::Arc, mem::ManuallyDrop};
 
 use ash::{prelude::VkResult, vk};
+use gpu_allocator::vulkan::Allocation;
 
 use crate::buffer::Buffer;
 
@@ -29,7 +30,7 @@ fn format_size(format: vk::Format) -> u32 {
 /// An ImageView is generated for each mip level automatically
 pub struct SampledImage {
     device: Arc<crate::Device>,
-    allocation: gpu_allocator::vulkan::Allocation,
+    allocation: ManuallyDrop<Allocation>,
     image: vk::Image,
     image_views: Vec<vk::ImageView>,
     sampler: vk::Sampler,
@@ -327,7 +328,7 @@ impl SampledImage {
         Ok(Self {
             device: device.clone(),
             image,
-            allocation,
+            allocation: ManuallyDrop::new(allocation),
             sampler,
             image_views,
             config: vkconfig,
@@ -465,7 +466,7 @@ impl SampledImage {
             image,
             image_views,
             sampler,
-            allocation,
+            allocation: ManuallyDrop::new(allocation),
             width,
             height,
             depth,
@@ -725,8 +726,9 @@ impl Drop for SampledImage {
             for &image_view in &self.image_views {
                 self.device.raw().destroy_image_view(image_view, None);
             }
-
-            crate::texture::delete_image(&self.device, self.image, self.allocation.clone())
+            let allocation = ManuallyDrop::take(&mut self.allocation);
+            
+            crate::texture::delete_image(&self.device, self.image, allocation)
                 .unwrap();
         }
     }

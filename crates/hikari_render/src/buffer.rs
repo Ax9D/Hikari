@@ -1,7 +1,7 @@
 use ash::{prelude::VkResult, vk};
 use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
 
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc, mem::ManuallyDrop};
 
 pub trait Buffer {
     fn buffer(&self) -> vk::Buffer;
@@ -135,7 +135,7 @@ pub fn create_index_buffer(
 pub struct CpuBuffer<T> {
     device: Arc<crate::Device>,
     inner: vk::Buffer,
-    allocation: Allocation,
+    allocation: ManuallyDrop<Allocation>,
     len: usize,
     _phantom: PhantomData<T>,
 }
@@ -186,7 +186,7 @@ impl<T: Copy> CpuBuffer<T> {
         Ok(Self {
             device: device.clone(),
             inner,
-            allocation,
+            allocation: ManuallyDrop::new(allocation),
             _phantom: PhantomData::default(),
             len,
         })
@@ -224,7 +224,8 @@ impl<T> Drop for CpuBuffer<T> {
     fn drop(&mut self) {
         unsafe {
             self.device.raw().destroy_buffer(self.inner, None);
-            self.device.free_memory(self.allocation.clone()).unwrap();
+            let allocation = ManuallyDrop::take(&mut self.allocation);
+            self.device.free_memory(allocation).unwrap();
         }
     }
 }
@@ -251,7 +252,7 @@ impl<T: Copy> Buffer for CpuBuffer<T> {
 pub struct GpuBuffer<T> {
     device: Arc<crate::Device>,
     inner: vk::Buffer,
-    allocation: Allocation,
+    allocation: ManuallyDrop<Allocation>,
     len: usize,
     _phantom: PhantomData<T>,
 }
@@ -292,7 +293,7 @@ impl<T: Copy> GpuBuffer<T> {
         Ok(Self {
             device: device.clone(),
             inner,
-            allocation,
+            allocation: ManuallyDrop::new(allocation),
             len,
             _phantom: PhantomData,
         })
@@ -353,7 +354,9 @@ impl<T> Drop for GpuBuffer<T> {
     fn drop(&mut self) {
         unsafe {
             self.device.raw().destroy_buffer(self.inner, None);
-            self.device.free_memory(self.allocation.clone()).unwrap();
+            let allocation = ManuallyDrop::take(&mut self.allocation);
+
+            self.device.free_memory(allocation).unwrap();
         }
     }
 }
