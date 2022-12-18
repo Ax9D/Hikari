@@ -52,7 +52,7 @@ fn prepare_graph(
                 0,
                 0,
                 record_info.framebuffer_width,
-                record_info.framebuffer_width,
+                record_info.framebuffer_height,
             );
 
             renderer

@@ -14,6 +14,7 @@ use hikari::{
     input::KeyCode,
 };
 use hikari_editor::*;
+use imgui::ImguiDockingExt;
 pub mod logging;
 
 //mod utils;
@@ -188,8 +189,6 @@ impl Editor {
             .position([0.0, 0.0], imgui::Condition::Always)
             .size(ui.io().display_size, imgui::Condition::Always)
             .build(|| {
-                ui.dockspace("Dockspace");
-
                 ui.menu_bar(|| {
                     //project::draw(ui, self, state).unwrap();
                     self.file_menu(ui, state).unwrap();
@@ -220,12 +219,14 @@ impl Editor {
                         self.show_demo = ui.menu_item_config("Demo Window").build();
                     });
                 });
+
+                let _dock_node = ui.dockspace("Dockspace");
             });
 
         //Update render settings before render, so incase of a resize we don't use freed resources in the imgui pass
         render_settings::draw(ui, self, state).unwrap();
 
-        content_browser::draw(ui, self, state).unwrap();
+        //content_browser::draw(ui, self, state).unwrap();
         viewport::draw(ui, self, state).unwrap();
         outliner::draw(ui, self, state).unwrap();
         project::draw(ui, self, state).unwrap();

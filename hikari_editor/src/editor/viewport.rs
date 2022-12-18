@@ -239,7 +239,7 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
 
     let dt = state.get::<Time>().unwrap().dt();
 
-    ui.set_keyboard_focus_here();
+    //ui.set_keyboard_focus_here();
     ui.window("Viewport")
         .size([950.0, 200.0], imgui::Condition::Once)
         .resizable(true)

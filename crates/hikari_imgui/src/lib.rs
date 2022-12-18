@@ -1,10 +1,10 @@
-//mod docking;
+mod docking;
 pub mod gizmo;
 mod id;
 mod storage;
 mod ui_func;
 
-//pub use docking::*;
+pub use docking::*;
 pub use id::*;
 pub use storage::*;
 pub use ui_func::*;

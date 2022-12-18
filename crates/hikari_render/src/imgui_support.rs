@@ -1,6 +1,7 @@
 use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 
+use std::time::Instant;
 use std::{ptr::NonNull, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
@@ -53,6 +54,7 @@ pub struct Backend {
     imgui: imgui::Context,
     platform: WinitPlatform,
     draw_data: SharedDrawData,
+    last_frame: Instant
 }
 
 impl Backend {
@@ -70,6 +72,7 @@ impl Backend {
             imgui,
             platform,
             draw_data: SharedDrawData::new(),
+            last_frame: Instant::now(),
         })
     }
     #[inline]
@@ -85,6 +88,16 @@ impl Backend {
     }
     #[inline]
     pub fn handle_event<T>(&mut self, window: &Window, event: &Event<T>) {
+        match event {
+            Event::NewEvents(_) => {
+                let now = Instant::now();
+                let delta = now - self.last_frame;
+                self.context().io_mut().update_delta_time(delta);
+
+                self.last_frame = now;
+            },
+            _=> {}
+        }
         self.platform
             .handle_event(self.imgui.io_mut(), window, event);
     }

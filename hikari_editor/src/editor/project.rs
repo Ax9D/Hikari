@@ -207,10 +207,10 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                         ui.open_popup("Create Scene");
                     }
 
-                    ui.popup_modal("Create Scene")
+                    ui.modal_popup_config("Create Scene")
                     .collapsible(false)
                     .always_auto_resize(true)
-                    .build(ui, || {
+                    .build(|| {
                             if let Some(path) = project_manager.scene_creator.draw(ui) {
                                 let scene = new_scene();
                                 project_manager.new_scene_scratch = Some(
@@ -245,12 +245,12 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                         }
                     }
 
-                    ui.popup_modal("Open Scene")
+                    ui.modal_popup_config("Open Scene")
                     .resizable(false)
                     .save_settings(false)
                     .collapsible(false)
                     .always_auto_resize(true)
-                    .build(ui, || {
+                    .build(|| {
                         ui.text("You may have unsaved changes. Are you sure you want to open a new scene?");
 
                         if ui.button("Yes") {
