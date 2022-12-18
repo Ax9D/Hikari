@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "3", features = ["derive"] }
-which = "4.2.5"
+which = "4.2"
 fs_extra = "1"
 anyhow = "1"
 simple_logger = "2"

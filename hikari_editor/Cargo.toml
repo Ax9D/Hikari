@@ -11,12 +11,12 @@ path = "src/lib/mod.rs"
 [dependencies]
 hikari = {path = "../", features = ["editor", "profiling_enabled", "serde"]}
 hikari_imgui = {path = "../crates/hikari_imgui"}
-winit = "0.25.0"
+winit = "0.27"
 log = {version = "^0.4"}
 fern = {version = "0.6", features = ["colored"] }
 flume = "0.10"
 chrono = "0.4"
-clipboard = "0.5.0"
+clipboard = "0.5"
 anyhow = "1"
 parking_lot = "0.12"
 rfd = "0.10"
