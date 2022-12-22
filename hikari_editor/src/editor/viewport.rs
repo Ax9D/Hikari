@@ -19,14 +19,14 @@ use super::{camera, icons, Editor};
 
 struct GizmoState {
     context: GizmoContext,
-    operation: Operation,
+    operation: Option<Operation>,
     mode: Mode,
 }
 impl Default for GizmoState {
     fn default() -> Self {
         Self {
             context: Default::default(),
-            operation: Operation::Translate,
+            operation: Some(Operation::Translate),
             mode: Mode::World,
         }
     }
@@ -66,28 +66,32 @@ fn gizmo_toolbar(ui: &imgui::Ui, state: &mut GizmoState, editor_camera: &mut Cam
                 ui: &imgui::Ui,
                 operation: Operation,
                 icon: &str,
-                current: &mut Operation,
+                current: &mut Option<Operation>,
             ) {
                 let mut _style_vars = None;
-                if *current == operation {
-                    let token1 = ui.push_style_color(
-                        imgui::StyleColor::Button,
-                        imgui::ImColor32::from_rgb(0, 115, 207).to_rgba_f32s(),
-                    );
-                    let token2 = ui.push_style_color(
-                        imgui::StyleColor::ButtonHovered,
-                        imgui::ImColor32::from_rgb(1, 151, 246).to_rgba_f32s(),
-                    );
-                    _style_vars = Some((token1, token2));
+                if let Some(current) = *current {
+                    if current == operation {
+                        let token1 = ui.push_style_color(
+                            imgui::StyleColor::Button,
+                            imgui::ImColor32::from_rgb(0, 115, 207).to_rgba_f32s(),
+                        );
+                        let token2 = ui.push_style_color(
+                            imgui::StyleColor::ButtonHovered,
+                            imgui::ImColor32::from_rgb(1, 151, 246).to_rgba_f32s(),
+                        );
+                        _style_vars = Some((token1, token2));
+                    }
                 }
 
                 if ui.button(icon) {
-                    *current = operation;
+                    *current = Some(operation);
                 }
             }
             let _style_token = ui.push_style_var(imgui::StyleVar::ItemSpacing([2.0, 0.0]));
             let _style_token = ui.push_style_var(imgui::StyleVar::FrameRounding(5.0));
-            ui.button(icons::MOUSE_SELECT);
+            if ui.button(icons::MOUSE_SELECT) {
+                state.operation = None;
+            }
             ui.same_line();
 
             draw_operation(
@@ -301,17 +305,20 @@ pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::
                     if let Ok(mut transform) = world.get_component::<&mut Transform>(entity) {
                         let projection = camera.get_projection_matrix(window_size.0, window_size.1);
                         let view = cam_transform.get_matrix().inverse();
-                        // If transform changed update it
-                        if let Some(changed_transform) = viewport
-                            .gizmo_state
-                            .context
-                            .gizmo(ui)
-                            .operation(viewport.gizmo_state.operation)
-                            .mode(viewport.gizmo_state.mode)
-                            .viewport(viewport_min, viewport_max)
-                            .manipulate(*transform, projection, view)
-                        {
-                            *transform = changed_transform;
+
+                        if let Some(operation) = viewport.gizmo_state.operation {
+                            // If transform changed update it
+                            if let Some(changed_transform) = viewport
+                                .gizmo_state
+                                .context
+                                .gizmo(ui)
+                                .operation(operation)
+                                .mode(viewport.gizmo_state.mode)
+                                .viewport(viewport_min, viewport_max)
+                                .manipulate(*transform, projection, view)
+                            {
+                                *transform = changed_transform;
+                            }
                         }
                     }
                 }
