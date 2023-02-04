@@ -1,5 +1,5 @@
 use ash::{prelude::VkResult, vk};
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc};
+use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
 
 use std::{marker::PhantomData, sync::Arc, mem::ManuallyDrop};
 
@@ -175,6 +175,7 @@ impl<T: Copy> CpuBuffer<T> {
             requirements,
             location,
             linear: true,
+            allocation_scheme: gpu_allocator::vulkan::AllocationScheme::GpuAllocatorManaged,
         })?;
 
         unsafe {
@@ -282,6 +283,7 @@ impl<T: Copy> GpuBuffer<T> {
             requirements,
             location: gpu_allocator::MemoryLocation::GpuOnly,
             linear: true,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged
         })?;
 
         unsafe {

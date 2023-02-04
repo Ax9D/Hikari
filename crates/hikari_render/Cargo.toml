@@ -24,7 +24,7 @@ ash = "0.37"
 ash-window = "0.12"
 raw-window-handle = "0.5"
 winit = {version = "0.27", features = ["x11"] }
-gpu-allocator = "0.21"
+gpu-allocator = "0.22"
 shaderc = "0.8"
 spirv-reflect = "0.2.3"
 vk-sync-fork = { version = "0.4"}

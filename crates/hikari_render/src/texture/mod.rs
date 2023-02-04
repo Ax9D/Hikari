@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use ash::vk;
+use gpu_allocator::vulkan::AllocationScheme;
 use gpu_allocator::{vulkan::Allocation, vulkan::AllocationCreateDesc, AllocationError};
 
 pub mod sampled_image;
@@ -21,6 +22,7 @@ pub fn create_image(
             requirements,
             location,
             linear: false,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged
         })?;
 
         device
