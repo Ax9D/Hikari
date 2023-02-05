@@ -153,6 +153,12 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
                 .cmd_dispatch(cmd, n_workgroups.0, n_workgroups.1, n_workgroups.2);
         }
     }
+    pub fn begin_debug_region(&mut self, name: impl AsRef<str>, color: hikari_math::Vec4) {
+        self.cmd.begin_debug_region(name, color)
+    }
+    pub fn end_debug_region(&mut self) {
+        self.cmd.end_debug_region()
+    }
     fn flush_compute_state(&mut self) {
         hikari_dev::profile_function!();
 

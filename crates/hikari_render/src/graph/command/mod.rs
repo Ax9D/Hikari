@@ -1,6 +1,7 @@
 use std::{ops::Range, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
+
 use vk_sync_fork::{AccessType, ImageBarrier};
 
 use crate::{
@@ -378,6 +379,28 @@ impl<'a> CommandBuffer<'a> {
         begin_info: RenderpassBeginInfo<'cmd>,
     ) -> RenderpassCommands<'cmd, 'a> {
         RenderpassCommands::new(self, begin_info)
+    }
+    pub(crate) fn begin_debug_region<'cmd>(&'cmd mut self, name: impl AsRef<str>, color: hikari_math::Vec4) {
+        if let Some(debug_utils) = &self.device.extensions().debug_utils {
+            
+            let name = name.as_ref();
+            let name_cstring = std::ffi::CString::new(name).expect("Debug Label is not a valid CString");
+            
+            let label = vk::DebugUtilsLabelEXT::builder()
+            .label_name(&name_cstring)
+            .color(color.to_array());
+
+            unsafe { 
+                debug_utils.cmd_begin_debug_utils_label(self.cmd, &label);
+            }
+        }
+    }
+    pub(crate) fn end_debug_region<'cmd>(&'cmd mut self) {
+        if let Some(debug_utils) = &self.device.extensions().debug_utils {
+            unsafe { 
+                debug_utils.cmd_end_debug_utils_label(self.cmd);
+            }
+        }
     }
     pub(crate) fn reset(&mut self) -> VkResult<()> {
         hikari_dev::profile_function!();

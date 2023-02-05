@@ -258,7 +258,12 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
             );
         }
     }
-
+    pub fn begin_debug_region(&mut self, name: impl AsRef<str>, color: hikari_math::Vec4) {
+        self.cmd.begin_debug_region(name, color)
+    }
+    pub fn end_debug_region(&mut self) {
+        self.cmd.end_debug_region()
+    }
     fn flush_render_state(&mut self) {
         hikari_dev::profile_function!();
 

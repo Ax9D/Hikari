@@ -14,8 +14,8 @@ name = "simplegraph"
 [dependencies]
 hikari_dev = {path = "../hikari_dev"}
 hikari_core = {path = "../hikari_core"}
-hikari_imgui = { path = "../hikari_imgui", optional = true}
-
+hikari_imgui = {path = "../hikari_imgui", optional = true}
+hikari_math = {path = "../hikari_math"}
 thiserror = "1"
 log = { version = "0.4"}
 anyhow = "1.0"

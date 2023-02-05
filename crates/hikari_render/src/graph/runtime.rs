@@ -356,7 +356,9 @@ impl GraphExecutor {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: vk::Extent2D { width, height },
             };
+            cmd.begin_debug_region(pass.name(), hikari_math::Vec4::new(0.729, 0.129, 0.086, 1.0));
 
+            {
             let mut rcmd = cmd.begin_renderpass(super::command::RenderpassBeginInfo {
                 renderpass: vk_pass,
                 area,
@@ -374,6 +376,9 @@ impl GraphExecutor {
             };
 
             (pass.record_fn.as_mut().unwrap())(&mut rcmd, resources, &record_info, args);
+
+            }
+            cmd.end_debug_region();
         }
         Ok(())
     }
@@ -393,15 +398,21 @@ impl GraphExecutor {
         unsafe {
             barriers.apply(device, cmd.raw());
         }
-        let mut ccmd = ComputepassCommands::new(cmd);
         if pass.record_fn.is_some() {
             //Self::bind_resources::<T>(ccmd.inner(), resources, pass.inputs(), pass.outputs());
+            cmd.begin_debug_region(pass.name(), hikari_math::Vec4::new(0.0, 0.0, 0.0, 1.0));
+
+            {
+            let mut ccmd = ComputepassCommands::new(cmd);
 
             let record_info = PassRecordInfo {
                 framebuffer_width: size.0,
                 framebuffer_height: size.1,
             };
             (pass.record_fn.as_mut().unwrap())(&mut ccmd, resources, &record_info, args);
+
+            }
+            cmd.end_debug_region();
         }
 
         Ok(())

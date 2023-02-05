@@ -239,6 +239,7 @@ impl Drop for RawDevice {
 
 pub struct VkExtensions {
     pub synchronization2: ash::extensions::khr::Synchronization2,
+    pub debug_utils: Option<ash::extensions::ext::DebugUtils>,
 }
 
 unsafe impl Send for Device {}
@@ -362,7 +363,7 @@ impl Device {
                 .ok_or_else(|| "Failed to initialize shaderc compiler".to_owned())?,
         );
 
-        let extensions = Self::setup_extension(&instance, &ash_device);
+        let extensions = Self::setup_extension(&entry, &instance, &ash_device, debug);
 
         let pipeline_cache = Self::create_pipeline_cache(&ash_device)?;
 
@@ -445,10 +446,16 @@ impl Device {
     pub fn model(&self) -> &str {
         self.device_properties.name()
     }
-    fn setup_extension(instance: &ash::Instance, device: &ash::Device) -> VkExtensions {
+    fn setup_extension(entry: &ash::Entry, instance: &ash::Instance, device: &ash::Device, debug: bool) -> VkExtensions {
         let synchronization2 = ash::extensions::khr::Synchronization2::new(instance, device);
 
-        VkExtensions { synchronization2 }
+        let debug_utils = if debug {
+            Some(ash::extensions::ext::DebugUtils::new(entry, instance))
+        } else {
+            None
+        };
+
+        VkExtensions { synchronization2, debug_utils }
     }
     pub fn extensions(&self) -> &VkExtensions {
         &self.extensions
