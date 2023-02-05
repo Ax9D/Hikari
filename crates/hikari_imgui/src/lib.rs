@@ -4,11 +4,13 @@ mod id;
 mod storage;
 mod ui_func;
 mod internal;
+mod xyz_drag;
 
 pub use docking::*;
 pub use id::*;
 pub use storage::*;
 pub use ui_func::*;
+pub use xyz_drag::*;
 pub use internal::*;
 
 pub use imgui::*;
