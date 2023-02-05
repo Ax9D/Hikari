@@ -3,11 +3,13 @@ pub mod gizmo;
 mod id;
 mod storage;
 mod ui_func;
+mod internal;
 
 pub use docking::*;
 pub use id::*;
 pub use storage::*;
 pub use ui_func::*;
+pub use internal::*;
 
 pub use imgui::*;
 
