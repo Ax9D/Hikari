@@ -24,6 +24,7 @@ type Args = (World, RenderResources, ShaderLibrary, AssetManager);
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct DebugSettings {
     pub show_shadow_cascades: bool,
+    pub wireframe: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

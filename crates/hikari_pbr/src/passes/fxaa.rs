@@ -38,8 +38,7 @@ pub fn build_pass(
             )
             .cmd(
                 move |cmd, graph_res, record_info, (_, res, shader_lib, _)| {
-                    cmd.set_image(graph_res.get_image(&pbr_output).unwrap(), 0, 0);
-
+                    
                     cmd.set_viewport(
                         0.0,
                         0.0,
@@ -52,11 +51,13 @@ pub fn build_pass(
                         record_info.framebuffer_width,
                         record_info.framebuffer_height,
                     );
+                    cmd.set_shader(shader_lib.get("fxaa").unwrap());
+                    cmd.set_image(graph_res.get_image(&pbr_output).unwrap(), 0, 0);
+                    
                     cmd.set_rasterizer_state(RasterizerState {
                         cull_mode: CullMode::Back,
                         ..Default::default()
                     });
-                    cmd.set_shader(shader_lib.get("fxaa").unwrap());
 
                     cmd.push_constants(
                         &PushConstants {

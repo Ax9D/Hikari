@@ -51,6 +51,14 @@ pub fn build_pass(
                     cmd.set_shader(shader_lib.get("depth_only").unwrap());
                     cmd.set_vertex_input_layout(layout);
 
+                    if res.settings.debug.wireframe {
+                        cmd.set_rasterizer_state(RasterizerState {
+                            polygon_mode: PolygonMode::Line,
+                            line_width: 2.0,
+                            ..Default::default()
+                        });
+                    }
+
                     cmd.set_depth_stencil_state(DepthStencilState {
                         depth_test_enabled: true,
                         depth_write_enabled: true,

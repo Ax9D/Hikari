@@ -96,6 +96,7 @@ pub fn build_pass(
 ) -> anyhow::Result<GpuHandle<SampledImage>> {
     let defaults = Defaults::prepare(device);
     shader_lib.insert("pbr")?;
+    shader_lib.insert("unlit")?;
 
     let layout = VertexInputLayout::builder()
         .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
@@ -155,6 +156,21 @@ pub fn build_pass(
 
                     cmd.set_vertex_input_layout(layout);
 
+                    
+                    
+                    if res.settings.debug.wireframe {
+                        cmd.set_shader(shader_lib.get("unlit").unwrap());
+                        cmd.set_rasterizer_state(RasterizerState{
+                            polygon_mode: PolygonMode::Line,
+                            line_width: 2.0,
+                            ..Default::default()
+                        });
+                    }
+                    else {
+                        cmd.set_shader(shader_lib.get("pbr").unwrap());
+                        cmd.set_rasterizer_state(RasterizerState::default());
+                        
+                    }
                     cmd.set_depth_stencil_state(DepthStencilState {
                         depth_test_enabled: true,
                         depth_write_enabled: false,

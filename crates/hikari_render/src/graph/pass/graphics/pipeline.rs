@@ -101,8 +101,7 @@ impl StencilOp {
     }
 }
 fn bad_float_equal_rep(x: f32) -> u32 {
-    let rounded = (x * 100.0).round() / 100.0;
-    rounded.to_bits()
+    x.to_bits()
 }
 fn bad_float_hash(x: f32, hasher: &mut impl std::hash::Hasher) {
     bad_float_equal_rep(x).hash(hasher);
@@ -173,7 +172,7 @@ impl DepthStencilState {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RasterizerState {
     pub polygon_mode: PolygonMode,
     pub cull_mode: CullMode,
@@ -184,6 +183,21 @@ pub struct RasterizerState {
     pub depth_bias_constant_factor: f32,
     pub depth_bias_clamp: f32,
     pub depth_bias_slope_factor: f32,
+    pub line_width: f32
+}
+impl Default for RasterizerState {
+    fn default() -> Self {
+        Self { 
+            polygon_mode: PolygonMode::Fill,
+            cull_mode: CullMode::Back, 
+            depth_clamp_enable: false, 
+            rasterizer_discard_enable: false, 
+            depth_bias_enable: false,
+            depth_bias_constant_factor: 0.0, 
+            depth_bias_clamp: 0.0, 
+            depth_bias_slope_factor: 0.0,
+            line_width: 1.0 }
+    }
 }
 impl RasterizerState {
     pub fn into_vk(&self) -> vk::PipelineRasterizationStateCreateInfo {
@@ -191,7 +205,7 @@ impl RasterizerState {
             .depth_clamp_enable(self.depth_clamp_enable)
             .rasterizer_discard_enable(self.rasterizer_discard_enable)
             .polygon_mode(self.polygon_mode.into_vk())
-            .line_width(1.0)
+            .line_width(self.line_width)
             .cull_mode(self.cull_mode.into_vk())
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .depth_bias_enable(self.depth_bias_enable)
@@ -212,6 +226,7 @@ impl Hash for RasterizerState {
         bad_float_hash(self.depth_bias_constant_factor, state);
         bad_float_hash(self.depth_bias_clamp, state);
         bad_float_hash(self.depth_bias_slope_factor, state);
+        bad_float_hash(self.line_width, state);
     }
 }
 
@@ -502,7 +517,6 @@ impl PipelineState {
             .dynamic_state(&dynamic_state)
             .layout(layout);
 
-        log::debug!("Creating pipeline: {:#?}", self);
         let create_infos = [*create_info];
         let pipeline = device
             .raw()
