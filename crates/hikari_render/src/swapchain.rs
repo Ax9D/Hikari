@@ -111,6 +111,7 @@ impl Swapchain {
             swap_extent.width,
             swap_extent.height,
             1,
+            1,
             ImageConfig {
                 format: device.supported_depth_stencil_format(),
                 filtering: vk::Filter::LINEAR,
@@ -122,6 +123,7 @@ impl Swapchain {
                 mip_levels: 1,
                 mip_filtering: vk::SamplerMipmapMode::LINEAR,
                 usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+                flags: vk::ImageCreateFlags::empty(),
                 image_type: vk::ImageType::TYPE_2D,
                 image_view_type: vk::ImageViewType::TYPE_2D,
                 initial_layout: vk::ImageLayout::UNDEFINED,

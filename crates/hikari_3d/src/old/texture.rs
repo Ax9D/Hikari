@@ -1,4 +1,4 @@
-use crate::texture::*;
+use crate::config::*;
 
 pub struct Texture {
     pub name: String,

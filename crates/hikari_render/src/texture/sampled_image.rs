@@ -1,7 +1,8 @@
-use std::{sync::Arc, mem::ManuallyDrop};
+use std::{sync::Arc, mem::ManuallyDrop, ops::Range, collections::HashMap};
 
 use ash::{prelude::VkResult, vk};
 use gpu_allocator::vulkan::Allocation;
+use parking_lot::Mutex;
 
 use crate::buffer::Buffer;
 
@@ -26,21 +27,6 @@ fn format_size(format: vk::Format) -> u32 {
         _ => todo!(),
     }
 }
-/// An Image that can be sampled in shaders
-/// An ImageView is generated for each mip level automatically
-pub struct SampledImage {
-    device: Arc<crate::Device>,
-    allocation: ManuallyDrop<Allocation>,
-    image: vk::Image,
-    image_views: Vec<vk::ImageView>,
-    sampler: vk::Sampler,
-    config: ImageConfig,
-    width: u32,
-    height: u32,
-    depth: u32,
-
-    download_buffer: Option<crate::buffer::CpuBuffer<u8>>,
-}
 /// Specifies what the properties of the Image should be
 /// If `host_readable` is set to true, the contents of the image can be copied back to the host
 #[derive(Copy, Clone, Debug)]
@@ -55,10 +41,34 @@ pub struct ImageConfig {
     pub mip_levels: u32,
     pub mip_filtering: vk::SamplerMipmapMode,
     pub usage: vk::ImageUsageFlags,
+    pub flags: vk::ImageCreateFlags,
     pub image_type: vk::ImageType,
     pub image_view_type: vk::ImageViewType,
     pub initial_layout: vk::ImageLayout,
     pub host_readable: bool,
+}
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct ImageViewDesc {
+    view_type: vk::ImageViewType,
+    mip_range: Range<u32>,
+    layer_range: Range<u32>
+}
+/// An Image that can be sampled in shaders
+/// An ImageView is generated for each mip level automatically
+pub struct SampledImage {
+    device: Arc<crate::Device>,
+    allocation: ManuallyDrop<Allocation>,
+    image: vk::Image,
+    basic_image_views: Vec<vk::ImageView>,
+    arbitrary_image_views: Mutex<HashMap<ImageViewDesc, vk::ImageView, crate::util::BuildHasher>>,
+    sampler: vk::Sampler,
+    config: ImageConfig,
+    width: u32,
+    height: u32,
+    depth: u32,
+    layers: u32,
+
+    download_buffer: Option<crate::buffer::CpuBuffer<u8>>,
 }
 
 impl ImageConfig {
@@ -77,6 +87,7 @@ impl ImageConfig {
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::LINEAR,
             usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            flags: vk::ImageCreateFlags::empty(),
             image_type: vk::ImageType::TYPE_2D,
             image_view_type: vk::ImageViewType::TYPE_2D,
             initial_layout: vk::ImageLayout::UNDEFINED,
@@ -95,6 +106,7 @@ impl ImageConfig {
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::LINEAR,
             usage: vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            flags: vk::ImageCreateFlags::empty(),
             image_type: vk::ImageType::TYPE_3D,
             image_view_type: vk::ImageViewType::TYPE_3D,
             initial_layout: vk::ImageLayout::UNDEFINED,
@@ -116,6 +128,7 @@ impl ImageConfig {
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::NEAREST,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            flags: vk::ImageCreateFlags::empty(),
             image_type: vk::ImageType::TYPE_2D,
             image_view_type: vk::ImageViewType::TYPE_2D,
             initial_layout: vk::ImageLayout::UNDEFINED,
@@ -137,6 +150,7 @@ impl ImageConfig {
             mip_levels: 1,
             mip_filtering: vk::SamplerMipmapMode::NEAREST,
             usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+            flags: vk::ImageCreateFlags::empty(),
             image_type: vk::ImageType::TYPE_2D,
             image_view_type: vk::ImageViewType::TYPE_2D,
             initial_layout: vk::ImageLayout::UNDEFINED,
@@ -198,6 +212,13 @@ impl SampledImage {
 
         unsafe { device.raw().create_sampler(&create_info, None) }
     }
+    fn create_view(device: &Arc<crate::Device>,
+        image: vk::Image,
+        create_info: &vk::ImageViewCreateInfo) -> VkResult<vk::ImageView> {
+        let view = unsafe { device.raw().create_image_view(create_info, None)? };
+
+        Ok(view)
+    }
     fn create_views(
         device: &Arc<crate::Device>,
         image: vk::Image,
@@ -207,24 +228,25 @@ impl SampledImage {
 
         for mip_level in 0..vkconfig.mip_levels {
             let create_info = vk::ImageViewCreateInfo::builder()
-                .image(image)
-                .format(vkconfig.format)
-                .view_type(vkconfig.image_view_type)
-                .subresource_range(
-                    *vk::ImageSubresourceRange::builder()
-                        .aspect_mask(format_to_aspect_flags(vkconfig.format))
-                        .base_mip_level(mip_level)
-                        .level_count(1)
-                        .base_array_layer(0)
-                        .layer_count(1),
-                )
-                .components(vk::ComponentMapping {
-                    r: vk::ComponentSwizzle::IDENTITY,
-                    g: vk::ComponentSwizzle::IDENTITY,
-                    b: vk::ComponentSwizzle::IDENTITY,
-                    a: vk::ComponentSwizzle::IDENTITY,
-                });
-            views.push(unsafe { device.raw().create_image_view(&create_info, None)? });
+            .image(image)
+            .format(vkconfig.format)
+            .view_type(vkconfig.image_view_type)
+            .subresource_range(
+                *vk::ImageSubresourceRange::builder()
+                    .aspect_mask(format_to_aspect_flags(vkconfig.format))
+                    .base_mip_level(mip_level)
+                    .level_count(vk::REMAINING_MIP_LEVELS)
+                    .base_array_layer(0)
+                    .layer_count(vk::REMAINING_ARRAY_LAYERS),
+            )
+            .components(vk::ComponentMapping {
+                r: vk::ComponentSwizzle::IDENTITY,
+                g: vk::ComponentSwizzle::IDENTITY,
+                b: vk::ComponentSwizzle::IDENTITY,
+                a: vk::ComponentSwizzle::IDENTITY,
+            });
+            let view = Self::create_view(device, image, &create_info)?;
+            views.push(view);
         }
 
         Ok(views)
@@ -234,6 +256,7 @@ impl SampledImage {
         width: u32,
         height: u32,
         depth: u32,
+        layers: u32,
         vkconfig: &ImageConfig,
     ) -> anyhow::Result<(
         vk::Image,
@@ -245,7 +268,7 @@ impl SampledImage {
             .image_type(vkconfig.image_type)
             .format(vkconfig.format)
             .mip_levels(vkconfig.mip_levels)
-            .array_layers(1)
+            .array_layers(layers)
             .samples(vk::SampleCountFlags::TYPE_1)
             .tiling(vk::ImageTiling::OPTIMAL)
             .sharing_mode(vk::SharingMode::EXCLUSIVE /**/)
@@ -260,7 +283,8 @@ impl SampledImage {
                 vk::ImageUsageFlags::TRANSFER_DST
                     | vk::ImageUsageFlags::TRANSFER_SRC
                     | vkconfig.usage,
-            );
+            )
+            .flags(vkconfig.flags);
 
         let (image, allocation) = crate::texture::create_image(
             device,
@@ -309,10 +333,11 @@ impl SampledImage {
         width: u32,
         height: u32,
         depth: u32,
+        layers: u32,
         vkconfig: ImageConfig,
     ) -> anyhow::Result<Self> {
         let (image, allocation, sampler, image_views) =
-            Self::create_image_with_sampler_and_views(device, width, height, depth, &vkconfig)?;
+            Self::create_image_with_sampler_and_views(device, width, height, depth, layers, &vkconfig)?;
 
         let download_buffer = if vkconfig.host_readable {
             Some(crate::buffer::CpuBuffer::new(
@@ -330,22 +355,159 @@ impl SampledImage {
             image,
             allocation: ManuallyDrop::new(allocation),
             sampler,
-            image_views,
+            basic_image_views: image_views,
+            arbitrary_image_views: Mutex::new(Default::default()),
             config: vkconfig,
             width,
             height,
             depth,
+            layers,
             download_buffer,
         })
     }
-    /// Creates a 4 channel image (1 byte per channel) with the specified pixel data, width and height
-    ///  
-    pub fn with_rgba8(
+    /// Creates an image with the specified pixel data, width, height and depth
+    pub fn with_data(
         device: &Arc<crate::Device>,
         data: &[u8],
         width: u32,
         height: u32,
         depth: u32,
+        vkconfig: ImageConfig,
+    ) -> anyhow::Result<Self> {
+        // vkconfig.usage |= vk::ImageUsageFlags::TRANSFER_DST;
+
+        // if vkconfig.host_readable {
+        //     vkconfig.usage |= vk::ImageUsageFlags::TRANSFER_SRC;
+        // }
+
+        // let image_buffer_max_size =
+        //     (width * height * depth) as usize * format_size(vkconfig.format) as usize;
+
+        // //FIX ME: This is probably wrong?, Dont assume format sizes
+        // if data.len() != image_buffer_max_size {
+        //     return Err(anyhow::anyhow!(
+        //         "Cannot create gpu image, data size {} bytes doesn't match expected size {} bytes, format is {:?}",
+        //         data.len(),
+        //         image_buffer_max_size,
+        //         vkconfig.format
+        //     ));
+        // }
+        // let (image, allocation, sampler, image_views) =
+        //     Self::create_image_with_sampler_and_views(device, width, height, depth, &vkconfig)?;
+
+        // let subresource_range = *vk::ImageSubresourceRange::builder()
+        //     .aspect_mask(format_to_aspect_flags(vkconfig.format))
+        //     .level_count(1)
+        //     .layer_count(1);
+
+        // let mut staging_buffer = crate::buffer::CpuBuffer::new(
+        //     device,
+        //     data.len(),
+        //     vk::BufferUsageFlags::TRANSFER_SRC,
+        //     gpu_allocator::MemoryLocation::CpuToGpu,
+        // )?;
+
+        // unsafe {
+        //     let slice = staging_buffer.mapped_slice_mut();
+
+        //     slice.copy_from_slice(data);
+        // }
+        // unsafe {
+        //     hikari_dev::profile_scope!("Image Upload");
+        //     device.submit_commands_immediate(|cmd| {
+        //         let device = device.raw();
+
+        //         crate::barrier::image_memory_barrier(
+        //             device,
+        //             cmd,
+        //             image,
+        //             subresource_range,
+        //             vk::AccessFlags::empty(),
+        //             vk::AccessFlags::TRANSFER_WRITE,
+        //             vk::ImageLayout::UNDEFINED,
+        //             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        //             vk::PipelineStageFlags::TRANSFER,
+        //             vk::PipelineStageFlags::TRANSFER,
+        //         );
+
+        //         let buffer_copy_region = [*vk::BufferImageCopy::builder()
+        //             .image_subresource(
+        //                 *vk::ImageSubresourceLayers::builder()
+        //                     .aspect_mask(format_to_aspect_flags(vkconfig.format))
+        //                     .mip_level(0)
+        //                     .base_array_layer(0)
+        //                     .layer_count(1),
+        //             )
+        //             .image_extent(vk::Extent3D {
+        //                 width,
+        //                 height,
+        //                 depth,
+        //             })];
+
+        //         device.cmd_copy_buffer_to_image(
+        //             cmd,
+        //             staging_buffer.buffer(),
+        //             image,
+        //             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        //             &buffer_copy_region,
+        //         );
+        //         Ok(())
+        //     })?;
+
+        //     device.submit_commands_immediate(|cmd| {
+        //         if vkconfig.mip_levels > 1 {
+        //             hikari_dev::profile_scope!("Generate mips");
+        //             Self::generate_mips(device.raw(), cmd, image, width, height, depth, &vkconfig);
+        //         } else {
+        //             crate::barrier::image_memory_barrier(
+        //                 device.raw(),
+        //                 cmd,
+        //                 image,
+        //                 subresource_range,
+        //                 vk::AccessFlags::TRANSFER_WRITE,
+        //                 vk::AccessFlags::SHADER_READ,
+        //                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        //                 vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        //                 vk::PipelineStageFlags::TRANSFER,
+        //                 vk::PipelineStageFlags::FRAGMENT_SHADER,
+        //             );
+        //         }
+        //         Ok(())
+        //     })?;
+        // }
+
+        // let download_buffer = if vkconfig.host_readable {
+        //     Some(crate::buffer::CpuBuffer::new(
+        //         device,
+        //         data.len(),
+        //         vk::BufferUsageFlags::TRANSFER_DST,
+        //         gpu_allocator::MemoryLocation::GpuToCpu,
+        //     )?)
+        // } else {
+        //     None
+        // };
+
+        // Ok(Self {
+        //     device: device.clone(),
+        //     image,
+        //     image_views,
+        //     sampler,
+        //     allocation: ManuallyDrop::new(allocation),
+        //     width,
+        //     height,
+        //     depth,
+        //     config: vkconfig,
+        //     download_buffer,
+        // })
+        Self::with_layers(device, data, width, height, depth, 1, vkconfig)
+    }
+    pub fn with_layers(
+        device: &Arc<crate::Device>,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        depth: u32,
+        layers: u32,
         mut vkconfig: ImageConfig,
     ) -> anyhow::Result<Self> {
         vkconfig.usage |= vk::ImageUsageFlags::TRANSFER_DST;
@@ -355,7 +517,7 @@ impl SampledImage {
         }
 
         let image_buffer_max_size =
-            (width * height * depth) as usize * format_size(vkconfig.format) as usize;
+            (width * height * depth * layers) as usize * format_size(vkconfig.format) as usize;
 
         //FIX ME: This is probably wrong?, Dont assume format sizes
         if data.len() != image_buffer_max_size {
@@ -367,12 +529,14 @@ impl SampledImage {
             ));
         }
         let (image, allocation, sampler, image_views) =
-            Self::create_image_with_sampler_and_views(device, width, height, depth, &vkconfig)?;
+            Self::create_image_with_sampler_and_views(device, width, height, depth, layers, &vkconfig)?;
 
         let subresource_range = *vk::ImageSubresourceRange::builder()
             .aspect_mask(format_to_aspect_flags(vkconfig.format))
             .level_count(1)
-            .layer_count(1);
+            .base_mip_level(0)
+            .level_count(vkconfig.mip_levels)
+            .layer_count(layers);
 
         let mut staging_buffer = crate::buffer::CpuBuffer::new(
             device,
@@ -410,7 +574,7 @@ impl SampledImage {
                             .aspect_mask(format_to_aspect_flags(vkconfig.format))
                             .mip_level(0)
                             .base_array_layer(0)
-                            .layer_count(1),
+                            .layer_count(layers),
                     )
                     .image_extent(vk::Extent3D {
                         width,
@@ -431,8 +595,36 @@ impl SampledImage {
             device.submit_commands_immediate(|cmd| {
                 if vkconfig.mip_levels > 1 {
                     hikari_dev::profile_scope!("Generate mips");
-                    Self::generate_mips(device.raw(), cmd, image, width, height, depth, &vkconfig);
-                } else {
+                
+                    crate::barrier::image_memory_barrier(
+                        device.raw(),
+                        cmd,
+                        image,
+                        subresource_range,
+                        vk::AccessFlags::TRANSFER_WRITE,
+                        vk::AccessFlags::TRANSFER_READ,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::PipelineStageFlags::TRANSFER,
+                    );
+
+                    Self::generate_mips_(device.raw(), cmd, image, width, height, depth, layers, &vkconfig);
+
+                    crate::barrier::image_memory_barrier(
+                        device.raw(),
+                        cmd,
+                        image,
+                        subresource_range,
+                        vk::AccessFlags::TRANSFER_READ,
+                        vk::AccessFlags::MEMORY_READ,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::PipelineStageFlags::TOP_OF_PIPE,
+                    );
+                } 
+                else {
                     crate::barrier::image_memory_barrier(
                         device.raw(),
                         cmd,
@@ -445,7 +637,8 @@ impl SampledImage {
                         vk::PipelineStageFlags::TRANSFER,
                         vk::PipelineStageFlags::FRAGMENT_SHADER,
                     );
-                }
+            }
+
                 Ok(())
             })?;
         }
@@ -464,165 +657,179 @@ impl SampledImage {
         Ok(Self {
             device: device.clone(),
             image,
-            image_views,
+            basic_image_views: image_views,
+            arbitrary_image_views: Mutex::new(Default::default()),
             sampler,
             allocation: ManuallyDrop::new(allocation),
             width,
             height,
             depth,
+            layers,
             config: vkconfig,
             download_buffer,
         })
     }
-    fn generate_mips(
+    /// Assumes that image is in TRANSFER_SRC_OPTIMAL layout
+    pub fn generate_mips(&self, cmd: vk::CommandBuffer) {
+        Self::generate_mips_(self.device.raw(), cmd, self.image, self.width, self.height, self.depth, self.layers, &self.config)
+    }
+    fn generate_mips_(
         device: &ash::Device,
         cmd: vk::CommandBuffer,
         image: vk::Image,
         width: u32,
         height: u32,
         depth: u32,
+        layers: u32,
         config: &ImageConfig,
     ) {
         let levels = config.mip_levels;
 
-        let subresource_range = *vk::ImageSubresourceRange::builder()
-            .aspect_mask(format_to_aspect_flags(config.format))
-            .level_count(1)
-            .layer_count(1);
-
-        crate::barrier::image_memory_barrier(
-            device,
-            cmd,
-            image,
-            subresource_range,
-            vk::AccessFlags::TRANSFER_WRITE,
-            vk::AccessFlags::TRANSFER_READ,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::PipelineStageFlags::TRANSFER,
-        );
-
         unsafe {
-            let mut mip_width = width as i32;
-            let mut mip_height = height as i32;
-            let mut mip_depth = depth as i32;
+            for layer in 0..layers {
 
-            for level in 1..levels {
-                let next_mip_width = if mip_width > 1 {
-                    mip_width / 2
-                } else {
-                    mip_width
-                };
-                let next_mip_height = if mip_height > 1 {
-                    mip_height / 2
-                } else {
-                    mip_height
-                };
-                let next_mip_depth = if mip_depth > 1 {
-                    mip_depth / 2
-                } else {
-                    mip_depth
-                };
+                let mut mip_width = width as i32;
+                let mut mip_height = height as i32;
+                let mut mip_depth = depth as i32;
+                
+                for level in 1..levels {
+                    let next_mip_width = if mip_width > 1 {
+                        mip_width / 2
+                    } else {
+                        mip_width
+                    };
+                    let next_mip_height = if mip_height > 1 {
+                        mip_height / 2
+                    } else {
+                        mip_height
+                    };
+                    let next_mip_depth = if mip_depth > 1 {
+                        mip_depth / 2
+                    } else {
+                        mip_depth
+                    };
 
-                let image_blit = [*vk::ImageBlit::builder()
-                    .src_subresource(
-                        *vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(format_to_aspect_flags(config.format))
-                            .layer_count(1)
-                            .mip_level(level - 1)
-                            .base_array_layer(0),
-                    )
-                    .src_offsets([
-                        vk::Offset3D { x: 0, y: 0, z: 0 },
-                        vk::Offset3D {
-                            x: mip_width,
-                            y: mip_height,
-                            z: mip_depth,
-                        },
-                    ])
-                    .dst_subresource(
-                        *vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(format_to_aspect_flags(config.format))
-                            .layer_count(1)
-                            .mip_level(level)
-                            .base_array_layer(0),
-                    )
-                    .dst_offsets([
-                        vk::Offset3D { x: 0, y: 0, z: 0 },
-                        vk::Offset3D {
-                            x: next_mip_width,
-                            y: next_mip_height,
-                            z: next_mip_depth,
-                        },
-                    ])];
+                    let image_blit = [*vk::ImageBlit::builder()
+                        .src_subresource(
+                            *vk::ImageSubresourceLayers::builder()
+                                .aspect_mask(format_to_aspect_flags(config.format))
+                                .layer_count(1)
+                                .mip_level(level - 1)
+                                .base_array_layer(layer),
+                        )
+                        .src_offsets([
+                            vk::Offset3D { x: 0, y: 0, z: 0 },
+                            vk::Offset3D {
+                                x: mip_width,
+                                y: mip_height,
+                                z: mip_depth,
+                            },
+                        ])
+                        .dst_subresource(
+                            *vk::ImageSubresourceLayers::builder()
+                                .aspect_mask(format_to_aspect_flags(config.format))
+                                .layer_count(1)
+                                .mip_level(level)
+                                .base_array_layer(layer),
+                        )
+                        .dst_offsets([
+                            vk::Offset3D { x: 0, y: 0, z: 0 },
+                            vk::Offset3D {
+                                x: next_mip_width,
+                                y: next_mip_height,
+                                z: next_mip_depth,
+                            },
+                        ])];
 
-                let mip_sub_range = *vk::ImageSubresourceRange::builder()
-                    .aspect_mask(format_to_aspect_flags(config.format))
-                    .base_mip_level(level)
-                    .level_count(1)
-                    .layer_count(1);
+                    let mip_sub_range = *vk::ImageSubresourceRange::builder()
+                        .aspect_mask(format_to_aspect_flags(config.format))
+                        .base_mip_level(level)
+                        .level_count(1)
+                        .base_array_layer(layer)
+                        .layer_count(1);
 
-                crate::barrier::image_memory_barrier(
-                    device,
-                    cmd,
-                    image,
-                    mip_sub_range,
-                    vk::AccessFlags::empty(),
-                    vk::AccessFlags::TRANSFER_WRITE,
-                    vk::ImageLayout::UNDEFINED,
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    vk::PipelineStageFlags::TRANSFER,
-                    vk::PipelineStageFlags::TRANSFER,
-                );
+                    crate::barrier::image_memory_barrier(
+                        device,
+                        cmd,
+                        image,
+                        mip_sub_range,
+                        vk::AccessFlags::empty(),
+                        vk::AccessFlags::TRANSFER_WRITE,
+                        vk::ImageLayout::UNDEFINED,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::PipelineStageFlags::TRANSFER,
+                    );
 
-                device.cmd_blit_image(
-                    cmd,
-                    image,
-                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                    image,
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    &image_blit,
-                    config.filtering,
-                );
+                    device.cmd_blit_image(
+                        cmd,
+                        image,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        image,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        &image_blit,
+                        config.filtering,
+                    );
 
-                crate::barrier::image_memory_barrier(
-                    device,
-                    cmd,
-                    image,
-                    mip_sub_range,
-                    vk::AccessFlags::TRANSFER_WRITE,
-                    vk::AccessFlags::TRANSFER_READ,
-                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                    vk::PipelineStageFlags::TRANSFER,
-                    vk::PipelineStageFlags::TRANSFER,
-                );
+                    crate::barrier::image_memory_barrier(
+                        device,
+                        cmd,
+                        image,
+                        mip_sub_range,
+                        vk::AccessFlags::TRANSFER_WRITE,
+                        vk::AccessFlags::TRANSFER_READ,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::PipelineStageFlags::TRANSFER,
+                    );
 
-                mip_width = next_mip_width;
-                mip_height = next_mip_height;
-                mip_depth = next_mip_depth;
+                    mip_width = next_mip_width;
+                    mip_height = next_mip_height;
+                    mip_depth = next_mip_depth;
+                }
             }
-
-            crate::barrier::image_memory_barrier(
-                device,
-                cmd,
-                image,
-                subresource_range,
-                vk::AccessFlags::TRANSFER_READ,
-                vk::AccessFlags::MEMORY_READ,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-            );
         }
     }
     pub fn image(&self) -> vk::Image {
         self.image
     }
     pub fn image_view(&self, mip_level: usize) -> Option<vk::ImageView> {
-        self.image_views.get(mip_level - 1).copied()
+        self.basic_image_views.get(mip_level - 1).copied()
+    }
+    pub fn custom_image_view(&self, view_desc: ImageViewDesc) -> vk::ImageView {
+        let mut views = self.arbitrary_image_views.lock();
+        views.entry(view_desc.clone()).or_insert_with(|| {
+            let base_mip_level = view_desc.mip_range.start;
+            let level_count = view_desc.mip_range.len() as u32;
+            assert!(level_count <= self.config.mip_levels);
+
+            let base_array_layer = view_desc.layer_range.start;
+            let layer_count = view_desc.layer_range.len() as u32;
+            assert!(layer_count <= self.layers);
+
+            let create_info = vk::ImageViewCreateInfo::builder()
+            .image(self.image)
+            .format(self.config.format)
+            .view_type(view_desc.view_type)
+            .subresource_range(
+                *vk::ImageSubresourceRange::builder()
+                    .aspect_mask(format_to_aspect_flags(self.config.format))
+                    .base_mip_level(base_mip_level)
+                    .level_count(level_count)
+                    .base_array_layer(base_array_layer)
+                    .layer_count(layer_count),
+            )
+            .components(vk::ComponentMapping {
+                r: vk::ComponentSwizzle::IDENTITY,
+                g: vk::ComponentSwizzle::IDENTITY,
+                b: vk::ComponentSwizzle::IDENTITY,
+                a: vk::ComponentSwizzle::IDENTITY,
+            });
+            Self::create_view(&self.device, self.image, &create_info).unwrap()
+        });
+
+        todo!()
     }
     pub fn sampler(&self) -> vk::Sampler {
         self.sampler
@@ -632,6 +839,12 @@ impl SampledImage {
     }
     pub fn height(&self) -> u32 {
         self.height
+    }
+    pub fn depth(&self) -> u32 {
+        self.depth
+    }
+    pub fn layers(&self) -> u32 {
+        self.layers
     }
     pub fn config(&self) -> &ImageConfig {
         &self.config
@@ -723,7 +936,11 @@ impl Drop for SampledImage {
         unsafe {
             self.device.raw().destroy_sampler(self.sampler, None);
 
-            for &image_view in &self.image_views {
+            for &image_view in &self.basic_image_views {
+                self.device.raw().destroy_image_view(image_view, None);
+            }
+
+            for &image_view in self.arbitrary_image_views.lock().values() {
                 self.device.raw().destroy_image_view(image_view, None);
             }
             let allocation = ManuallyDrop::take(&mut self.allocation);

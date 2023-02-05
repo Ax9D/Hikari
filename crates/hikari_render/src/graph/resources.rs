@@ -134,7 +134,7 @@ impl GraphResources {
             let (new_width, new_height, new_depth) =
                 size.get_physical_size_3d((new_width, new_height));
             let new_image =
-                SampledImage::with_dimensions(device, new_width, new_height, new_depth, config)?;
+                SampledImage::with_dimensions(device, new_width, new_height, new_depth, image.layers(), config)?;
 
             let old_image = std::mem::replace(image, new_image);
         }

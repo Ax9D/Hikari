@@ -156,15 +156,15 @@ fn load_texture_data(
     });
 
     let wrap_x = match texture.sampler().wrap_s() {
-        gltf::texture::WrappingMode::ClampToEdge => crate::texture::WrapMode::Clamp,
-        gltf::texture::WrappingMode::MirroredRepeat => crate::texture::WrapMode::Repeat,
-        gltf::texture::WrappingMode::Repeat => crate::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::ClampToEdge => crate::config::WrapMode::Clamp,
+        gltf::texture::WrappingMode::MirroredRepeat => crate::config::WrapMode::Repeat,
+        gltf::texture::WrappingMode::Repeat => crate::config::WrapMode::Repeat,
     };
 
     let wrap_y = match texture.sampler().wrap_t() {
-        gltf::texture::WrappingMode::ClampToEdge => crate::texture::WrapMode::Clamp,
-        gltf::texture::WrappingMode::MirroredRepeat => crate::texture::WrapMode::Repeat,
-        gltf::texture::WrappingMode::Repeat => crate::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::ClampToEdge => crate::config::WrapMode::Clamp,
+        gltf::texture::WrappingMode::MirroredRepeat => crate::config::WrapMode::Repeat,
+        gltf::texture::WrappingMode::Repeat => crate::config::WrapMode::Repeat,
     };
 
     let min_filter = texture
@@ -177,8 +177,8 @@ fn load_texture_data(
         .unwrap_or(gltf::texture::MagFilter::Linear);
 
     let filtering = match mag_filter {
-        gltf::texture::MagFilter::Nearest => crate::texture::FilterMode::Closest,
-        gltf::texture::MagFilter::Linear => crate::texture::FilterMode::Linear,
+        gltf::texture::MagFilter::Nearest => crate::config::FilterMode::Closest,
+        gltf::texture::MagFilter::Linear => crate::config::FilterMode::Linear,
     };
 
     let generate_mips = match min_filter {
@@ -198,9 +198,9 @@ fn load_texture_data(
 
     //Albedo textures are treated as SRGB
     let format = if is_albedo.is_some() {
-        crate::texture::Format::RGBA8
+        crate::config::Format::RGBA8
     } else {
-        crate::texture::Format::RGBA8
+        crate::config::Format::RGBA8
     };
 
     Ok(Texture {

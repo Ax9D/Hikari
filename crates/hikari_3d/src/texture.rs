@@ -1,86 +1,12 @@
 use image::EncodableLayout;
-use serde::{Deserialize, Serialize};
-
-#[derive(Copy, Clone, Serialize, Deserialize)]
-pub enum FilterMode {
-    Closest,
-    Linear,
-}
-
-impl Default for FilterMode {
-    fn default() -> Self {
-        Self::Linear
-    }
-}
-
-#[derive(Copy, Clone, Serialize, Deserialize)]
-pub enum Format {
-    RGBA8,
-
-    RGBAFloat16,
-    RGBAFloat32,
-
-    SRGBA,
-}
-
-impl Default for Format {
-    fn default() -> Self {
-        Self::RGBA8
-    }
-}
-
-#[derive(Copy, Clone, Serialize, Deserialize)]
-pub enum WrapMode {
-    Clamp,
-    Repeat,
-}
-
-impl Default for WrapMode {
-    fn default() -> Self {
-        Self::Repeat
-    }
-}
-
-#[derive(Copy, Clone, Default, Serialize, Deserialize, type_uuid::TypeUuid)]
-#[uuid = "304e0256-1f2c-4a71-94f6-6e858fa4d9be"]
-pub struct TextureConfig {
-    pub format: Format,
-    pub filtering: FilterMode,
-    pub wrap_x: WrapMode,
-    pub wrap_y: WrapMode,
-    pub aniso_level: f32,
-    pub generate_mips: bool,
-}
-impl TextureConfig {
-    pub fn get_mip_count(width: u32, height: u32) -> u32 {
-        ((u32::max(width, height) as f32).log2().floor() + 1.0) as u32
-    }
-    // pub fn into_vk_config(&self, width: u32, height: u32) -> ImageConfig {
-    //     ImageConfig {
-    //         format: self.format.into_vk(),
-    //         filtering: self.filtering.into_vk(),
-    //         wrap_x: self.wrap_x.into_vk(),
-    //         wrap_y: self.wrap_y.into_vk(),
-    //         aniso_level: self.aniso_level,
-    //         mip_levels: if self.generate_mips {
-    //             Self::get_mip_count(width, height)
-    //         } else {
-    //             1
-    //         },
-    //         mip_filtering: self.filtering.into_vk_mip(),
-    //         usage: vk::ImageUsageFlags::SAMPLED,
-    //         image_type: vk::ImageType::TYPE_2D,
-    //         host_readable: false,
-    //     }
-    // }
-}
 
 use std::{io::Read, sync::Arc};
+use crate::config::*;
 
 use hikari_asset::{Asset, LoadContext, Loader};
 use hikari_render::*;
 
-pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageConfig {
+fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageConfig {
     let format = match config.format {
         //Format::RGB8 => vk::Format::R8G8B8_SNORM,
         Format::RGBA8 => vk::Format::R8G8B8A8_UNORM,
@@ -123,6 +49,7 @@ pub fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageC
         },
         mip_filtering,
         usage: vk::ImageUsageFlags::SAMPLED,
+        flags: vk::ImageCreateFlags::empty(),
         image_type: vk::ImageType::TYPE_2D,
         image_view_type: vk::ImageViewType::TYPE_2D,
         initial_layout: vk::ImageLayout::UNDEFINED,
@@ -142,7 +69,7 @@ impl Texture2D {
         config: TextureConfig,
     ) -> Result<Texture2D, anyhow::Error> {
         Ok(Self {
-            image: SampledImage::with_rgba8(
+            image: SampledImage::with_data(
                 device,
                 data,
                 width,
@@ -179,18 +106,20 @@ impl Loader for TextureLoader {
         context.reader().read_to_end(&mut raw_data)?;
 
         let image = image::load_from_memory(&raw_data)?;
+        let width = image.width();
+        let height = image.height();
+
+        let config = *context.settings::<Texture2D>();
 
         let image = image.to_rgba8();
         let data = image.as_bytes();
-        let width = image.width();
-        let height = image.height();
 
         let texture = Texture2D::new(
             &self.device,
             data,
             width,
             height,
-            *context.settings::<Texture2D>(),
+            config,
         )?;
         context.set_asset(texture);
 
@@ -198,7 +127,7 @@ impl Loader for TextureLoader {
     }
 
     fn extensions(&self) -> &[&str] {
-        &["png", "jpg", "jpeg"]
+        &["png", "jpg", "jpeg", "dds", "bmp", "gif", "tga"]
     }
 }
 
@@ -213,7 +142,7 @@ fn parallel_load() -> Result<(), Box<dyn std::error::Error>> {
         vsync: false,
     })?;
 
-    let path = "../../assets/models/sponza/14930275953430797156.png";
+    let path = "../../engine_assets/models/sponza/14930275953430797156.png";
     let (image, width, height) = image::open_rgba8(path).unwrap();
 
     let _textures: Vec<_> = (0..1000)
