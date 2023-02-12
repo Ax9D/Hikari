@@ -1,6 +1,6 @@
 use image::EncodableLayout;
 
-use std::{io::Read, sync::Arc};
+use std::{sync::Arc};
 use crate::config::*;
 
 use hikari_asset::{Asset, LoadContext, Loader};
@@ -102,10 +102,13 @@ impl Asset for Texture2D {
 }
 impl Loader for TextureLoader {
     fn load(&self, context: &mut LoadContext) -> anyhow::Result<()> {
-        let mut raw_data = vec![];
-        context.reader().read_to_end(&mut raw_data)?;
+        //let mut raw_data = vec![];
+        //context.reader().read_to_end(&mut raw_data)?;
 
-        let image = image::load_from_memory(&raw_data)?;
+        let format = image::ImageFormat::from_path(context.path())?;
+
+        let image = image::load(context.reader(), format)?;
+        //let image = image::load_from_memory(&buf_reader)?;
         let width = image.width();
         let height = image.height();
 

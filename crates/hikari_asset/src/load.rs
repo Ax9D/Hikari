@@ -1,17 +1,16 @@
 use std::{
     any::Any,
-    io::Read,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use crate::{Asset, AssetManager, IO};
+use crate::{Asset, AssetManager, IO, BufReadSeek};
 
 pub struct LoadContext {
-    abs_path: PathBuf,
+    asset_dir: PathBuf,
     rel_path: PathBuf,
     io: Arc<dyn IO>,
-    reader: Box<dyn Read + Send + Sync + 'static>,
+    reader: Box<dyn BufReadSeek +  Send + Sync + 'static>,
     settings: Box<dyn Any + Send + Sync + 'static>,
     asset: Option<Box<dyn Any + Send + Sync + 'static>>,
     reload: bool,
@@ -19,16 +18,16 @@ pub struct LoadContext {
 }
 impl LoadContext {
     pub fn new<T: Asset>(
-        abs_path: PathBuf,
+        asset_dir: PathBuf,
         rel_path: PathBuf,
         io: Arc<dyn IO>,
-        reader: Box<dyn Read + Send + Sync + 'static>,
+        reader: Box<dyn BufReadSeek + Send + Sync + 'static>,
         settings: T::Settings,
         reload: bool,
         ass_man: AssetManager,
     ) -> Self {
         Self {
-            abs_path,
+            asset_dir,
             rel_path,
             io,
             reader,
@@ -41,15 +40,15 @@ impl LoadContext {
     pub fn io(&self) -> &dyn IO {
         &*self.io
     }
-    /// Returns absolute path of asset
-    pub fn abs_path(&self) -> &Path {
-        &self.abs_path
+    /// Returns absolute path of asset directory
+    pub fn asset_dir(&self) -> &Path {
+        &self.asset_dir
     }
     /// Return path of asset relative to asset directory
     pub fn path(&self) -> &Path {
         &self.rel_path
     }
-    pub fn reader(&mut self) -> &mut impl Read {
+    pub fn reader(&mut self) -> &mut impl BufReadSeek {
         &mut self.reader
     }
     pub fn settings<T: Asset>(&self) -> &T::Settings {

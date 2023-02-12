@@ -1,6 +1,5 @@
 use std::{
-    io::Read,
-    io::Write,
+    io::{Write, BufRead, BufReader, Seek},
     path::{Path, PathBuf},
 };
 
@@ -44,12 +43,15 @@ impl Mode {
         }
     }
 }
+pub trait BufReadSeek: BufRead + Seek {}
+impl<T: BufRead + Seek> BufReadSeek for T {}
+
 pub trait IO: Send + Sync + 'static {
     fn read_file(
         &self,
         path: &Path,
         mode: &Mode,
-    ) -> Result<Box<dyn Read + Send + Sync + 'static>, std::io::Error>;
+    ) -> Result<Box<dyn BufReadSeek + Send + Sync + 'static>, std::io::Error>;
     fn write_file(
         &self,
         path: &Path,
@@ -101,7 +103,7 @@ impl IO for PhysicalIO {
         &self,
         path: &Path,
         mode: &Mode,
-    ) -> Result<Box<dyn Read + Send + Sync + 'static>, std::io::Error> {
+    ) -> Result<Box<dyn BufReadSeek + Send + Sync + 'static>, std::io::Error> {
         let file = std::fs::OpenOptions::new()
             .create(mode.create)
             .create_new(mode.create_new)
@@ -111,7 +113,7 @@ impl IO for PhysicalIO {
             .truncate(mode.truncate)
             .open(path)?;
 
-        Ok(Box::new(file))
+        Ok(Box::new(BufReader::new(file)))
     }
 
     fn write_file(
