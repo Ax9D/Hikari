@@ -10,7 +10,7 @@ pub struct DragVec3<L, F = &'static str> {
     max: f32,
     reset: f32,
     width: f32,
-    lock: bool,
+    proportional: bool,
     display_format: Option<F>,
     flags: SliderFlags,
 }
@@ -25,7 +25,7 @@ impl<L: AsRef<str>> DragVec3<L> {
             display_format: None,
             reset: 0.0,
             width: 0.0,
-            lock: false,
+            proportional: false,
             flags: SliderFlags::empty(),
         }
     }
@@ -45,8 +45,8 @@ impl<L: AsRef<str>> DragVec3<L> {
         self.width = width;
         self
     }
-    pub fn lock(mut self, lock: bool) -> Self {
-        self.lock = lock;
+    pub fn proportional(mut self, lock: bool) -> Self {
+        self.proportional = lock;
         self
     }
     /// Sets the value increment for a movement of one pixel.
@@ -67,7 +67,7 @@ impl<L: AsRef<str>> DragVec3<L> {
             width: self.width,
             display_format: Some(display_format),
             flags: self.flags,
-            lock: self.lock,
+            proportional: self.proportional,
         }
     }
     /// Replaces all current settings with the given flags
@@ -94,7 +94,6 @@ impl<L: AsRef<str>> DragVec3<L> {
     ///
     /// Returns true if the slider value was changed.
     pub fn build(self, ui: &Ui, value: &mut Vec3) -> bool {
-        let mut changed = false;
         const RED: Vec4 = Vec4::new(0.768, 0.125, 0.125, 1.000);
         const RED_HOVERED: Vec4 = Vec4::new(0.825, 0.275, 0.275, 1.000);
         const RED_CLICKED: Vec4 = Vec4::new(0.618, 0.075, 0.075, 1.000);
@@ -108,6 +107,9 @@ impl<L: AsRef<str>> DragVec3<L> {
         const BLUE_CLICKED: Vec4 = Vec4::new(0.093, 0.289, 0.569, 1.000);
 
         const SPACE: f32 = 5.0;
+
+        let mut changed = false;
+        let old = *value;
 
         if let Some(_token) = ui.begin_table_with_sizing(self.label.as_ref(), 2, TableFlags::SIZING_STRETCH_PROP, [self.width, 0.0], 0.0) {
             ui.table_setup_column_with(TableColumnSetup {
@@ -128,13 +130,13 @@ impl<L: AsRef<str>> DragVec3<L> {
             ui.table_next_column();
 
             unsafe { sys::igPushMultiItemsWidths(3, ui.calc_item_width()); }
-            
-            
+
+
             let _style_token = ui.push_style_var(StyleVar::ItemSpacing([0.0, 0.0]));
-            
+
             //let line_height = ui.text_line_height();
             //let button_size = [line_height, line_height];
-            
+
             //X
             {
                 let _color = ui.push_style_color(StyleColor::Button, RED);
@@ -152,7 +154,7 @@ impl<L: AsRef<str>> DragVec3<L> {
 
             ui.same_line_with_spacing(0.0, SPACE);
             unsafe {sys::igPopItemWidth()};
-            
+
             //Y
             {
                 let _color = ui.push_style_color(StyleColor::Button, GREEN);
@@ -167,7 +169,7 @@ impl<L: AsRef<str>> DragVec3<L> {
                 ui.same_line();
             }
             changed |= self.build_drag(ui, "##Y", &mut value.y);
-            
+
             ui.same_line_with_spacing(0.0, SPACE);
             unsafe {sys::igPopItemWidth()};
 
@@ -177,7 +179,7 @@ impl<L: AsRef<str>> DragVec3<L> {
                 let _color = ui.push_style_color(StyleColor::ButtonHovered, BLUE_HOVERED);
                 let _color = ui.push_style_color(StyleColor::ButtonActive, BLUE_CLICKED);
                 let _style_token = ui.push_style_var(StyleVar::FrameRounding(0.0));
-                
+
                 if ui.button("z") {
                     value.z = self.reset;
                     changed = true;
@@ -185,9 +187,36 @@ impl<L: AsRef<str>> DragVec3<L> {
                 ui.same_line();
             }
             changed |= self.build_drag(ui, "##Z", &mut value.z);
-            
+
             ui.same_line_with_spacing(0.0, SPACE);
             unsafe {sys::igPopItemWidth()};
+        }
+
+        if changed && self.proportional {
+            let diff = *value - old;
+            let mask = diff / (diff.x + diff.y + diff.z);
+            let mut ratio = *value / old;
+
+            if !ratio.x.is_finite() {
+                ratio.x = 0.0;
+            }
+            if !ratio.y.is_finite() {
+                ratio.y = 0.0;
+            }
+            if !ratio.z.is_finite() {
+                ratio.z = 0.0;
+            }
+
+            dbg!(old);
+            //dbg!(mask);
+            let ratio = ratio * mask;
+            let ratio = ratio.x + ratio.y + ratio.z;
+            let inv_mask = Vec3::new(1.0, 1.0, 1.0) - mask;
+            let mul_mask = inv_mask * ratio + mask;
+            let new = *value * mul_mask;
+            dbg!(new);
+            *value = new;
+            dbg!(ratio);
         }
 
         changed
