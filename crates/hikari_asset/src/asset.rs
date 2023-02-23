@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-use type_uuid::TypeUuid;
+use type_uuid::{TypeUuid};
 use uuid::Uuid;
 
 use crate::{ErasedHandle, Record};
@@ -48,7 +48,7 @@ impl AssetDB {
             .insert(record.path.clone(), record_index);
         self.uuid_to_handle.insert(record.uuid, handle);
     }
-    fn register_new_handle<T: Asset>(
+    fn register_new_record<T: Asset>(
         &mut self,
         handle: ErasedHandle,
         path: PathBuf,
@@ -64,17 +64,22 @@ impl AssetDB {
 
         self.create_links(handle, record_index);
     }
-    pub(crate) fn assign_handle<T: Asset>(
+    pub(crate) fn create_or_update_record<T: Asset>(
         &mut self,
         handle: &ErasedHandle,
-        path: PathBuf,
+        path: &Path,
         settings: T::Settings,
     ) {
-        match self.path_to_record.get(&path) {
-            Some(&index) => {
-                self.create_links(handle.clone(), index);
+        match self.path_to_record.get(path) {
+            Some(&record_index) => {
+                let record = &mut self.records[record_index];
+                *record.settings_mut::<T>() = settings;
+
+                self.create_links(handle.clone(), record_index);
             }
-            None => self.register_new_handle::<T>(handle.clone(), path, settings),
+            None => {
+                self.register_new_record::<T>(handle.clone(), path.to_owned(), settings);
+            }
         }
     }
     pub(crate) fn fix_uuid(&mut self, current: &Uuid, fixed: Uuid) -> Option<()> {
@@ -158,11 +163,14 @@ impl AssetDB {
     pub fn path_to_handle_and_record(
         &mut self,
         path: &Path,
-    ) -> Option<(&ErasedHandle, &mut Record)> {
-        let record = &mut self.records[*self.path_to_record.get(path)?];
-        let handle = self.uuid_to_handle.get(&record.uuid)?;
-
-        Some((handle, record))
+    ) -> (Option<&ErasedHandle>, Option<&mut Record>) {
+        if let Some(&index) = self.path_to_record.get(path) {
+            let record = &mut self.records[index];
+            let handle = self.uuid_to_handle.get(&record.uuid);
+            (handle, Some(record))
+        } else {
+            (None, None)
+        }
     }
     /// Removes all assets which do not have an handle associated with them
     pub fn clean_unref(&mut self) {

@@ -164,13 +164,13 @@ impl AssetManagerInner {
         let loader = self.get_loader::<T>(path)?.clone();
 
         let io = self.io.clone();
-        let abs_path = self.asset_dir.read().join(path);
+        let asset_dir = self.asset_dir.read().clone();
         let rel_path = path.to_owned();
         let settings = settings.clone();
         let load_queue = self.load_queue.clone();
         let handle = handle.clone();
         self.thread_pool.spawn(move || {
-            let result = Self::load_task::<T>(abs_path, rel_path, settings, reload, io, loader);
+            let result = Self::load_task::<T>(asset_dir, rel_path, settings, reload, io, loader);
 
             let load_result = LoadResult { result, handle };
             load_queue
@@ -210,12 +210,32 @@ impl AssetManagerInner {
         }
 
         let mut db = self.asset_db.write();
-        if let Some((handle, record)) = db.path_to_handle_and_record(path) {
-            self.existing_handle_load::<T>(handle, record, settings, reload, lazy)?;
-            return Ok(handle.clone_strong().clone_typed::<T>().unwrap());
+        match db.path_to_handle_and_record(path) {
+            (None, None)  => {
+                //Not loaded not registered asset
+                //By "loaded" I mean having an handle (irrespective of the fact if the asset was successfully loaded/failed etc)
+                let settings = settings.unwrap_or_default();
+                self.fresh_load::<T>(&mut db, path, settings, reload, lazy)
+            },
+            (None, Some(record))  => {
+                //Not loaded but registered asset
+                //By "loaded" I mean having an handle (irrespective of the fact if the asset was successfully loaded/failed etc)
+                let settings = settings.unwrap_or_else(|| record.settings::<T>().clone());
+                self.fresh_load::<T>(&mut db, path, settings, reload, lazy)
+            },
+            (Some(handle), Some(record)) => {
+                //Loaded and registered asset
+                self.registered_asset_load::<T>(handle, record, settings, reload, lazy)?;
+                Ok(handle.clone_strong().clone_typed::<T>().unwrap())
+            }
+            _ => unreachable!()
         }
 
-        self.fresh_load::<T>(db, path, settings, reload, lazy)
+       //if let (handle, record) = db.path_to_handle_and_record(path) {
+        //    self.existing_handle_load::<T>(handle, record, settings, reload, lazy)?;
+        //    return Ok(handle.clone_strong().clone_typed::<T>().unwrap());
+        //}
+        //self.fresh_load::<T>(db, path, settings, reload, lazy)
     }
     pub fn request_load<T: Asset>(
         &self,
@@ -227,9 +247,9 @@ impl AssetManagerInner {
         let erased_handle = &handle.clone_erased_as_weak();
         let record = db.handle_to_record_mut(erased_handle).unwrap();
 
-        self.existing_handle_load::<T>(erased_handle, record, settings, reload, false)
+        self.registered_asset_load::<T>(erased_handle, record, settings, reload, false)
     }
-    fn existing_handle_load<T: Asset>(
+    fn registered_asset_load<T: Asset>(
         &self,
         handle: &ErasedHandle,
         record: &mut Record,
@@ -275,8 +295,7 @@ impl AssetManagerInner {
 
         let erased_handle = handle.clone_erased_as_weak();
 
-        let settings = settings.unwrap_or(T::Settings::default());
-        db.assign_handle::<T>(&erased_handle, path.to_owned(), settings.clone());
+        db.create_or_update_record::<T>(&erased_handle, path, settings.clone());
 
         if lazy {
             self.load_statuses
@@ -371,9 +390,9 @@ impl AssetManagerInner {
 
         let handle = pool.insert(asset);
         let erased_handle = handle.clone_erased_as_weak();
-        self.asset_db.write().assign_handle::<T>(
+        self.asset_db.write().create_or_update_record::<T>(
             &erased_handle,
-            asset_path.to_owned(),
+            asset_path,
             settings.unwrap_or_default(),
         );
         self.load_statuses
