@@ -87,6 +87,7 @@ struct AssetManagerInner {
     savers: HashMap<TypeId, Vec<Arc<dyn Saver>>>,
     load_statuses: LoadStatuses,
     thread_pool: Arc<ThreadPool>,
+    //untyped_loaders: HashMap<TypeId, fn() -> ErasedHandle>,
     io: Arc<dyn IO>,
     load_queue: Arc<LoadQueue>,
     #[cfg(feature = "serialize")]
@@ -106,7 +107,7 @@ impl AssetManagerInner {
 
         for loader in loaders {
             for &extension in loader.extensions() {
-                if extension == file_ext {
+                if extension.to_lowercase() == file_ext.to_lowercase() {
                     return Ok(loader);
                 }
             }
@@ -131,16 +132,17 @@ impl AssetManagerInner {
         &self.asset_db
     }
     fn load_task<T: Asset>(
-        abs_path: PathBuf,
+        asset_dir: PathBuf,
         rel_path: PathBuf,
         settings: T::Settings,
         reload: bool,
         io: Arc<dyn IO>,
         loader: Arc<dyn Loader>,
-    ) -> anyhow::Result<T> {
+    ) -> anyhow::Result<(T, Dependencies)> {
+        let abs_path = asset_dir.join(&rel_path);
         let reader = io.read_file(&abs_path, &Mode::read_only())?;
         let mut ctx = LoadContext::new::<T>(
-            abs_path,
+            asset_dir,
             rel_path,
             io.clone(),
             reader,
@@ -152,7 +154,7 @@ impl AssetManagerInner {
 
         let asset = ctx.take_asset::<T>().expect("Asset not set during loading");
 
-        Ok(asset)
+        Ok((asset, ctx.dependencies))
     }
     fn trigger_load<T: Asset>(
         &self,
@@ -282,9 +284,9 @@ impl AssetManagerInner {
     }
     fn fresh_load<T: Asset>(
         &self,
-        mut db: RwLockWriteGuard<'_, AssetDB>,
+        db: &mut AssetDB,
         path: &Path,
-        settings: Option<T::Settings>,
+        settings: T::Settings,
         reload: bool,
         lazy: bool,
     ) -> anyhow::Result<Handle<T>> {
@@ -323,7 +325,7 @@ impl AssetManagerInner {
 
         for loader in savers {
             for &extension in loader.extensions() {
-                if extension == file_ext {
+                if extension.to_lowercase() == file_ext.to_lowercase() {
                     return Ok(loader);
                 }
             }
@@ -374,11 +376,11 @@ impl AssetManagerInner {
     }
     pub fn create<T: Asset>(
         &self,
-        save_path: impl AsRef<Path>,
+        path: impl AsRef<Path>,
         asset: T,
         settings: Option<T::Settings>,
     ) -> anyhow::Result<Handle<T>> {
-        let asset_path = save_path.as_ref();
+        let asset_path = path.as_ref();
         let asset_path_abs = self.asset_dir.read().join(&asset_path);
 
         if asset_path_abs.exists() {
@@ -517,15 +519,6 @@ impl AssetManagerInner {
         self.load_statuses.get(handle)
     }
 }
-
-impl Drop for AssetManagerInner {
-    fn drop(&mut self) {
-        #[cfg(feature = "serialize")]
-        self.save_db()
-            .expect("Failed to save DB before dropping Asset Manager");
-    }
-}
-
 pub struct AssetManagerBuilder {
     thread_pool: Option<Arc<ThreadPool>>,
     asset_pools: HashMap<TypeId, DynAssetPool>,
@@ -533,6 +526,7 @@ pub struct AssetManagerBuilder {
     loaders: HashMap<TypeId, Vec<Arc<dyn Loader>>>,
     savers: HashMap<TypeId, Vec<Arc<dyn Saver>>>,
     load_queue: LoadQueue,
+    //untyped_loaders: HashMap<TypeId, fn() -> ErasedHandle>,
     io: Option<Arc<dyn IO>>,
     #[cfg(feature = "serialize")]
     any_serde: AnySerde,
@@ -546,6 +540,7 @@ impl AssetManagerBuilder {
             loaders: HashMap::new(),
             savers: HashMap::new(),
             load_queue: LoadQueue::new(),
+            //untyped_loaders: HashMap::new(),
             io: None,
             #[cfg(feature = "serialize")]
             any_serde: AnySerde::new(),
@@ -619,7 +614,6 @@ impl AssetManagerBuilder {
         Ok(asset_manager)
     }
 }
-
 #[derive(Clone)]
 pub struct AssetManager {
     inner: Arc<AssetManagerInner>,
