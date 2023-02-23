@@ -1,10 +1,10 @@
 use std::{
     any::Any,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::Arc, collections::HashSet,
 };
 
-use crate::{Asset, AssetManager, IO, BufReadSeek};
+use crate::{Asset, AssetManager, IO, BufReadSeek, ErasedHandle, Handle};
 
 pub struct LoadContext {
     asset_dir: PathBuf,
@@ -15,6 +15,7 @@ pub struct LoadContext {
     asset: Option<Box<dyn Any + Send + Sync + 'static>>,
     reload: bool,
     ass_man: AssetManager,
+    pub(crate) dependencies: Dependencies
 }
 impl LoadContext {
     pub fn new<T: Asset>(
@@ -35,6 +36,7 @@ impl LoadContext {
             asset: None,
             reload,
             ass_man,
+            dependencies: Dependencies::default()
         }
     }
     pub fn io(&self) -> &dyn IO {
@@ -65,6 +67,9 @@ impl LoadContext {
 
         self.asset = Some(Box::new(asset));
     }
+    pub fn depends_on<T: Asset>(&mut self, handle: &Handle<T>) {
+        self.dependencies.add_dependency(handle);
+    }
     pub(crate) fn take_asset<T: Asset>(&mut self) -> Option<T> {
         self.asset
             .take()
@@ -72,6 +77,18 @@ impl LoadContext {
     }
 }
 
+#[derive(Default)]
+pub(crate) struct Dependencies {
+    inner: HashSet<ErasedHandle>,
+}
+impl Dependencies {
+    pub fn add_dependency<T: Asset>(&mut self, handle: &Handle<T>) {
+        self.inner.insert(handle.clone_erased_as_weak());
+    }
+    pub fn iter(&self) -> std::collections::hash_set::Iter<'_, ErasedHandle> {
+        self.inner.iter()
+    }
+}
 pub trait Loader: Send + Sync + 'static {
     fn extensions(&self) -> &[&str];
     fn load(&self, ctx: &mut LoadContext) -> anyhow::Result<()>;

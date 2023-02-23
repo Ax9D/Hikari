@@ -84,6 +84,9 @@ pub struct ErasedHandle {
 }
 
 impl ErasedHandle {
+    pub fn index(&self) -> usize {
+        self.raw().index()
+    }
     pub fn raw(&self) -> &RawHandle {
         &self.raw
     }

@@ -2,7 +2,7 @@
 use crate::serialize::AnySerde;
 use crate::{
     record::Record, Asset, AssetDB, DynAssetPool, ErasedHandle, Handle, LoadContext, Loader, Mode,
-    PhysicalIO, PoolMut, PoolRef, SaveContext, Saver, IO,
+    PhysicalIO, PoolMut, PoolRef, SaveContext, Saver, IO, Dependencies,
 };
 
 use anyhow::anyhow;
@@ -51,7 +51,7 @@ impl LoadStatuses {
     }
 }
 struct LoadResult<T: Asset> {
-    result: anyhow::Result<T>,
+    result: anyhow::Result<(T, Dependencies)>,
     handle: ErasedHandle,
 }
 type QueueEnds<T> = (flume::Sender<LoadResult<T>>, flume::Receiver<LoadResult<T>>);
@@ -75,9 +75,9 @@ impl LoadQueue {
         let any = self.queues.get(&TypeId::of::<T>()).unwrap();
         any.downcast_ref::<QueueEnds<T>>().unwrap().0.send(result)
     }
-    pub fn recv<T: Asset>(&self) -> flume::TryIter<LoadResult<T>> {
+    pub fn recv<T: Asset>(&self) -> flume::Drain<LoadResult<T>> {
         let any = self.queues.get(&TypeId::of::<T>()).unwrap();
-        any.downcast_ref::<QueueEnds<T>>().unwrap().1.try_iter()
+        any.downcast_ref::<QueueEnds<T>>().unwrap().1.drain()
     }
 }
 struct AssetManagerInner {
@@ -410,24 +410,34 @@ impl AssetManagerInner {
         let mut load_statuses = self.load_statuses.full_lock();
 
         for result in self.load_queue.recv::<T>() {
-            let load_status = load_statuses.get_mut(&result.handle).unwrap();
 
             match result.result {
-                Ok(data) => {
-                    log::info!(
-                        "Loaded {:?}",
-                        asset_db.handle_to_path(&result.handle).unwrap()
+                Ok((data, dependencies)) => {
+                    let all_deps_loaded = dependencies.iter().all( |dependency|
+                        load_statuses.get(dependency) == Some(&LoadStatus::Loaded)
                     );
 
-                    let handle = result.handle.into_typed::<T>().unwrap();
-                    let mut pool = self.write_assets::<T>().unwrap();
-                    pool.insert_with_handle(&handle, data);
+                    if all_deps_loaded {
+                        let load_status = load_statuses.get_mut(&result.handle).unwrap();
+                        let mut pool = self.write_assets::<T>().unwrap();
+                        pool.insert_with_handle(result.handle.index(), data);
 
-                    *load_status = LoadStatus::Loaded;
+                        *load_status = LoadStatus::Loaded;
+
+                        log::info!(
+                            "Loaded {:?}",
+                            asset_db.handle_to_path(&result.handle).unwrap()
+                        );
+                    } else {
+                        self.load_queue.send(LoadResult {
+                            handle: result.handle,
+                            result: Ok((data, dependencies))
+                        }).expect("Failed to set send load result");
+                    }
                 }
                 Err(err) => {
                     log::error!("{}", err);
-
+                    let load_status = load_statuses.get_mut(&result.handle).unwrap();
                     *load_status = LoadStatus::Failed;
                 }
             }

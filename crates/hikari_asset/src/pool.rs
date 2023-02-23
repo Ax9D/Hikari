@@ -29,14 +29,14 @@ impl<T: Asset> AssetPool<T> {
     pub(crate) fn handle_allocator(&self) -> &HandleAllocator {
         &self.handle_allocator
     }
-    pub(crate) fn insert_with_handle(&mut self, handle: &Handle<T>, data: T) {
-        self.ensure_length(handle.index());
+    pub(crate) fn insert_with_handle(&mut self, handle_index: usize, data: T) {
+        self.ensure_length(handle_index);
 
-        self.inner[handle.index()] = Some(data);
+        self.inner[handle_index] = Some(data);
     }
     pub fn insert(&mut self, data: T) -> Handle<T> {
         let handle = self.handle_allocator.allocate::<T>();
-        self.insert_with_handle(&handle, data);
+        self.insert_with_handle(handle.index(), data);
 
         handle
     }
