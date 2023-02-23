@@ -9,8 +9,9 @@ use hikari_math::{Quat, Vec2, Vec3, Vec4};
 
 use crate::{
     material::Material,
-    texture::{Texture2D, TextureConfig},
-    SubMesh,
+    texture::{Texture2D},
+
+    SubMesh, TextureConfig,
 };
 #[allow(unused)]
 struct ImportData {
@@ -178,47 +179,30 @@ impl ImportData {
 //     })
 // }
 
-fn load_textures(
-    import_data: &ImportData,
-    load_context: &mut LoadContext,
-) -> Result<Vec<Handle<Texture2D>>, anyhow::Error> {
-    // Ok(import_data
-    //     .document()
-    //     .textures()
-    //     .collect::<Vec<_>>()
-    //     .par_iter()
-    //     .map(|texture| load_texture_data(&texture, &import_data).unwrap())
-    //     .collect())
-    let mut textures = Vec::new();
-    for texture in import_data.document().textures() {
-        textures.push(load_texture(import_data, &texture, load_context)?);
-    }
-
-    Ok(textures)
-}
 fn load_texture(
     import_data: &ImportData,
     texture: &gltf::Texture,
     load_context: &mut LoadContext,
+    is_albedo: bool,
 ) -> Result<Handle<Texture2D>, anyhow::Error> {
-    let is_albedo = import_data.document().materials().find(|mat| {
-        if let Some(albedo) = mat.pbr_metallic_roughness().base_color_texture() {
-            albedo.texture().index() == texture.index()
-        } else {
-            false
-        }
-    });
+    // let is_albedo = import_data.document().materials().find(|mat| {
+    //     if let Some(albedo) = mat.pbr_metallic_roughness().base_color_texture() {
+    //         albedo.texture().index() == texture.index()
+    //     } else {
+    //         false
+    //     }
+    // });
 
     let wrap_x = match texture.sampler().wrap_s() {
-        gltf::texture::WrappingMode::ClampToEdge => crate::texture::WrapMode::Clamp,
-        gltf::texture::WrappingMode::MirroredRepeat => crate::texture::WrapMode::Repeat,
-        gltf::texture::WrappingMode::Repeat => crate::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::ClampToEdge => crate::config::WrapMode::Clamp,
+        gltf::texture::WrappingMode::MirroredRepeat => crate::config::WrapMode::Repeat,
+        gltf::texture::WrappingMode::Repeat => crate::config::WrapMode::Repeat,
     };
 
     let wrap_y = match texture.sampler().wrap_t() {
-        gltf::texture::WrappingMode::ClampToEdge => crate::texture::WrapMode::Clamp,
-        gltf::texture::WrappingMode::MirroredRepeat => crate::texture::WrapMode::Repeat,
-        gltf::texture::WrappingMode::Repeat => crate::texture::WrapMode::Repeat,
+        gltf::texture::WrappingMode::ClampToEdge => crate::config::WrapMode::Clamp,
+        gltf::texture::WrappingMode::MirroredRepeat => crate::config::WrapMode::Repeat,
+        gltf::texture::WrappingMode::Repeat => crate::config::WrapMode::Repeat,
     };
 
     let min_filter = texture
@@ -231,8 +215,8 @@ fn load_texture(
         .unwrap_or(gltf::texture::MagFilter::Linear);
 
     let filtering = match mag_filter {
-        gltf::texture::MagFilter::Nearest => crate::texture::FilterMode::Closest,
-        gltf::texture::MagFilter::Linear => crate::texture::FilterMode::Linear,
+        gltf::texture::MagFilter::Nearest => crate::config::FilterMode::Closest,
+        gltf::texture::MagFilter::Linear => crate::config::FilterMode::Linear,
     };
 
     let generate_mips = match min_filter {
@@ -240,15 +224,23 @@ fn load_texture(
         | gltf::texture::MinFilter::NearestMipmapLinear
         | gltf::texture::MinFilter::LinearMipmapNearest
         | gltf::texture::MinFilter::LinearMipmapLinear => true,
-        _ => false,
-    } && is_albedo.is_some();
+        _=> false
+    };
     //println!("Loading texture {}", name);
 
+    // let is_albedo = import_data.document().materials().find(|material| {
+    //     if let Some(info) = material.pbr_metallic_roughness().base_color_texture() {
+    //         info.texture().index() == texture.index()
+    //     } else {
+    //         false
+    //     }
+    // }).is_some();
+
     //Albedo textures are treated as SRGB
-    let format = if is_albedo.is_some() {
-        crate::texture::Format::RGBA8
+    let format = if is_albedo {
+        crate::config::Format::SRGBA
     } else {
-        crate::texture::Format::RGBA8
+        crate::config::Format::RGBA8
     };
 
     let config = TextureConfig {
@@ -277,22 +269,15 @@ fn parse_texture_data(
             let parent_buffer = &gltf.buffers()[view.buffer().index()].0;
             let data = &parent_buffer[start..end];
 
-            match mime_type {
-                "image/png" | "image/jpeg" => create_and_load_image_with_data(
+            create_and_load_image_with_data(
                     &data,
                     texture,
                     config,
                     mime_type,
                     gltf,
                     load_context,
-                ),
-                _ => Err(anyhow::anyhow!(
-                    crate::error::Error::UnsupportedImageFormat(
-                        mime_type.split(r"/").last().unwrap().to_string(),
-                        texture.name().unwrap_or("unknown").to_string(),
-                    )
-                )),
-            }
+            )
+
         }
         gltf::image::Source::Uri { uri, mime_type } => {
             //Credit: https://github.com/bwasty/gltf-viewer/blob/master/src/render/texture.rs
@@ -314,34 +299,14 @@ fn parse_texture_data(
                         .unwrap()
                 };
 
-                match mime_type {
-                    "image/png" | "image/jpeg" => create_and_load_image_with_data(
-                        &data,
-                        texture,
-                        config,
-                        mime_type,
-                        gltf,
-                        load_context,
-                    ),
-                    _ => Err(anyhow::anyhow!(
-                        crate::error::Error::UnsupportedImageFormat(
-                            mime_type.split(r"/").last().unwrap().to_string(),
-                            texture.name().unwrap_or("unknown").to_string(),
-                        )
-                    )),
-                }
-            } else if let Some(mime_type) = mime_type {
-                let path = gltf.parent_path().join(uri);
-
-                match mime_type {
-                    "image/jpeg" | "image/png" => asset_manager.load(&path, Some(config), false),
-                    _ => Err(anyhow::anyhow!(
-                        crate::error::Error::UnsupportedImageFormat(
-                            mime_type.split(r"/").last().unwrap().to_string(),
-                            texture.name().unwrap_or("unknown").to_string(),
-                        )
-                    )),
-                }
+                create_and_load_image_with_data(
+                    &data,
+                    texture,
+                    config,
+                    mime_type,
+                    gltf,
+                    load_context,
+                )
             } else {
                 let path = gltf.parent_path().join(uri);
 
@@ -359,10 +324,11 @@ fn create_and_load_image_with_data(
     load_context: &mut LoadContext,
 ) -> anyhow::Result<Handle<Texture2D>> {
     let base_path = import_data.parent_path();
-    let texture_name = texture
-        .name()
-        .map(|name| name.to_owned())
-        .unwrap_or_else(|| format!("{}_texture_{}", import_data.filename(), texture.index()));
+
+    let texture_id = texture.index().to_string();
+    let texture_name = texture.name().unwrap_or(&texture_id);
+
+    let texture_name = format!("{}_texture_{}", import_data.filename(), texture_name);
 
     let ext = mime_type.split("/").nth(1).unwrap();
 
@@ -373,10 +339,11 @@ fn create_and_load_image_with_data(
         new_texture_path.set_extension(ext);
     }
 
+    let asset_dir = load_context.asset_dir();
     if !new_texture_path.exists() {
         let mut file = load_context
             .io()
-            .write_file(&new_texture_path, &Mode::create_and_write())?;
+            .write_file(&asset_dir.join(&new_texture_path), &Mode::create_and_write())?;
         file.write(&data)?;
         file.flush()?;
     }
@@ -390,12 +357,11 @@ fn create_and_load_image_with_data(
 }
 fn load_materials(
     import_data: &ImportData,
-    textures: &[Handle<Texture2D>],
     load_context: &mut LoadContext,
 ) -> Result<Vec<Handle<crate::Material>>, anyhow::Error> {
     let mut materials = Vec::new();
     for (ix, material) in import_data.document().materials().enumerate() {
-        let material = load_material(ix, import_data, textures, &material, load_context)?;
+        let material = load_material(ix, import_data, &material, load_context)?;
 
         materials.push(material);
     }
@@ -405,18 +371,14 @@ fn load_materials(
 fn load_material(
     ix: usize,
     import_data: &ImportData,
-    textures: &[Handle<Texture2D>],
     material: &gltf::Material,
     load_context: &mut LoadContext,
 ) -> Result<Handle<crate::Material>, anyhow::Error> {
-    let mut file_name = material
-        .name()
-        .unwrap_or(&format!(
-            "{}_material_{}",
-            import_data.filename(),
-            material.index().unwrap_or(ix)
-        ))
-        .to_owned();
+    let material_id = material.index().unwrap_or(ix).to_string();
+    let material_name = material.name().unwrap_or(&material_id);
+
+    let mut file_name = format!("{}_material_{}",import_data.filename(), material_name);
+
     file_name.push_str(".hmat");
 
     let material_path = import_data.parent_path().join(file_name);
@@ -424,24 +386,27 @@ fn load_material(
         let (albedo, albedo_set) =
             if let Some(info) = material.pbr_metallic_roughness().base_color_texture() {
                 (
-                    Some(textures[info.texture().index()].clone()),
-                    info.tex_coord() as i32,
+                    Some(load_texture(import_data, &info.texture(), load_context, true)?),
+                    info.tex_coord(),
                 )
             } else {
-                (None, -1)
+                (None, 0)
             };
         let albedo_factor = Vec4::from(material.pbr_metallic_roughness().base_color_factor());
+
+        // const GAMMA: f32 = 2.2;
+        // *albedo_factor = *albedo_factor.powf(GAMMA); //SRGB To Linear
 
         let (roughness, roughness_set) = if let Some(info) = material
             .pbr_metallic_roughness()
             .metallic_roughness_texture()
         {
             (
-                Some(textures[info.texture().index()].clone()),
-                info.tex_coord() as i32,
+                Some(load_texture(import_data, &info.texture(), load_context, false)?),
+                info.tex_coord(),
             )
         } else {
-            (None, -1)
+            (None, 0)
         };
         let roughness_factor = material.pbr_metallic_roughness().roughness_factor();
 
@@ -450,21 +415,21 @@ fn load_material(
             .metallic_roughness_texture()
         {
             (
-                Some(textures[info.texture().index()].clone()),
-                info.tex_coord() as i32,
+                Some(load_texture(import_data, &info.texture(), load_context, false)?),
+                info.tex_coord(),
             )
         } else {
-            (None, -1)
+            (None, 0)
         };
         let metallic_factor = material.pbr_metallic_roughness().metallic_factor();
 
         let (normal, normal_set) = if let Some(info) = material.normal_texture() {
             (
-                Some(textures[info.texture().index()].clone()),
-                info.tex_coord() as i32,
+                Some(load_texture(import_data, &info.texture(), load_context, false)?),
+                info.tex_coord(),
             )
         } else {
-            (None, -1)
+            (None, 0)
         };
 
         let material = Material {
@@ -481,9 +446,16 @@ fn load_material(
             normal_set,
         };
 
-        let material_text = serde_yaml::to_string(&material)?;
-        std::fs::write(&material_path, material_text)?;
-        println!("Creating material {ix} {:#?}", material_path);
+        let handle = load_context.asset_manager().create(&material_path, material, None)?;
+
+        load_context.asset_manager().save(&handle)?;
+
+        // let material_text = serde_yaml::to_string(&material)?;
+
+        // let mut file = load_context.io().write_file(&material_path, &Mode::create_and_write())?;
+        // file.write_all(material_text.as_bytes())?;
+
+        //println!("Creating material {ix} {:#?}", material_path);
     }
 
     load_context
@@ -498,10 +470,12 @@ fn load_mesh(
     materials: &[Handle<crate::Material>],
 ) -> Result<crate::mesh::Mesh, anyhow::Error> {
     let mut sub_meshes = Vec::new();
-    let _name = mesh
-        .name()
-        .unwrap_or(&format!("{}_mesh_{}", import_data.filename(), mesh.index()))
-        .to_owned();
+
+
+    let mesh_id = mesh.index().to_string();
+    let mesh_name = mesh.name().unwrap_or(&mesh_id);
+
+    let _mesh_name = format!("{}_texture_{}", import_data.filename(), mesh_name);
 
     let node = import_data
         .document()
@@ -611,8 +585,8 @@ pub fn load_scene(
         .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
     println!("Parsed GLTF");
 
-    let textures = load_textures(&import_data, load_context)?;
-    let materials = load_materials(&import_data, &textures, load_context)?;
+    //let textures = load_textures(&import_data, load_context)?;
+    let materials = load_materials(&import_data, load_context)?;
 
     let mut meshes = Vec::new();
 
