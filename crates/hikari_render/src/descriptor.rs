@@ -413,7 +413,7 @@ pub struct DescriptorSetAllocator {
     device: Arc<crate::Device>,
     set_layout: DescriptorSetLayout,
     max_sets: u32,
-    temp_map: TemporaryMap<u64, vk::DescriptorSet, 4>,
+    temp_map: TemporaryMap<u64, vk::DescriptorSet, 4, nohash_hasher::BuildNoHashHasher<u64>>,
     resuable_sets: Vec<vk::DescriptorSet>,
 
     pools: Vec<vk::DescriptorPool>,
@@ -428,7 +428,7 @@ impl DescriptorSetAllocator {
             device: device.clone(),
             set_layout,
             max_sets: MAX_SETS_PER_POOL as u32,
-            temp_map: TemporaryMap::new(),
+            temp_map: TemporaryMap::with_hasher(nohash_hasher::BuildNoHashHasher::default()),
             resuable_sets: Vec::new(),
             pools: Vec::new(),
             pool_sizes: Self::get_pool_sizes(MAX_SETS_PER_POOL, set_layout),
@@ -662,6 +662,18 @@ impl DescriptorSetAllocator {
             self.device.raw().update_descriptor_sets(&writes, &[]);
         }
     }
+    #[cold]
+    fn create_and_update_set(&mut self, hash: u64, state: &DescriptorSetState) -> vk::DescriptorSet {
+        let new_set = self.resuable_sets.pop().unwrap_or_else(|| {
+            self.allocate(self.set_layout.raw())
+                .expect("Failed to allocate descriptor set")
+        });
+        self.temp_map.insert(hash, new_set);
+
+        self.update_set(new_set, state);
+
+        new_set
+    }
     pub fn get(&mut self, state: &DescriptorSetState) -> vk::DescriptorSet {
         hikari_dev::profile_function!();
 
@@ -671,15 +683,7 @@ impl DescriptorSetAllocator {
         match self.temp_map.get(&hash) {
             Some(&set) => set,
             None => {
-                let new_set = self.resuable_sets.pop().unwrap_or_else(|| {
-                    self.allocate(self.set_layout.raw())
-                        .expect("Failed to allocate descriptor set")
-                });
-                self.temp_map.insert(hash, new_set);
-
-                self.update_set(new_set, state);
-
-                new_set
+                self.create_and_update_set(hash, state)
             }
         }
     }
@@ -703,10 +707,16 @@ impl Drop for DescriptorSetAllocator {
 }
 unsafe impl Sync for DescriptorPool {}
 unsafe impl Send for DescriptorPool {}
+
+impl nohash_hasher::IsEnabled for VkDescriptorSetLayout {}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct VkDescriptorSetLayout(vk::DescriptorSetLayout);
+
 pub struct DescriptorPool {
     device: Arc<crate::Device>,
     set_allocators:
-        HashMap<vk::DescriptorSetLayout, DescriptorSetAllocator, crate::util::BuildHasher>,
+        HashMap<VkDescriptorSetLayout, DescriptorSetAllocator, nohash_hasher::BuildNoHashHasher<VkDescriptorSetLayout>>,
 }
 impl DescriptorPool {
     pub fn new(device: &Arc<crate::Device>) -> Self {
@@ -718,7 +728,7 @@ impl DescriptorPool {
     pub fn get(&mut self, set_layout: &DescriptorSetLayout) -> &mut DescriptorSetAllocator {
         hikari_dev::profile_function!();
 
-        match self.set_allocators.entry(set_layout.raw()) {
+        match self.set_allocators.entry(VkDescriptorSetLayout(set_layout.raw())) {
             Entry::Occupied(allocator) => allocator.into_mut(),
             Entry::Vacant(vacant) => {
                 vacant.insert(DescriptorSetAllocator::new(&self.device, *set_layout).unwrap())

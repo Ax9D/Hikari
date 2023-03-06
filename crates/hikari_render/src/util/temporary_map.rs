@@ -36,17 +36,21 @@ impl<K: std::fmt::Debug, V: std::fmt::Debug> std::fmt::Debug for Entry<K, V> {
     }
 }
 
-unsafe impl<K, V, const N: usize> Sync for TemporaryMap<K, V, N> {}
-unsafe impl<K, V, const N: usize> Send for TemporaryMap<K, V, N> {}
-type Map<K, V> = HashMap<K, *mut Node<Entry<K, V>>, crate::util::BuildHasher>;
-pub struct TemporaryMap<K, V, const N: usize> {
-    map: Map<K, V>,
+unsafe impl<K, V, const N: usize, H> Sync for TemporaryMap<K, V, N, H> {}
+unsafe impl<K, V, const N: usize, H> Send for TemporaryMap<K, V, N, H> {}
+type Map<K, V, H> = HashMap<K, *mut Node<Entry<K, V>>, H>;
+pub struct TemporaryMap<K, V, const N: usize, H = crate::util::BuildHasher> {
+    map: Map<K, V, H>,
     frames: [IntrusiveLinkedList<Entry<K, V>>; N],
     current_frame: usize,
 }
-
-impl<K: Hash + Eq + Copy, V, const N: usize> TemporaryMap<K, V, N> {
+impl<K: Hash + Eq + Copy, V, const N: usize> TemporaryMap<K, V, N, crate::util::BuildHasher> {
     pub fn new() -> Self {
+        Self::with_hasher(crate::util::hasher_builder())
+    }
+}
+impl<K: Hash + Eq + Copy, V, const N: usize, H: std::hash::BuildHasher> TemporaryMap<K, V, N, H> {
+    pub fn with_hasher(hasher: H) -> Self {
         let mut frames = ArrayVec::<IntrusiveLinkedList<Entry<K, V>>, N>::new();
         for _ in 0..N {
             frames.push(IntrusiveLinkedList::new());
@@ -58,7 +62,7 @@ impl<K: Hash + Eq + Copy, V, const N: usize> TemporaryMap<K, V, N> {
             .unwrap();
 
         Self {
-            map: Map::with_hasher(crate::util::hasher_builder()),
+            map: Map::with_hasher(hasher),
             frames,
             current_frame: 0,
         }
@@ -158,7 +162,7 @@ impl<K: Hash + Eq + Copy, V, const N: usize> TemporaryMap<K, V, N> {
     //         },
     //     }
     // }
-    pub fn new_frame(&mut self) -> Removed<K, V> {
+    pub fn new_frame(&mut self) -> Removed<K, V, H> {
         self.current_frame = (self.current_frame + 1) % N;
         Removed {
             map: &mut self.map,
@@ -167,11 +171,11 @@ impl<K: Hash + Eq + Copy, V, const N: usize> TemporaryMap<K, V, N> {
     }
 }
 use super::intrusive_linked_list::Drain;
-pub struct Removed<'a, K, V> {
-    map: &'a mut Map<K, V>,
+pub struct Removed<'a, K, V, H> {
+    map: &'a mut Map<K, V, H>,
     drain: Drain<'a, Entry<K, V>>,
 }
-impl<'a, K: Hash + Eq, V> Iterator for Removed<'a, K, V> {
+impl<'a, K: Hash + Eq, V, H: std::hash::BuildHasher> Iterator for Removed<'a, K, V, H> {
     type Item = V;
 
     fn next(&mut self) -> Option<Self::Item> {
