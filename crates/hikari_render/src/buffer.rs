@@ -1,7 +1,10 @@
 use ash::{prelude::VkResult, vk};
-use gpu_allocator::{vulkan::{Allocation, AllocationCreateDesc, AllocationScheme}, AllocationError};
+use gpu_allocator::{
+    vulkan::{Allocation, AllocationCreateDesc, AllocationScheme},
+    AllocationError,
+};
 
-use std::{marker::PhantomData, sync::Arc, mem::ManuallyDrop};
+use std::{marker::PhantomData, mem::ManuallyDrop, sync::Arc};
 
 pub trait Buffer {
     fn buffer(&self) -> vk::Buffer;
@@ -132,7 +135,11 @@ pub fn create_index_buffer(
 //     }
 // }
 
-pub fn delete_buffer(device: &crate::Device, buffer: vk::Buffer, allocation: Allocation) -> Result<(), AllocationError> {
+pub fn delete_buffer(
+    device: &crate::Device,
+    buffer: vk::Buffer,
+    allocation: Allocation,
+) -> Result<(), AllocationError> {
     unsafe {
         device.raw().destroy_buffer(buffer, None);
     };
@@ -288,7 +295,7 @@ impl<T: Copy> GpuBuffer<T> {
             requirements,
             location: gpu_allocator::MemoryLocation::GpuOnly,
             linear: true,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
         })?;
 
         unsafe {

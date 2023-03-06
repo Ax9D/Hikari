@@ -356,27 +356,29 @@ impl GraphExecutor {
                 offset: vk::Offset2D { x: 0, y: 0 },
                 extent: vk::Extent2D { width, height },
             };
-            cmd.begin_debug_region(pass.name(), hikari_math::Vec4::new(0.729, 0.129, 0.086, 1.0));
+            cmd.begin_debug_region(
+                pass.name(),
+                hikari_math::Vec4::new(0.729, 0.129, 0.086, 1.0),
+            );
 
             {
-            let mut rcmd = cmd.begin_renderpass(super::command::RenderpassBeginInfo {
-                renderpass: vk_pass,
-                area,
-                framebuffer,
-            });
+                let mut rcmd = cmd.begin_renderpass(super::command::RenderpassBeginInfo {
+                    renderpass: vk_pass,
+                    area,
+                    framebuffer,
+                });
 
-            //Self::bind_resources::<T>(rcmd.inner(), resources, pass.inputs(), pass.outputs());
+                //Self::bind_resources::<T>(rcmd.inner(), resources, pass.inputs(), pass.outputs());
 
-            //rcmd.set_viewport(0.0, 0.0, width as f32, height as f32);
-            //rcmd.set_scissor(0, 0, width, height);
+                //rcmd.set_viewport(0.0, 0.0, width as f32, height as f32);
+                //rcmd.set_scissor(0, 0, width, height);
 
-            let record_info = PassRecordInfo {
-                framebuffer_width: width,
-                framebuffer_height: height,
-            };
+                let record_info = PassRecordInfo {
+                    framebuffer_width: width,
+                    framebuffer_height: height,
+                };
 
-            (pass.record_fn.as_mut().unwrap())(&mut rcmd, resources, &record_info, args);
-
+                (pass.record_fn.as_mut().unwrap())(&mut rcmd, resources, &record_info, args);
             }
             cmd.end_debug_region();
         }
@@ -403,14 +405,13 @@ impl GraphExecutor {
             cmd.begin_debug_region(pass.name(), hikari_math::Vec4::new(0.0, 0.0, 0.0, 1.0));
 
             {
-            let mut ccmd = ComputepassCommands::new(cmd);
+                let mut ccmd = ComputepassCommands::new(cmd);
 
-            let record_info = PassRecordInfo {
-                framebuffer_width: size.0,
-                framebuffer_height: size.1,
-            };
-            (pass.record_fn.as_mut().unwrap())(&mut ccmd, resources, &record_info, args);
-
+                let record_info = PassRecordInfo {
+                    framebuffer_width: size.0,
+                    framebuffer_height: size.1,
+                };
+                (pass.record_fn.as_mut().unwrap())(&mut ccmd, resources, &record_info, args);
             }
             cmd.end_debug_region();
         }

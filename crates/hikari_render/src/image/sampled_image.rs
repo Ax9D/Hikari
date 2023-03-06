@@ -1,4 +1,4 @@
-use std::{sync::Arc, ops::Range, collections::HashMap};
+use std::{collections::HashMap, ops::Range, sync::Arc};
 
 use ash::{prelude::VkResult, vk};
 use gpu_allocator::vulkan::Allocation;
@@ -169,7 +169,7 @@ impl ImageConfig {
 pub struct ImageViewDesc {
     pub view_type: vk::ImageViewType,
     pub mip_range: Range<u32>,
-    pub layer_range: Range<u32>
+    pub layer_range: Range<u32>,
 }
 /// An Image that can be sampled in shaders
 /// An ImageView is generated for each mip level automatically
@@ -243,9 +243,11 @@ impl SampledImage {
 
         unsafe { device.raw().create_sampler(&create_info, None) }
     }
-    fn create_view(device: &Arc<crate::Device>,
+    fn create_view(
+        device: &Arc<crate::Device>,
         image: vk::Image,
-        create_info: &vk::ImageViewCreateInfo) -> VkResult<vk::ImageView> {
+        create_info: &vk::ImageViewCreateInfo,
+    ) -> VkResult<vk::ImageView> {
         let view = unsafe { device.raw().create_image_view(create_info, None)? };
 
         Ok(view)
@@ -259,23 +261,23 @@ impl SampledImage {
 
         for mip_level in 0..vkconfig.mip_levels {
             let create_info = vk::ImageViewCreateInfo::builder()
-            .image(image)
-            .format(vkconfig.format)
-            .view_type(vkconfig.image_view_type)
-            .subresource_range(
-                *vk::ImageSubresourceRange::builder()
-                    .aspect_mask(format_to_aspect_flags(vkconfig.format))
-                    .base_mip_level(mip_level)
-                    .level_count(vk::REMAINING_MIP_LEVELS)
-                    .base_array_layer(0)
-                    .layer_count(vk::REMAINING_ARRAY_LAYERS),
-            )
-            .components(vk::ComponentMapping {
-                r: vk::ComponentSwizzle::IDENTITY,
-                g: vk::ComponentSwizzle::IDENTITY,
-                b: vk::ComponentSwizzle::IDENTITY,
-                a: vk::ComponentSwizzle::IDENTITY,
-            });
+                .image(image)
+                .format(vkconfig.format)
+                .view_type(vkconfig.image_view_type)
+                .subresource_range(
+                    *vk::ImageSubresourceRange::builder()
+                        .aspect_mask(format_to_aspect_flags(vkconfig.format))
+                        .base_mip_level(mip_level)
+                        .level_count(vk::REMAINING_MIP_LEVELS)
+                        .base_array_layer(0)
+                        .layer_count(vk::REMAINING_ARRAY_LAYERS),
+                )
+                .components(vk::ComponentMapping {
+                    r: vk::ComponentSwizzle::IDENTITY,
+                    g: vk::ComponentSwizzle::IDENTITY,
+                    b: vk::ComponentSwizzle::IDENTITY,
+                    a: vk::ComponentSwizzle::IDENTITY,
+                });
             let view = Self::create_view(device, image, &create_info)?;
             views.push(view);
         }
@@ -367,8 +369,9 @@ impl SampledImage {
         layers: u32,
         vkconfig: ImageConfig,
     ) -> anyhow::Result<Self> {
-        let (image, allocation, sampler, image_views) =
-            Self::create_image_with_sampler_and_views(device, width, height, depth, layers, &vkconfig)?;
+        let (image, allocation, sampler, image_views) = Self::create_image_with_sampler_and_views(
+            device, width, height, depth, layers, &vkconfig,
+        )?;
 
         let download_buffer = if vkconfig.host_readable {
             Some(crate::buffer::CpuBuffer::new(
@@ -426,7 +429,10 @@ impl SampledImage {
             (width * height * depth * layers) as usize * format_size(vkconfig.format) as usize;
 
         let data = unsafe {
-                std::slice::from_raw_parts::<u8>(data.as_ptr() as *const u8, data.len() * std::mem::size_of::<T>() / std::mem::size_of::<u8>())
+            std::slice::from_raw_parts::<u8>(
+                data.as_ptr() as *const u8,
+                data.len() * std::mem::size_of::<T>() / std::mem::size_of::<u8>(),
+            )
         };
         //FIX ME: This is probably wrong?, Dont assume format sizes
         if data.len() != image_buffer_max_size {
@@ -437,8 +443,9 @@ impl SampledImage {
                 vkconfig.format
             ));
         }
-        let (image, allocation, sampler, image_views) =
-            Self::create_image_with_sampler_and_views(device, width, height, depth, layers, &vkconfig)?;
+        let (image, allocation, sampler, image_views) = Self::create_image_with_sampler_and_views(
+            device, width, height, depth, layers, &vkconfig,
+        )?;
 
         let subresource_range = *vk::ImageSubresourceRange::builder()
             .aspect_mask(format_to_aspect_flags(vkconfig.format))
@@ -517,7 +524,16 @@ impl SampledImage {
                         vk::PipelineStageFlags::TRANSFER,
                     );
 
-                    Self::generate_mips_(device.raw(), cmd, image, width, height, depth, layers, &vkconfig);
+                    Self::generate_mips_(
+                        device.raw(),
+                        cmd,
+                        image,
+                        width,
+                        height,
+                        depth,
+                        layers,
+                        &vkconfig,
+                    );
 
                     crate::barrier::image_memory_barrier(
                         device.raw(),
@@ -531,8 +547,7 @@ impl SampledImage {
                         vk::PipelineStageFlags::TRANSFER,
                         vk::PipelineStageFlags::TOP_OF_PIPE,
                     );
-                }
-                else {
+                } else {
                     crate::barrier::image_memory_barrier(
                         device.raw(),
                         cmd,
@@ -545,7 +560,7 @@ impl SampledImage {
                         vk::PipelineStageFlags::TRANSFER,
                         vk::PipelineStageFlags::FRAGMENT_SHADER,
                     );
-            }
+                }
 
                 Ok(())
             })?;
@@ -579,7 +594,16 @@ impl SampledImage {
     }
     /// Assumes that image is in TRANSFER_SRC_OPTIMAL layout
     pub fn generate_mips(&self, cmd: vk::CommandBuffer) {
-        Self::generate_mips_(self.device.raw(), cmd, self.image, self.width, self.height, self.depth, self.layers, &self.config)
+        Self::generate_mips_(
+            self.device.raw(),
+            cmd,
+            self.image,
+            self.width,
+            self.height,
+            self.depth,
+            self.layers,
+            &self.config,
+        )
     }
     fn generate_mips_(
         device: &ash::Device,
@@ -595,7 +619,6 @@ impl SampledImage {
 
         unsafe {
             for layer in 0..layers {
-
                 let mut mip_width = width as i32;
                 let mut mip_height = height as i32;
                 let mut mip_depth = depth as i32;
@@ -717,23 +740,23 @@ impl SampledImage {
             assert!(layer_count <= self.layers);
 
             let create_info = vk::ImageViewCreateInfo::builder()
-            .image(self.image)
-            .format(self.config.format)
-            .view_type(view_desc.view_type)
-            .subresource_range(
-                *vk::ImageSubresourceRange::builder()
-                    .aspect_mask(format_to_aspect_flags(self.config.format))
-                    .base_mip_level(base_mip_level)
-                    .level_count(level_count)
-                    .base_array_layer(base_array_layer)
-                    .layer_count(layer_count),
-            )
-            .components(vk::ComponentMapping {
-                r: vk::ComponentSwizzle::IDENTITY,
-                g: vk::ComponentSwizzle::IDENTITY,
-                b: vk::ComponentSwizzle::IDENTITY,
-                a: vk::ComponentSwizzle::IDENTITY,
-            });
+                .image(self.image)
+                .format(self.config.format)
+                .view_type(view_desc.view_type)
+                .subresource_range(
+                    *vk::ImageSubresourceRange::builder()
+                        .aspect_mask(format_to_aspect_flags(self.config.format))
+                        .base_mip_level(base_mip_level)
+                        .level_count(level_count)
+                        .base_array_layer(base_array_layer)
+                        .layer_count(layer_count),
+                )
+                .components(vk::ComponentMapping {
+                    r: vk::ComponentSwizzle::IDENTITY,
+                    g: vk::ComponentSwizzle::IDENTITY,
+                    b: vk::ComponentSwizzle::IDENTITY,
+                    a: vk::ComponentSwizzle::IDENTITY,
+                });
             Self::create_view(&self.device, self.image, &create_info).unwrap()
         });
 

@@ -1,7 +1,7 @@
 use ::image::EncodableLayout;
 
-use std::{sync::Arc};
 use crate::config::*;
+use std::sync::Arc;
 
 use hikari_asset::{Asset, LoadContext, Loader};
 use hikari_render::*;
@@ -48,10 +48,7 @@ impl Texture2D {
         })
     }
     pub fn from_parts(image: SampledImage, config: TextureConfig) -> Self {
-        Self {
-            image,
-            config
-        }
+        Self { image, config }
     }
     pub fn raw(&self) -> &SampledImage {
         &self.image
@@ -67,7 +64,8 @@ impl Texture2D {
     }
 }
 
-pub const SUPPORTED_TEXTURE_EXTENSIONS: [&'static str; 7] = ["png", "jpg", "jpeg", "dds", "bmp", "gif", "tga"];
+pub const SUPPORTED_TEXTURE_EXTENSIONS: [&'static str; 7] =
+    ["png", "jpg", "jpeg", "dds", "bmp", "gif", "tga"];
 pub struct TextureLoader {
     pub device: Arc<Device>,
 }
@@ -92,13 +90,7 @@ impl Loader for TextureLoader {
         let image = image.to_rgba8();
         let data = image.as_bytes();
 
-        let texture = Texture2D::new(
-            &self.device,
-            data,
-            width,
-            height,
-            config,
-        )?;
+        let texture = Texture2D::new(&self.device, data, width, height, config)?;
         context.set_asset(texture);
 
         Ok(())

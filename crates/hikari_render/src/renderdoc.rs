@@ -16,7 +16,7 @@ fn init_renderdoc() {
     let renderdoc = RenderDoc::<V120>::new().expect("Failed to initialize renderdoc");
     RENDERDOC.get_or_init(|| Mutex::new(renderdoc));
 }
-fn get_renderdoc() -> MutexGuard<'static, RenderDoc<V120>>{
+fn get_renderdoc() -> MutexGuard<'static, RenderDoc<V120>> {
     RENDERDOC.get().expect("RenderDoc not initialized").lock()
 }
 

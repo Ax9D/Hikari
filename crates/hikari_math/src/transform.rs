@@ -30,7 +30,7 @@ impl Transform {
         Self {
             position,
             scale,
-            rotation
+            rotation,
         }
     }
     pub fn forward(&self) -> Vec3 {

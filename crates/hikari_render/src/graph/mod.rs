@@ -18,8 +18,8 @@ use self::pass::AnyPass;
 use self::runtime::GraphExecutor;
 
 pub use command::CommandBuffer;
-pub use command::RenderpassCommands;
 pub use command::PassRecordInfo;
+pub use command::RenderpassCommands;
 
 pub use resources::*;
 pub use storage::GpuHandle;
@@ -75,8 +75,9 @@ impl<'a, T: Args> GraphBuilder<'a, T> {
         size: ImageSize,
     ) -> Result<GpuHandle<SampledImage>, GraphCreationError> {
         let (width, height, depth) = size.get_physical_size_3d(self.size);
-        let image = SampledImage::with_dimensions(self.gfx.device(), width, height, depth, 1, config)
-            .map_err(|err| GraphCreationError::AllocationFailed(err.to_string()))?;
+        let image =
+            SampledImage::with_dimensions(self.gfx.device(), width, height, depth, 1, config)
+                .map_err(|err| GraphCreationError::AllocationFailed(err.to_string()))?;
         Ok(self.resources.add_image(name.to_string(), image, size))
     }
     pub fn add_buffer<B: Buffer + Send + Sync + 'static>(

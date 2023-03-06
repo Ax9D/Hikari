@@ -1,8 +1,8 @@
 #[cfg(feature = "serialize")]
 use crate::serialize::AnySerde;
 use crate::{
-    record::Record, Asset, AssetDB, DynAssetPool, ErasedHandle, Handle, LoadContext, Loader, Mode,
-    PhysicalIO, PoolMut, PoolRef, SaveContext, Saver, IO, Dependencies,
+    record::Record, Asset, AssetDB, Dependencies, DynAssetPool, ErasedHandle, Handle, LoadContext,
+    Loader, Mode, PhysicalIO, PoolMut, PoolRef, SaveContext, Saver, IO,
 };
 
 use anyhow::anyhow;
@@ -213,27 +213,27 @@ impl AssetManagerInner {
 
         let mut db = self.asset_db.write();
         match db.path_to_handle_and_record(path) {
-            (None, None)  => {
+            (None, None) => {
                 //Not loaded not registered asset
                 //By "loaded" I mean having an handle (irrespective of the fact if the asset was successfully loaded/failed etc)
                 let settings = settings.unwrap_or_default();
                 self.fresh_load::<T>(&mut db, path, settings, reload, lazy)
-            },
-            (None, Some(record))  => {
+            }
+            (None, Some(record)) => {
                 //Not loaded but registered asset
                 //By "loaded" I mean having an handle (irrespective of the fact if the asset was successfully loaded/failed etc)
                 let settings = settings.unwrap_or_else(|| record.settings::<T>().clone());
                 self.fresh_load::<T>(&mut db, path, settings, reload, lazy)
-            },
+            }
             (Some(handle), Some(record)) => {
                 //Loaded and registered asset
                 self.registered_asset_load::<T>(handle, record, settings, reload, lazy)?;
                 Ok(handle.clone_strong().clone_typed::<T>().unwrap())
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
 
-       //if let (handle, record) = db.path_to_handle_and_record(path) {
+        //if let (handle, record) = db.path_to_handle_and_record(path) {
         //    self.existing_handle_load::<T>(handle, record, settings, reload, lazy)?;
         //    return Ok(handle.clone_strong().clone_typed::<T>().unwrap());
         //}
@@ -412,12 +412,11 @@ impl AssetManagerInner {
         let mut load_statuses = self.load_statuses.full_lock();
 
         for result in self.load_queue.recv::<T>() {
-
             match result.result {
                 Ok((data, dependencies)) => {
-                    let all_deps_loaded = dependencies.iter().all( |dependency|
+                    let all_deps_loaded = dependencies.iter().all(|dependency| {
                         load_statuses.get(dependency) == Some(&LoadStatus::Loaded)
-                    );
+                    });
 
                     if all_deps_loaded {
                         let load_status = load_statuses.get_mut(&result.handle).unwrap();
@@ -431,10 +430,12 @@ impl AssetManagerInner {
                             asset_db.handle_to_path(&result.handle).unwrap()
                         );
                     } else {
-                        self.load_queue.send(LoadResult {
-                            handle: result.handle,
-                            result: Ok((data, dependencies))
-                        }).expect("Failed to set send load result");
+                        self.load_queue
+                            .send(LoadResult {
+                                handle: result.handle,
+                                result: Ok((data, dependencies)),
+                            })
+                            .expect("Failed to set send load result");
                     }
                 }
                 Err(err) => {
@@ -720,7 +721,7 @@ pub(crate) fn get_asset_manager() -> AssetManager {
         .get()
         .expect("AssetManager has not been initialized");
     AssetManager {
-        inner: inner.upgrade().expect("Asset Manager has been dropped")
+        inner: inner.upgrade().expect("Asset Manager has been dropped"),
     }
 }
 

@@ -38,7 +38,6 @@ pub fn build_pass(
             )
             .cmd(
                 move |cmd, graph_res, record_info, (_, res, shader_lib, ..)| {
-
                     cmd.set_viewport(
                         0.0,
                         0.0,

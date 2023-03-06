@@ -1,17 +1,18 @@
-use crate::{editor::EditorWindow, Editor, widgets::{AssetSelector}};
+use crate::{editor::EditorWindow, widgets::AssetSelector, Editor};
+use hikari::imgui::*;
 use hikari::{
     asset::{AssetManager, Handle},
-    g3d::{Material, Texture2D}, render::imgui_support::TextureExt,
+    g3d::{Material, Texture2D},
+    render::imgui_support::TextureExt,
 };
 use hikari_editor::EngineState;
-use hikari::imgui::*;
 
 #[derive(Default)]
 pub struct MaterialEditor {
     is_open: bool,
     current: Option<Handle<Material>>,
     #[allow(unused)]
-    changed: bool
+    changed: bool,
 }
 impl MaterialEditor {
     #[allow(unused)]
@@ -59,9 +60,7 @@ impl EditorWindow for MaterialEditor {
                 //     ui.table_next_column();
                 outer_result = material_edit(ui, &mut material_editor.current, &asset_manager);
                 // }
-
-        });
-
+            });
 
         outer_result
     }
@@ -100,13 +99,11 @@ fn parameter_edit(
             if let Some(handle) = texture {
                 let pool = asset_manager.read_assets().unwrap();
                 if let Some(texture) = pool.get(handle) {
-                   Image::new(ui.get_texture_id(texture.raw()), [64.0, 64.0])
-                   .build(ui);
+                    Image::new(ui.get_texture_id(texture.raw()), [64.0, 64.0]).build(ui);
                 }
             }
             ui.table_next_column();
-            AssetSelector::new(ui, name, texture_extensions)
-            .build(texture, asset_manager);
+            AssetSelector::new(ui, name, texture_extensions).build(texture, asset_manager);
             (other)();
         }
     }
@@ -118,7 +115,6 @@ fn material_edit(
     current: &mut Option<Handle<Material>>,
     asset_manager: &AssetManager,
 ) -> anyhow::Result<()> {
-
     if let Some(_table_token) = ui.begin_table_with_sizing(
         "MaterialEditor",
         2,
@@ -142,58 +138,79 @@ fn material_edit(
         ui.table_next_column();
         ui.text("Material");
         ui.table_next_column();
-        AssetSelector::new(ui,  "MaterialAsset", hikari::g3d::SUPPORTED_MATERIAL_EXTENSIONS)
+        AssetSelector::new(
+            ui,
+            "MaterialAsset",
+            hikari::g3d::SUPPORTED_MATERIAL_EXTENSIONS,
+        )
         .build(current, asset_manager);
     }
     if let Some(handle) = &current {
         let mut materials = asset_manager.write_assets::<Material>().unwrap();
         let material = materials.get_mut(&handle);
         if let Some(material) = material {
-            parameter_edit(ui, "Albedo", &mut material.albedo, || {
-                ui.full_width(|| {
-                    ui.color_edit4_config("##AlbedoFactor", &mut material.albedo_factor)
-                        .picker(true)
-                        .build();
-                });
-            }, asset_manager)?;
+            parameter_edit(
+                ui,
+                "Albedo",
+                &mut material.albedo,
+                || {
+                    ui.full_width(|| {
+                        ui.color_edit4_config("##AlbedoFactor", &mut material.albedo_factor)
+                            .picker(true)
+                            .build();
+                    });
+                },
+                asset_manager,
+            )?;
 
-            parameter_edit(ui, "Roughness", &mut material.roughness, || {
-                ui.full_width(|| {
-                    ui.slider(
-                        "##RoughnessFactor",
-                        0.0,
-                        1.0,
-                        &mut material.roughness_factor,
-                    );
-                });
-            }, asset_manager)?;
+            parameter_edit(
+                ui,
+                "Roughness",
+                &mut material.roughness,
+                || {
+                    ui.full_width(|| {
+                        ui.slider(
+                            "##RoughnessFactor",
+                            0.0,
+                            1.0,
+                            &mut material.roughness_factor,
+                        );
+                    });
+                },
+                asset_manager,
+            )?;
 
-            parameter_edit(ui, "Metallic", &mut material.metallic, || {
-                ui.full_width(|| {
-                    ui.slider(
-                        "##MetallicFactor",
-                        0.0,
-                        1.0,
-                        &mut material.metallic_factor,
-                    );
-                });
-            }, asset_manager)?;
+            parameter_edit(
+                ui,
+                "Metallic",
+                &mut material.metallic,
+                || {
+                    ui.full_width(|| {
+                        ui.slider("##MetallicFactor", 0.0, 1.0, &mut material.metallic_factor);
+                    });
+                },
+                asset_manager,
+            )?;
 
-            parameter_edit(ui, "Emissive", &mut material.emissive, || {
-                ui.full_width(|| {
-                    ui.color_edit3_config("##EmissiveFactor", &mut material.emissive_factor)
-                        .picker(true)
-                        .build();
-                    Drag::new("##EmissiveStrength")
-                    .range(0.0, f32::MAX)
-                    .speed(0.25)
-                    .build(ui, &mut material.emissive_strength);
-                });
-            }, asset_manager)?;
+            parameter_edit(
+                ui,
+                "Emissive",
+                &mut material.emissive,
+                || {
+                    ui.full_width(|| {
+                        ui.color_edit3_config("##EmissiveFactor", &mut material.emissive_factor)
+                            .picker(true)
+                            .build();
+                        Drag::new("##EmissiveStrength")
+                            .range(0.0, f32::MAX)
+                            .speed(0.25)
+                            .build(ui, &mut material.emissive_strength);
+                    });
+                },
+                asset_manager,
+            )?;
 
-            parameter_edit(ui, "Normal", &mut material.normal, || {
-
-            }, asset_manager)?;
+            parameter_edit(ui, "Normal", &mut material.normal, || {}, asset_manager)?;
             // let _table_token = ui.begin_table_with_sizing(
             //     "MaterialEditor",
             //     2,

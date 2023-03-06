@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+use hikari::imgui::*;
 use hikari::math::{EulerRot, Quat, Transform, Vec3};
 use hikari_editor::*;
-use hikari::imgui::*;
 
 use crate::{components::EditorComponent, *};
 
@@ -82,21 +82,21 @@ impl EditorComponent for Transform {
         // self.position = position.into();
 
         let width = ui.content_region_avail()[0];
-        
+
         DragVec3::new("position")
-        .speed(0.1)
-        .width(width)
-        .build(ui, &mut self.position);
+            .speed(0.1)
+            .width(width)
+            .build(ui, &mut self.position);
 
         rotation_controls(ui, width, &mut self.rotation, entity, euler_cache);
 
         DragVec3::new("scale")
-        .speed(0.03)
-        .width(width)
-        .reset(1.0)
-        .range(0.0, f32::MAX)
-        .proportional(editor.properties.scale_locked)
-        .build(ui, &mut self.scale);
+            .speed(0.03)
+            .width(width)
+            .reset(1.0)
+            .range(0.0, f32::MAX)
+            .proportional(editor.properties.scale_locked)
+            .build(ui, &mut self.scale);
 
         ui.same_line_with_spacing(0.0, 5.0);
         ui.checkbox("##ScaleLock", &mut editor.properties.scale_locked);

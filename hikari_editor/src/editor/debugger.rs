@@ -1,9 +1,9 @@
 use super::{Editor, EditorWindow};
+use hikari::imgui::*;
 use hikari::{
     asset::{AssetDB, AssetManager},
     pbr::WorldRenderer,
 };
-use hikari::imgui::*;
 use hikari_editor::EngineState;
 use parking_lot::{lock_api::RwLockUpgradableReadGuard, RwLockWriteGuard};
 
@@ -13,9 +13,9 @@ pub struct Debugger {
 }
 impl Debugger {
     pub fn new() -> Self {
-        Self { 
+        Self {
             is_open: false,
-            search: String::new()
+            search: String::new(),
         }
     }
 }
@@ -28,7 +28,7 @@ fn estimate_asset_size(asset_db: &AssetDB) -> u64 {
         }
     }
 
-   size
+    size
 }
 // https://git.sr.ht/~f9/human_bytes/tree/main/item/src/lib.rs
 fn human_bytes(size: u64) -> String {
@@ -128,29 +128,31 @@ impl EditorWindow for Debugger {
 
                         ui.text(format!("Asset Count: {}", asset_db.records().len()));
 
-                        if let Some(size) = ui
-                            .storage()
-                            .get::<String>(ui.new_id_int(ASSET_FILE_SIZE))
+                        if let Some(size) =
+                            ui.storage().get::<String>(ui.new_id_int(ASSET_FILE_SIZE))
                         {
                             ui.same_line();
                             ui.text(format!("Estimated Size: {}", size));
                         }
-                        
+
                         ui.input_text("##Search", &mut debugger.search)
-                        .hint("Search")
-                        .build();
+                            .hint("Search")
+                            .build();
 
                         if let Some(_token) = ui.begin_table_header_with_flags(
                             "AssetInfo",
-                            [TableColumnSetup {
-                                name: "Path",
-                                init_width_or_weight: 50.0,
-                                ..Default::default()
-                            }, TableColumnSetup {
-                                name: "UUID",
-                                init_width_or_weight: 50.0,
-                                ..Default::default()
-                            }],
+                            [
+                                TableColumnSetup {
+                                    name: "Path",
+                                    init_width_or_weight: 50.0,
+                                    ..Default::default()
+                                },
+                                TableColumnSetup {
+                                    name: "UUID",
+                                    init_width_or_weight: 50.0,
+                                    ..Default::default()
+                                },
+                            ],
                             TableFlags::BORDERS
                                 | TableFlags::ROW_BG
                                 | TableFlags::RESIZABLE
@@ -161,30 +163,35 @@ impl EditorWindow for Debugger {
                             if debugger.search.is_empty() {
                                 let clipper = ListClipper::new(asset_db.records().len() as i32);
                                 let mut clipper = clipper.begin(ui);
-                                
+
                                 while clipper.step() {
-                                    for record_ix in clipper.display_start()..clipper.display_end() {
+                                    for record_ix in clipper.display_start()..clipper.display_end()
+                                    {
                                         let record = &asset_db.records()[record_ix as usize];
                                         draw_asset_db(ui, record, &asset_db);
                                     }
                                 }
-
                             } else {
-                                let filtered: Vec<_> = asset_db.records().iter()
-                                .filter(|record| {
-                                    let path_string = record.path.to_str()
-                                    .map(|str| str.to_lowercase())
-                                    .unwrap_or(String::new());
+                                let filtered: Vec<_> = asset_db
+                                    .records()
+                                    .iter()
+                                    .filter(|record| {
+                                        let path_string = record
+                                            .path
+                                            .to_str()
+                                            .map(|str| str.to_lowercase())
+                                            .unwrap_or(String::new());
 
-                                    path_string.contains(&debugger.search.to_lowercase())
-                                })
-                                .collect();
+                                        path_string.contains(&debugger.search.to_lowercase())
+                                    })
+                                    .collect();
 
                                 let clipper = ListClipper::new(filtered.len() as i32);
                                 let mut clipper = clipper.begin(ui);
 
                                 while clipper.step() {
-                                    for record_ix in clipper.display_start()..clipper.display_end() {
+                                    for record_ix in clipper.display_start()..clipper.display_end()
+                                    {
                                         let record = &filtered[record_ix as usize];
                                         draw_asset_db(ui, record, &asset_db);
                                     }

@@ -16,7 +16,6 @@ pub trait ImguiInternalExt {
         txt_0: impl AsRef<str>,
         txt_1: Option<impl AsRef<str>>,
     ) -> (*const sys::cty::c_char, *const sys::cty::c_char);
-    
 }
 
 impl ImguiInternalExt for imgui::Ui {

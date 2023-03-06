@@ -1,5 +1,4 @@
-use hikari_math::{Transform, Vec3, Quat};
-
+use hikari_math::{Quat, Transform, Vec3};
 
 //Creates a correction matrix for right handed transformation to left handed transformation assuming the following convention:
 // Right Handed: +x = right, +y = up, +z = forward
@@ -15,7 +14,7 @@ pub fn left_handed_correction(transform: Transform) -> Transform {
     Transform {
         position,
         scale,
-        rotation
+        rotation,
     }
 }
 pub fn ccw_to_cw<T>(arr: &mut [T]) {

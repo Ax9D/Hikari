@@ -1,21 +1,22 @@
 use std::{
     any::Any,
+    collections::HashSet,
     path::{Path, PathBuf},
-    sync::Arc, collections::HashSet,
+    sync::Arc,
 };
 
-use crate::{Asset, AssetManager, IO, BufReadSeek, ErasedHandle, Handle};
+use crate::{Asset, AssetManager, BufReadSeek, ErasedHandle, Handle, IO};
 
 pub struct LoadContext {
     asset_dir: PathBuf,
     rel_path: PathBuf,
     io: Arc<dyn IO>,
-    reader: Box<dyn BufReadSeek +  Send + Sync + 'static>,
+    reader: Box<dyn BufReadSeek + Send + Sync + 'static>,
     settings: Box<dyn Any + Send + Sync + 'static>,
     asset: Option<Box<dyn Any + Send + Sync + 'static>>,
     reload: bool,
     ass_man: AssetManager,
-    pub(crate) dependencies: Dependencies
+    pub(crate) dependencies: Dependencies,
 }
 impl LoadContext {
     pub fn new<T: Asset>(
@@ -36,7 +37,7 @@ impl LoadContext {
             asset: None,
             reload,
             ass_man,
-            dependencies: Dependencies::default()
+            dependencies: Dependencies::default(),
         }
     }
     pub fn io(&self) -> &dyn IO {

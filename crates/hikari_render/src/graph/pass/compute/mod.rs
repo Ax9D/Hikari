@@ -81,7 +81,7 @@ impl<T: Args> ComputePass<T> {
             | AccessType::DepthStencilAttachmentRead
             | AccessType::ComputeShaderReadOther
             | AccessType::AnyShaderReadSampledImageOrUniformTexelBuffer
-            | AccessType::AnyShaderReadOther 
+            | AccessType::AnyShaderReadOther
             | AccessType::TransferRead => {}
             _ => panic!(
                 "Invalid access type {:?} for image read in computepass",

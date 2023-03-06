@@ -91,7 +91,7 @@ impl<'ui, L: AsRef<str>> DragDropHelperSource<'ui, L> {
     }
 }
 
-/// A header for a typed payload for compatibility with existing imgui-rs drag drop api 
+/// A header for a typed payload for compatibility with existing imgui-rs drag drop api
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 #[repr(C)]
 struct TypedPayloadHeader {
@@ -116,7 +116,6 @@ impl TypedPayloadHeader {
         }
     }
 }
-
 
 pub struct DragDropSourceHelperToolTip<'ui>(PhantomData<&'ui Ui>);
 
@@ -150,15 +149,15 @@ impl<'ui> DragDropHelperTarget<'ui> {
         flags: DragDropFlags,
     ) -> Option<DragDropHelperPayload<T>> {
         let mut storage = self.0.storage();
-        
+
         let drag_drop_storage = storage
-        .get_or_insert_with(self.0.new_id_ptr(&GLOBAL_DRAG_DROP_STORAGE_ID), || {
-            DragDropStorage::default()
-        });
-        
+            .get_or_insert_with(self.0.new_id_ptr(&GLOBAL_DRAG_DROP_STORAGE_ID), || {
+                DragDropStorage::default()
+            });
+
         let data = drag_drop_storage.take_drag_data::<T>(&payload_name)?;
         let raw_payload = unsafe { self.accept_payload_unchecked(payload_name, flags)? };
-        
+
         // let received =
         // unsafe { (raw_payload.Data as *const TypedPayloadHeader).read_unaligned() };
 

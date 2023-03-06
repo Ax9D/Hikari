@@ -80,7 +80,8 @@ pub fn build_pass(
                                 if let Some(scene) = scenes.get(handle) {
                                     let mesh = &scene.meshes[*mesh_ix];
 
-                                    let transform = transform.get_matrix() * mesh.transform.get_matrix();
+                                    let transform =
+                                        transform.get_matrix() * mesh.transform.get_matrix();
 
                                     cmd.push_constants(&PushConstants { transform }, 0);
 

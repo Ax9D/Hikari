@@ -1,7 +1,7 @@
 use std::{
     ffi::{CStr, CString},
     io::{Read, Write},
-    sync::{Arc},
+    sync::Arc,
 };
 
 use ash::{
@@ -12,7 +12,7 @@ use ash::{
 use gpu_allocator::vulkan::*;
 use parking_lot::{Mutex, MutexGuard};
 
-use crate::{descriptor::DescriptorSetLayoutCache, swapchain::SurfaceData, delete::Deleter};
+use crate::{delete::Deleter, descriptor::DescriptorSetLayoutCache, swapchain::SurfaceData};
 
 const VK_PIPELINE_CACHE_FILE: &str = "vk_pipeline_cache";
 
@@ -405,7 +405,7 @@ impl Device {
             extensions,
             #[cfg(feature = "aftermath")]
             aftermath,
-            deleter: Deleter::new()
+            deleter: Deleter::new(),
         }))
     }
     fn pick_optimal(
@@ -434,7 +434,7 @@ impl Device {
                 }
             }
 
-            if unified_queue && features  {
+            if unified_queue && features {
                 return Some(device);
             }
         }
@@ -448,7 +448,12 @@ impl Device {
     pub fn model(&self) -> &str {
         self.device_properties.name()
     }
-    fn setup_extension(entry: &ash::Entry, instance: &ash::Instance, device: &ash::Device, debug: bool) -> VkExtensions {
+    fn setup_extension(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        device: &ash::Device,
+        debug: bool,
+    ) -> VkExtensions {
         let synchronization2 = ash::extensions::khr::Synchronization2::new(instance, device);
 
         let debug_utils = if debug {
@@ -457,7 +462,10 @@ impl Device {
             None
         };
 
-        VkExtensions { synchronization2, debug_utils }
+        VkExtensions {
+            synchronization2,
+            debug_utils,
+        }
     }
     pub fn extensions(&self) -> &VkExtensions {
         &self.extensions
@@ -508,12 +516,12 @@ impl Device {
         );
 
         std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(VK_PIPELINE_CACHE_FILE)
-        .expect("Couldn't create pipeline cache file")
-        .write_all(&data)
-        .expect("Couldn't write to pipeline cache file");
+            .write(true)
+            .create(true)
+            .open(VK_PIPELINE_CACHE_FILE)
+            .expect("Couldn't create pipeline cache file")
+            .write_all(&data)
+            .expect("Couldn't write to pipeline cache file");
 
         //std::fs::write(VK_PIPELINE_CACHE_FILE, &data).expect("Couldn't write to pipeline cache file");
 
@@ -763,10 +771,10 @@ bitflags::bitflags! {
 
 impl Default for Features {
     fn default() -> Self {
-        Features::SAMPLER_ANISOTROPY |
-        Features::FILL_MODE_NON_SOLID |
-        Features::DEPTH_CLAMP |
-        Features::WIDE_LINES
+        Features::SAMPLER_ANISOTROPY
+            | Features::FILL_MODE_NON_SOLID
+            | Features::DEPTH_CLAMP
+            | Features::WIDE_LINES
     }
 }
 impl From<vk::PhysicalDeviceFeatures> for Features {

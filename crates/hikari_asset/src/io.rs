@@ -1,5 +1,5 @@
 use std::{
-    io::{Write, BufRead, BufReader, Seek},
+    io::{BufRead, BufReader, Seek, Write},
     path::{Path, PathBuf},
 };
 

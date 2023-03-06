@@ -1,6 +1,4 @@
-use hikari::{
-    math::{Quat, Transform, Vec2, Vec3},
-};
+use hikari::math::{Quat, Transform, Vec2, Vec3};
 
 use hikari::imgui::*;
 
@@ -21,10 +19,9 @@ impl Default for ViewportCamera {
 }
 
 impl ViewportCamera {
-
     pub fn manipulate(&mut self, ui: &Ui, transform: &mut Transform, dt: f32) {
         hikari::dev::profile_function!();
-        
+
         let speed = self.speed;
         let sensitivity = self.angular_speed;
 
@@ -68,7 +65,8 @@ impl ViewportCamera {
 
             *rotation += delta;
 
-            let delta_quat = Quat::from_axis_angle(Vec3::Y, rotation.x) * Quat::from_axis_angle(Vec3::X, rotation.y);
+            let delta_quat = Quat::from_axis_angle(Vec3::Y, rotation.x)
+                * Quat::from_axis_angle(Vec3::X, rotation.y);
 
             //*rotation *= delta_quat;
 

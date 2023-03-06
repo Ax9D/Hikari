@@ -37,7 +37,7 @@ impl Default for Material {
             emissive_factor: Vec3::ZERO,
             emissive_strength: 1.0,
             normal: None,
-         }
+        }
     }
 }
 
@@ -55,10 +55,22 @@ impl Loader for MaterialLoader {
     {
         let material: Material = serde_yaml::from_reader(context.reader())?;
 
-        material.albedo.as_ref().map(|texture| context.depends_on(texture));
-        material.roughness.as_ref().map(|texture| context.depends_on(texture));
-        material.metallic.as_ref().map(|texture| context.depends_on(texture));
-        material.normal.as_ref().map(|texture| context.depends_on(texture));
+        material
+            .albedo
+            .as_ref()
+            .map(|texture| context.depends_on(texture));
+        material
+            .roughness
+            .as_ref()
+            .map(|texture| context.depends_on(texture));
+        material
+            .metallic
+            .as_ref()
+            .map(|texture| context.depends_on(texture));
+        material
+            .normal
+            .as_ref()
+            .map(|texture| context.depends_on(texture));
 
         context.set_asset(material);
         Ok(())
@@ -74,7 +86,11 @@ impl Saver for MaterialLoader {
         &SUPPORTED_MATERIAL_EXTENSIONS
     }
 
-    fn save(&self, context: &mut hikari_asset::SaveContext, writer: &mut dyn std::io::Write) -> anyhow::Result<()> {
+    fn save(
+        &self,
+        context: &mut hikari_asset::SaveContext,
+        writer: &mut dyn std::io::Write,
+    ) -> anyhow::Result<()> {
         serde_yaml::to_writer(writer, context.get_asset::<Material>())?;
 
         Ok(())

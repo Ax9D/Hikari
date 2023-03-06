@@ -1,8 +1,5 @@
 #![allow(unused)]
-use std::{
-    any::TypeId,
-    collections::{HashMap},
-};
+use std::{any::TypeId, collections::HashMap};
 
 use hikari::core::{Component, ComponentError, Entity, NoSuchEntity, World};
 use hikari::imgui::Ui;
@@ -102,7 +99,7 @@ pub trait EditorComponent: Component {
     fn new() -> Self
     where
         Self: Sized;
-    fn sort_key() -> usize { 
+    fn sort_key() -> usize {
         usize::MAX
     }
     fn draw(

@@ -2,36 +2,37 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ash::vk;
 
-
 struct IndexAllocator {
     new_index: AtomicUsize,
     freed_indices: flume::Receiver<usize>,
-    freed_indices_sender: flume::Sender<usize>
+    freed_indices_sender: flume::Sender<usize>,
 }
 
 impl IndexAllocator {
     pub fn allocate(&self) -> usize {
-        self.freed_indices.try_iter().next().unwrap_or_else(|| {
-            self.new_index.fetch_add(1, Ordering::Relaxed)
-        })
+        self.freed_indices
+            .try_iter()
+            .next()
+            .unwrap_or_else(|| self.new_index.fetch_add(1, Ordering::Relaxed))
     }
     pub fn deallocate(&self, index: usize) {
-        self.freed_indices_sender.send(index).expect("Failed to send")
+        self.freed_indices_sender
+            .send(index)
+            .expect("Failed to send")
     }
 }
 
 pub struct BindlessSet {
-    textures: BindlessTextures
+    textures: BindlessTextures,
 }
 
 struct RegisterTexture {
     view: vk::ImageView,
     sampler: vk::Sampler,
-    layout: vk::ImageLayout
+    layout: vk::ImageLayout,
 }
 struct BindlesTexturesInner {
     index_allocator: IndexAllocator,
-
 }
 impl BindlesTexturesInner {
     // pub fn register_texture(&self, view: vk::ImageView, sampler: vk::Sampler, layout: vk::ImageLayout) -> usize {
@@ -55,9 +56,6 @@ impl BindlesTexturesInner {
     // }
 }
 
-pub struct BindlessTextures {
-}
+pub struct BindlessTextures {}
 
-impl BindlessTextures {
-
-}
+impl BindlessTextures {}

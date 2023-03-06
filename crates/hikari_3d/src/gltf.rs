@@ -7,12 +7,7 @@ use std::{
 use hikari_asset::{Handle, LoadContext, Mode};
 use hikari_math::{Quat, Vec2, Vec3, Vec4};
 
-use crate::{
-    material::Material,
-    texture::{Texture2D},
-
-    SubMesh, TextureConfig, processing,
-};
+use crate::{material::Material, processing, texture::Texture2D, SubMesh, TextureConfig};
 #[allow(unused)]
 struct ImportData {
     path: PathBuf,
@@ -106,7 +101,7 @@ fn load_texture(
         | gltf::texture::MinFilter::NearestMipmapLinear
         | gltf::texture::MinFilter::LinearMipmapNearest
         | gltf::texture::MinFilter::LinearMipmapLinear => true,
-        _=> false
+        _ => false,
     };
     //println!("Loading texture {}", name);
 
@@ -152,15 +147,7 @@ fn parse_texture_data(
             let parent_buffer = &gltf.buffers()[view.buffer().index()].0;
             let data = &parent_buffer[start..end];
 
-            create_and_load_image_with_data(
-                    &data,
-                    texture,
-                    config,
-                    mime_type,
-                    gltf,
-                    load_context,
-            )
-
+            create_and_load_image_with_data(&data, texture, config, mime_type, gltf, load_context)
         }
         gltf::image::Source::Uri { uri, mime_type } => {
             //Credit: https://github.com/bwasty/gltf-viewer/blob/master/src/render/texture.rs
@@ -224,9 +211,10 @@ fn create_and_load_image_with_data(
 
     let asset_dir = load_context.asset_dir();
     if !new_texture_path.exists() {
-        let mut file = load_context
-            .io()
-            .write_file(&asset_dir.join(&new_texture_path), &Mode::create_and_write())?;
+        let mut file = load_context.io().write_file(
+            &asset_dir.join(&new_texture_path),
+            &Mode::create_and_write(),
+        )?;
         file.write(&data)?;
         file.flush()?;
     }
@@ -260,7 +248,7 @@ fn load_material(
     let material_id = material.index().unwrap_or(ix).to_string();
     let material_name = material.name().unwrap_or(&material_id);
 
-    let mut file_name = format!("{}_material_{}",import_data.filename(), material_name);
+    let mut file_name = format!("{}_material_{}", import_data.filename(), material_name);
 
     file_name.push_str(".hmat");
 
@@ -268,22 +256,32 @@ fn load_material(
     if !material_path.exists() {
         let pbr = material.pbr_metallic_roughness();
 
-        let uv_set =pbr
-        .base_color_texture()
-        .or(pbr.metallic_roughness_texture())
-        .map(|info| info.tex_coord())
-        .unwrap_or(0);// Try to guess the uv_set
+        let uv_set = pbr
+            .base_color_texture()
+            .or(pbr.metallic_roughness_texture())
+            .map(|info| info.tex_coord())
+            .unwrap_or(0); // Try to guess the uv_set
 
         let albedo = if let Some(info) = pbr.base_color_texture() {
-            Some(load_texture(import_data, &info.texture(), load_context, true)?)
-            } else {
-                None
+            Some(load_texture(
+                import_data,
+                &info.texture(),
+                load_context,
+                true,
+            )?)
+        } else {
+            None
         };
 
         let albedo_factor = Vec4::from(pbr.base_color_factor());
 
         let roughness = if let Some(info) = pbr.metallic_roughness_texture() {
-        Some(load_texture(import_data, &info.texture(), load_context, false)?)
+            Some(load_texture(
+                import_data,
+                &info.texture(),
+                load_context,
+                false,
+            )?)
         } else {
             None
         };
@@ -291,30 +289,41 @@ fn load_material(
         let roughness_factor = pbr.roughness_factor();
 
         let metallic = if let Some(info) = pbr.metallic_roughness_texture() {
-                Some(load_texture(import_data, &info.texture(), load_context, false)?)
-            } else {
-                None
-            };
-
-        let metallic_factor = pbr.metallic_factor();
-
-        let emissive = if let Some(info) = material
-            .emissive_texture() {
-                Some(load_texture(import_data, &info.texture(), load_context, true)?)
-            } else {
-                None
-            };
-
-
-        let emissive_factor = material.emissive_factor().into();
-
-        let normal = if let Some(info) = material
-        .normal_texture() {
-            Some(load_texture(import_data, &info.texture(), load_context, false)?)
+            Some(load_texture(
+                import_data,
+                &info.texture(),
+                load_context,
+                false,
+            )?)
         } else {
             None
         };
 
+        let metallic_factor = pbr.metallic_factor();
+
+        let emissive = if let Some(info) = material.emissive_texture() {
+            Some(load_texture(
+                import_data,
+                &info.texture(),
+                load_context,
+                true,
+            )?)
+        } else {
+            None
+        };
+
+        let emissive_factor = material.emissive_factor().into();
+
+        let normal = if let Some(info) = material.normal_texture() {
+            Some(load_texture(
+                import_data,
+                &info.texture(),
+                load_context,
+                false,
+            )?)
+        } else {
+            None
+        };
 
         let material = Material {
             albedo,
@@ -330,7 +339,9 @@ fn load_material(
             ..Default::default()
         };
 
-        let handle = load_context.asset_manager().create(&material_path, material, None)?;
+        let handle = load_context
+            .asset_manager()
+            .create(&material_path, material, None)?;
 
         load_context.asset_manager().save(&handle)?;
 

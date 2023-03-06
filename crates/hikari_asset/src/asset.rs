@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-use type_uuid::{TypeUuid};
+use type_uuid::TypeUuid;
 use uuid::Uuid;
 
 use crate::{ErasedHandle, Record};

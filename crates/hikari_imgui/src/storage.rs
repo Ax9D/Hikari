@@ -58,7 +58,7 @@ fn hash(id: imgui::Id, type_id: TypeId) -> u64 {
     use std::hash::Hash;
     let mut state = FxHasher::default();
 
-    let id: u32 = unsafe {std::mem::transmute(id)}; // No way to retrieve internal id, sadge :(
+    let id: u32 = unsafe { std::mem::transmute(id) }; // No way to retrieve internal id, sadge :(
 
     id.hash(&mut state);
     type_id.hash(&mut state);

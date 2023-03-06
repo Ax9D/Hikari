@@ -398,7 +398,7 @@ impl ShaderStage {
 }
 pub struct ShaderProgramBuilder<'entry, 'defines> {
     name: String,
-    stages: HashMap<ShaderStage, (ShaderCode<'entry>, &'defines[&'defines str])>,
+    stages: HashMap<ShaderStage, (ShaderCode<'entry>, &'defines [&'defines str])>,
 }
 
 // fn shaderc_to_vulkan_stage(kind: shaderc::ShaderKind) -> vk::ShaderStageFlags {
@@ -456,8 +456,13 @@ impl<'entry, 'defines> ShaderProgramBuilder<'entry, 'defines> {
             .with_stage(ShaderStage::Vertex, vertex.clone(), &[])
             .with_stage(ShaderStage::Fragment, fragment.clone(), &[])
     }
-    pub fn with_stage(mut self, stage: ShaderStage, code: ShaderCode<'entry>, defines: &'defines[&'defines str]) -> Self {
-        self.stages.insert(stage,(code, defines));
+    pub fn with_stage(
+        mut self,
+        stage: ShaderStage,
+        code: ShaderCode<'entry>,
+        defines: &'defines [&'defines str],
+    ) -> Self {
+        self.stages.insert(stage, (code, defines));
 
         self
     }
@@ -540,7 +545,11 @@ impl<'entry, 'defines> ShaderProgramBuilder<'entry, 'defines> {
             reflection_data,
         })
     }
-    pub fn build(mut self, device: &Arc<crate::Device>, options: Option<CompileOptions>) -> Result<Arc<Shader>, ShaderCreateError> {
+    pub fn build(
+        mut self,
+        device: &Arc<crate::Device>,
+        options: Option<CompileOptions>,
+    ) -> Result<Arc<Shader>, ShaderCreateError> {
         let mut modules = vec![];
 
         let compile_options = options.unwrap_or_else(|| CompileOptions::new().unwrap());

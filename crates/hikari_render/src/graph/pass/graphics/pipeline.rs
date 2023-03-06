@@ -183,7 +183,7 @@ pub struct RasterizerState {
     pub depth_bias_constant_factor: f32,
     pub depth_bias_clamp: f32,
     pub depth_bias_slope_factor: f32,
-    pub line_width: f32
+    pub line_width: f32,
 }
 impl Default for RasterizerState {
     fn default() -> Self {
@@ -196,7 +196,8 @@ impl Default for RasterizerState {
             depth_bias_constant_factor: 0.0,
             depth_bias_clamp: 0.0,
             depth_bias_slope_factor: 0.0,
-            line_width: 1.0 }
+            line_width: 1.0,
+        }
     }
 }
 impl RasterizerState {

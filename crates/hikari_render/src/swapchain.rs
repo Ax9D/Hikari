@@ -6,8 +6,8 @@ use ash::{
 };
 
 use crate::{
-    renderpass::PhysicalRenderpass,
     image::{ImageConfig, SampledImage},
+    renderpass::PhysicalRenderpass,
 };
 
 #[derive(Clone)]

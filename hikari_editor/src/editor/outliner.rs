@@ -1,8 +1,8 @@
 use hikari::core::*;
 use hikari::math::*;
 
-use hikari::imgui::*;
 use crate::widgets::RenameInput;
+use hikari::imgui::*;
 use hikari_editor::*;
 
 use super::meta::{EditorInfo, EditorOnly};
@@ -45,18 +45,18 @@ impl EditorWindow for Outliner {
             .build(|| {
                 let outliner = &mut editor.outliner;
                 let rename_state = &mut editor.rename_state;
-    
+
                 if ui.button("+") {
                     outliner.add_entity(&mut world, "untitled");
                 }
-    
+
                 if ui.is_window_focused() && ui.is_key_down(Key::Delete) {
                     if let Some(entity) = outliner.selected {
                         outliner.remove_entity(&mut world, entity).unwrap();
                         outliner.selected = None;
                     }
                 }
-    
+
                 let mut ordered_entities;
                 {
                     hikari::dev::profile_scope!("Outliner Entity sorting");
@@ -64,15 +64,15 @@ impl EditorWindow for Outliner {
                     for (entity, info) in world.query_mut::<Without<&EditorInfo, &EditorOnly>>() {
                         ordered_entities.push((entity, info.index));
                     }
-    
+
                     ordered_entities.sort_by(|(_, a), (_, b)| a.cmp(b));
                 }
-    
+
                 for (entity, _) in ordered_entities {
                     let mut editor_info = world.get_component::<&mut EditorInfo>(entity).unwrap();
                     let entity_id = ui.new_id_int(entity.id() as i32);
                     let _id = ui.push_id_int(entity.id() as i32);
-    
+
                     RenameInput::new(entity_id, &mut editor_info.name).build(
                         ui,
                         rename_state,
@@ -81,7 +81,7 @@ impl EditorWindow for Outliner {
                                 .selectable_config(&current)
                                 .selected(outliner.selected == Some(entity))
                                 .build();
-    
+
                             if clicked {
                                 outliner.selected = Some(entity);
                             }
@@ -89,7 +89,7 @@ impl EditorWindow for Outliner {
                     );
                 }
             });
-    
+
         Ok(())
     }
 }

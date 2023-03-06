@@ -36,7 +36,12 @@ pub struct Viewport {
     gizmo_state: GizmoState,
     viewport_camera: ViewportCamera,
 }
-fn gizmo_toolbar(ui: &imgui::Ui, state: &mut GizmoState, camera_state: &mut ViewportCamera, editor_camera: &mut Camera) {
+fn gizmo_toolbar(
+    ui: &imgui::Ui,
+    state: &mut GizmoState,
+    camera_state: &mut ViewportCamera,
+    editor_camera: &mut Camera,
+) {
     let parent_pos = ui.window_pos();
     let parent_size = ui.window_size();
     let size = [200.0, 50.0];
@@ -46,12 +51,16 @@ fn gizmo_toolbar(ui: &imgui::Ui, state: &mut GizmoState, camera_state: &mut View
         parent_pos[1] + pos_offset[1] + size[1],
     ];
     unsafe {
-        imgui::sys::igSetNextWindowPos(pos.into(), imgui::sys::ImGuiCond_Always as i32, [0.0, 0.0].into());
+        imgui::sys::igSetNextWindowPos(
+            pos.into(),
+            imgui::sys::ImGuiCond_Always as i32,
+            [0.0, 0.0].into(),
+        );
     };
     ui.child_window("Gizmo Toolbar")
         .size(size)
         .flags(
-        imgui::WindowFlags::NO_TITLE_BAR
+            imgui::WindowFlags::NO_TITLE_BAR
         | imgui::WindowFlags::NO_RESIZE
         | imgui::WindowFlags::NO_SCROLLBAR
         //imgui:: | WindowFlags::NO_INPUTS
@@ -298,16 +307,25 @@ impl EditorWindow for Viewport {
 
                 {
                     draw_dir_light(ui, &mut world, viewport_min, viewport_max);
-                    let mut editor_camera = world.get_component::<&mut Camera>(editor_camera).unwrap();
-                    gizmo_toolbar(ui, &mut viewport.gizmo_state, &mut viewport.viewport_camera, &mut editor_camera );
+                    let mut editor_camera =
+                        world.get_component::<&mut Camera>(editor_camera).unwrap();
+                    gizmo_toolbar(
+                        ui,
+                        &mut viewport.gizmo_state,
+                        &mut viewport.viewport_camera,
+                        &mut editor_camera,
+                    );
                 }
 
                 if let Some(entity) = outliner.selected {
-                    if let Ok(mut query) = world.query_one::<(&Camera, &mut Transform)>(editor_camera) {
+                    if let Ok(mut query) =
+                        world.query_one::<(&Camera, &mut Transform)>(editor_camera)
+                    {
                         let (camera, cam_transform) = query.get().unwrap();
 
                         if let Ok(mut transform) = world.get_component::<&mut Transform>(entity) {
-                            let projection = camera.get_projection_matrix(window_size.0, window_size.1);
+                            let projection =
+                                camera.get_projection_matrix(window_size.0, window_size.1);
                             let view = cam_transform.get_matrix().inverse();
 
                             if let Some(operation) = viewport.gizmo_state.operation {

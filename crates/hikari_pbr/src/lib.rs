@@ -78,8 +78,14 @@ impl Plugin for PBRPlugin {
         let mut gfx = game.get_mut::<Gfx>();
         let mut shader_lib = game.get_mut::<ShaderLibrary>();
         let primitives = game.get::<Arc<hikari_3d::primitives::Primitives>>();
-        let renderer = WorldRenderer::new(&mut gfx, self.width, self.height, &mut shader_lib, &primitives)
-            .expect("Failed to create WorldRenderer");
+        let renderer = WorldRenderer::new(
+            &mut gfx,
+            self.width,
+            self.height,
+            &mut shader_lib,
+            &primitives,
+        )
+        .expect("Failed to create WorldRenderer");
         drop(gfx);
         drop(shader_lib);
         drop(primitives);

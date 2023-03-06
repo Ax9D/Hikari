@@ -5,7 +5,7 @@ use vec_map::VecMap;
 use vk_sync_fork::AccessType;
 
 use crate::{
-    graph::pass::AttachmentKind, renderpass::PhysicalRenderpass, image::SampledImage, Buffer,
+    graph::pass::AttachmentKind, image::SampledImage, renderpass::PhysicalRenderpass, Buffer,
 };
 
 use super::{pass::AnyPass, resources::GraphResources, Renderpass};
@@ -32,9 +32,7 @@ impl BarrierStorage {
         queue_index: u32,
     ) {
         let range = vk::ImageSubresourceRange {
-            aspect_mask: crate::image::sampled_image::format_to_aspect_flags(
-                image.config().format,
-            ),
+            aspect_mask: crate::image::sampled_image::format_to_aspect_flags(image.config().format),
             base_mip_level: 0,
             level_count: image.config().mip_levels,
             base_array_layer: 0,

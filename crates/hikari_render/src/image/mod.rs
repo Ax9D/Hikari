@@ -22,7 +22,7 @@ pub fn create_image(
             requirements,
             location,
             linear: false,
-            allocation_scheme: AllocationScheme::GpuAllocatorManaged
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
         })?;
 
         device
@@ -42,11 +42,13 @@ pub fn delete_image(
     }
     device.free_memory(allocation)
 }
-pub fn delete_image_view(device: &crate::Device,
-    image_view: vk::ImageView) {
-    unsafe { device.raw().destroy_image_view(image_view, None); }
+pub fn delete_image_view(device: &crate::Device, image_view: vk::ImageView) {
+    unsafe {
+        device.raw().destroy_image_view(image_view, None);
+    }
 }
-pub fn delete_sampler(device: &crate::Device,
-    sampler: vk::Sampler) {
-    unsafe { device.raw().destroy_sampler(sampler, None); }
+pub fn delete_sampler(device: &crate::Device, sampler: vk::Sampler) {
+    unsafe {
+        device.raw().destroy_sampler(sampler, None);
+    }
 }

@@ -1,18 +1,23 @@
-use hikari::{g3d::{Environment, EnvironmentTexture}, asset::AssetManager};
 use hikari::imgui::*;
+use hikari::{
+    asset::AssetManager,
+    g3d::{Environment, EnvironmentTexture},
+};
 
 use crate::components::EditorComponent;
 
 impl EditorComponent for Environment {
     fn name() -> &'static str
     where
-        Self: Sized {
+        Self: Sized,
+    {
         "Environment Component"
     }
 
     fn new() -> Self
     where
-        Self: Sized {
+        Self: Sized,
+    {
         Environment::default()
     }
 
@@ -49,10 +54,10 @@ impl EditorComponent for Environment {
             }
         }
         Drag::new("Intensity")
-        .range(0.0, f32::MAX)
-        .speed(0.01)
-        .build(ui, &mut self.intensity);
-    
+            .range(0.0, f32::MAX)
+            .speed(0.01)
+            .build(ui, &mut self.intensity);
+
         ui.checkbox("Use Proxy", &mut self.use_proxy);
         ui.disabled(!self.use_proxy, || {
             ui.slider("Mip Level", 0, 9, &mut self.mip_level);
@@ -63,7 +68,8 @@ impl EditorComponent for Environment {
 
     fn clone(&self) -> Self
     where
-        Self: Sized {
+        Self: Sized,
+    {
         <Self as Clone>::clone(self)
     }
 }

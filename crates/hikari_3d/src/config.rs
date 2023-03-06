@@ -88,7 +88,7 @@ impl Default for TextureConfig {
             wrap_y: WrapMode::Repeat,
             aniso_level: 8.0,
             generate_mips: true,
-            max_mip_levels: 15
+            max_mip_levels: 15,
         }
     }
 }
@@ -115,39 +115,37 @@ impl TextureConfig {
             WrapMode::Repeat => vk::SamplerAddressMode::REPEAT,
         };
         let wrap_z = vk::SamplerAddressMode::REPEAT;
-    
+
         let mip_filtering = match self.filtering {
             FilterMode::Closest => vk::SamplerMipmapMode::NEAREST,
             FilterMode::Linear => vk::SamplerMipmapMode::LINEAR,
         };
-    
+
         if self.generate_mips && self.max_mip_levels == 0 {
             return Err(anyhow::anyhow!("Max mip levels must be greater than 0"));
         }
-    
-        Ok(
-            ImageConfig {
-                format,
-                filtering,
-                wrap_x,
-                wrap_y,
-                wrap_z,
-                sampler_reduction_mode: None,
-                aniso_level: self.aniso_level,
-                mip_levels: if self.generate_mips {
-                    TextureConfig::get_mip_count(width, height).min(self.max_mip_levels)
-                } else {
-                    1
-                },
-                mip_filtering,
-                usage: vk::ImageUsageFlags::SAMPLED,
-                flags: vk::ImageCreateFlags::empty(),
-                image_type: vk::ImageType::TYPE_2D,
-                image_view_type: vk::ImageViewType::TYPE_2D,
-                initial_layout: vk::ImageLayout::UNDEFINED,
-                host_readable: false,
-            }
-        )
+
+        Ok(ImageConfig {
+            format,
+            filtering,
+            wrap_x,
+            wrap_y,
+            wrap_z,
+            sampler_reduction_mode: None,
+            aniso_level: self.aniso_level,
+            mip_levels: if self.generate_mips {
+                TextureConfig::get_mip_count(width, height).min(self.max_mip_levels)
+            } else {
+                1
+            },
+            mip_filtering,
+            usage: vk::ImageUsageFlags::SAMPLED,
+            flags: vk::ImageCreateFlags::empty(),
+            image_type: vk::ImageType::TYPE_2D,
+            image_view_type: vk::ImageViewType::TYPE_2D,
+            initial_layout: vk::ImageLayout::UNDEFINED,
+            host_readable: false,
+        })
     }
     pub fn into_image_config_cube(&self, width: u32, height: u32) -> anyhow::Result<ImageConfig> {
         let format = match self.format {
@@ -155,7 +153,7 @@ impl TextureConfig {
             Format::RGBA8 => vk::Format::R8G8B8A8_UNORM,
             //Format::SRGB => vk::Format::R8G8B8_SRGB,
             Format::SRGBA => vk::Format::R8G8B8A8_SRGB,
-            
+
             Format::RGBAFloat16 => vk::Format::R16G16B16A16_SFLOAT,
             Format::RGBAFloat32 => vk::Format::R32G32B32A32_SFLOAT,
         };
@@ -172,7 +170,7 @@ impl TextureConfig {
             WrapMode::Repeat => vk::SamplerAddressMode::REPEAT,
         };
         let wrap_z = vk::SamplerAddressMode::CLAMP_TO_EDGE;
-    
+
         let mip_filtering = match self.filtering {
             FilterMode::Closest => vk::SamplerMipmapMode::NEAREST,
             FilterMode::Linear => vk::SamplerMipmapMode::LINEAR,

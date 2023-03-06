@@ -86,7 +86,6 @@ impl ShaderLibrary {
             },
         );
 
-
         let filename = filename.to_str().unwrap();
         let mut shader_builder = Shader::builder(&filename);
 

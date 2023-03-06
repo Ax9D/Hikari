@@ -25,6 +25,7 @@ mod about;
 mod camera;
 mod content_browser;
 mod debugger;
+mod font;
 mod icons;
 pub mod meta;
 mod outliner;
@@ -33,7 +34,6 @@ mod properties;
 mod render_settings;
 mod style;
 mod viewport;
-mod font;
 
 mod asset_editors;
 
@@ -67,7 +67,11 @@ pub enum RenameState {
 
 pub trait EditorWindow {
     fn draw(ui: &hikari::imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()>;
-    fn draw_if_open(ui: &hikari::imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+    fn draw_if_open(
+        ui: &hikari::imgui::Ui,
+        editor: &mut Editor,
+        state: EngineState,
+    ) -> anyhow::Result<()> {
         if Self::is_open(editor) {
             Self::draw(ui, editor, state)?;
         }
@@ -201,7 +205,11 @@ impl Editor {
             return;
         }
 
-        let root = ui.dockspace("Dockspace", [0.0, 0.0], hikari::imgui::sys::ImGuiDockNodeFlags_AutoHideTabBar as i32);
+        let root = ui.dockspace(
+            "Dockspace",
+            [0.0, 0.0],
+            hikari::imgui::sys::ImGuiDockNodeFlags_AutoHideTabBar as i32,
+        );
 
         root.split(
             hikari::imgui::Direction::Left,
@@ -270,7 +278,11 @@ impl Editor {
 
         Ok(())
     }
-    pub fn draw_windows(&mut self, ui: &hikari::imgui::Ui, state: EngineState) -> anyhow::Result<()> {
+    pub fn draw_windows(
+        &mut self,
+        ui: &hikari::imgui::Ui,
+        state: EngineState,
+    ) -> anyhow::Result<()> {
         hikari::dev::profile_function!();
 
         //Update render settings before render, so incase of a resize we don't use freed resources in the imgui pass
@@ -293,8 +305,17 @@ impl Editor {
 
         Ok(())
     }
-    pub fn pre_update(&mut self, _window: &winit::window::Window, _context: &mut hikari::imgui::Context) {}
-    pub fn post_update(&mut self, _window: &winit::window::Window, context: &mut hikari::imgui::Context) {
+    pub fn pre_update(
+        &mut self,
+        _window: &winit::window::Window,
+        _context: &mut hikari::imgui::Context,
+    ) {
+    }
+    pub fn post_update(
+        &mut self,
+        _window: &winit::window::Window,
+        context: &mut hikari::imgui::Context,
+    ) {
         self.project_manager.load_imgui_settings(context);
         self.project_manager.save_imgui_settings(context);
     }

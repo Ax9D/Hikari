@@ -12,7 +12,7 @@ impl ImguiUiExt for imgui::Ui {
     fn horizontal_align<R>(&self, f: impl FnOnce() -> R, alignment: f32, width: f32) -> R {
         let avail = self.content_region_avail()[0];
         let offset = (avail - width) * alignment;
-    
+
         let cur_pos = self.cursor_pos();
         if offset > 0.0 {
             self.set_cursor_pos([cur_pos[0] + offset, cur_pos[1]]);

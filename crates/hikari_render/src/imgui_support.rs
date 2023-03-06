@@ -55,7 +55,7 @@ pub struct Backend {
     imgui: imgui::Context,
     platform: WinitPlatform,
     draw_data: SharedDrawData,
-    last_frame: Instant
+    last_frame: Instant,
 }
 
 impl Backend {
@@ -96,8 +96,8 @@ impl Backend {
                 self.context().io_mut().update_delta_time(delta);
 
                 self.last_frame = now;
-            },
-            _=> {}
+            }
+            _ => {}
         }
         self.platform
             .handle_event(self.imgui.io_mut(), window, event);

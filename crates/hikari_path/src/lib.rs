@@ -1,14 +1,14 @@
 pub struct AssetPath {
-    inner: str
+    inner: str,
 }
 pub struct AssetPathBuf {
-    inner: String
+    inner: String,
 }
 
 impl AssetPathBuf {
     pub fn new() -> Self {
         Self {
-            inner: String::new()
+            inner: String::new(),
         }
     }
 }

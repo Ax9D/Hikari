@@ -1,10 +1,10 @@
 use crate::ImguiInternalExt;
 use imgui::sys;
-use imgui::Direction;
 use imgui::sys::ImGuiDockNodeFlags;
+use imgui::Direction;
 
 pub struct DockNode {
-    id: u32
+    id: u32,
 }
 impl DockNode {
     pub fn new(id: u32) -> Self {
@@ -54,14 +54,29 @@ impl DockNode {
 }
 
 pub trait ImguiDockingExt {
-    fn dockspace<Label: AsRef<str>>(&self, label: Label, size: [f32; 2], flags: ImGuiDockNodeFlags) -> DockNode;
+    fn dockspace<Label: AsRef<str>>(
+        &self,
+        label: Label,
+        size: [f32; 2],
+        flags: ImGuiDockNodeFlags,
+    ) -> DockNode;
     fn dockspace_over_viewport(&self);
-    fn docknode<Label: AsRef<str>, F: FnOnce(DockNode)>(&self, label: Label, flags: ImGuiDockNodeFlags, f: F);
+    fn docknode<Label: AsRef<str>, F: FnOnce(DockNode)>(
+        &self,
+        label: Label,
+        flags: ImGuiDockNodeFlags,
+        f: F,
+    );
     fn get_node<Label: AsRef<str>>(&self, label: Label) -> Option<*const sys::ImGuiDockNode>;
 }
 
 impl ImguiDockingExt for imgui::Ui {
-    fn dockspace<Label: AsRef<str>>(&self, label: Label, size: [f32; 2], flags: ImGuiDockNodeFlags) -> DockNode {
+    fn dockspace<Label: AsRef<str>>(
+        &self,
+        label: Label,
+        size: [f32; 2],
+        flags: ImGuiDockNodeFlags,
+    ) -> DockNode {
         unsafe {
             let id = sys::igGetID_Str(self.scratch_txt(label));
             sys::igDockSpace(
@@ -74,17 +89,22 @@ impl ImguiDockingExt for imgui::Ui {
             DockNode { id }
         }
     }
-    fn docknode<Label: AsRef<str>, F: FnOnce(DockNode)>(&self, label: Label, flags: ImGuiDockNodeFlags, f: F)  {
+    fn docknode<Label: AsRef<str>, F: FnOnce(DockNode)>(
+        &self,
+        label: Label,
+        flags: ImGuiDockNodeFlags,
+        f: F,
+    ) {
         unsafe {
             let id = sys::igGetID_Str(self.scratch_txt(label));
-            
+
             sys::igDockBuilderRemoveNode(id);
 
             sys::igDockBuilderAddNode(id, flags);
 
             f(DockNode::new(id));
 
-            sys::igDockBuilderFinish(id) 
+            sys::igDockBuilderFinish(id)
         }
     }
     fn dockspace_over_viewport(&self) {
@@ -106,6 +126,6 @@ impl ImguiDockingExt for imgui::Ui {
             } else {
                 Some(root_node_set)
             }
-        }   
+        }
     }
 }

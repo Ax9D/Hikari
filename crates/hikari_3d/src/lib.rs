@@ -1,21 +1,22 @@
 mod gltf;
-mod shader;
 mod processing;
+mod shader;
 
 pub mod camera;
+pub mod config;
+pub mod cubemap;
+pub mod environment;
 pub mod error;
 pub mod image;
 pub mod light;
 pub mod material;
 pub mod mesh;
-pub mod scene;
-pub mod cubemap;
-pub mod environment;
-pub mod texture;
-pub mod config;
 pub mod primitives;
+pub mod scene;
+pub mod texture;
 
 pub use camera::*;
+pub use config::*;
 pub use cubemap::*;
 pub use environment::*;
 pub use error::Error;
@@ -27,7 +28,6 @@ pub use mesh::*;
 pub use scene::*;
 pub use shader::*;
 pub use texture::*;
-pub use config::*;
 
 pub mod old;
 
@@ -59,16 +59,13 @@ impl Plugin for Plugin3D {
         #[cfg(not(debug_assertions))]
         let base_path = hikari_utils::engine_dir();
 
-        let mut shader_lib = ShaderLibrary::new(
-            &device,
-                base_path.join("data/assets/shaders"),
-            config,
-        );
+        let mut shader_lib =
+            ShaderLibrary::new(&device, base_path.join("data/assets/shaders"), config);
         let mut gfx = game.get_mut::<Gfx>();
         let primitives = primitives::Primitives::prepare(&mut gfx, &mut shader_lib);
-        let env_loader = EnvironmentTextureLoader::new(&mut gfx, &mut shader_lib).expect("Failed to create HDR Loader");
+        let env_loader = EnvironmentTextureLoader::new(&mut gfx, &mut shader_lib)
+            .expect("Failed to create HDR Loader");
         drop(gfx);
-
 
         game.add_state(shader_lib);
         game.add_state(primitives);
@@ -78,8 +75,9 @@ impl Plugin for Plugin3D {
         game.register_asset_loader::<Material, MaterialLoader>(MaterialLoader);
         game.register_asset_saver::<Material, MaterialLoader>(MaterialLoader);
 
-        game.register_asset_loader::<Scene, GLTFLoader>(GLTFLoader { device: device.clone() });
+        game.register_asset_loader::<Scene, GLTFLoader>(GLTFLoader {
+            device: device.clone(),
+        });
         game.register_asset_loader::<EnvironmentTexture, EnvironmentTextureLoader>(env_loader);
-
     }
 }

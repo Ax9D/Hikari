@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use hikari_asset::Asset;
-use hikari_render::{SampledImage};
+use hikari_render::SampledImage;
 
 use crate::config::*;
 
@@ -18,12 +18,17 @@ impl TextureCube {
         height: u32,
         config: TextureConfig,
     ) -> Result<Self, anyhow::Error> {
-        let image = SampledImage::with_layers(device, &faces, width, height, 1, 6, config.into_image_config_cube(width, height)?)?;
+        let image = SampledImage::with_layers(
+            device,
+            &faces,
+            width,
+            height,
+            1,
+            6,
+            config.into_image_config_cube(width, height)?,
+        )?;
 
-        Ok(Self {
-            image,
-            config
-        })
+        Ok(Self { image, config })
     }
     pub fn with_dimensions(
         device: &Arc<hikari_render::Device>,
@@ -34,17 +39,11 @@ impl TextureCube {
         let image_config = config.into_image_config_cube(width, height)?;
         let image = SampledImage::with_dimensions(device, width, height, 1, 6, image_config)?;
 
-        Ok(Self {
-            image,
-            config
-        })
+        Ok(Self { image, config })
     }
     pub fn from_parts(image: SampledImage, config: TextureConfig) -> Self {
-        Self {
-            image,
-            config
-        }
-    } 
+        Self { image, config }
+    }
     pub fn raw(&self) -> &SampledImage {
         &self.image
     }

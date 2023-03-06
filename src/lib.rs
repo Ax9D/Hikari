@@ -25,7 +25,7 @@ pub mod asset {
 pub mod utils {
     pub use hikari_utils::*;
 }
-#[cfg(feature="hikari_imgui")]
+#[cfg(feature = "hikari_imgui")]
 pub mod imgui {
     pub use hikari_imgui::*;
 }

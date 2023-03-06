@@ -6,7 +6,7 @@ use crate::Editor;
 use super::EditorWindow;
 #[derive(Default)]
 pub struct About {
-    is_open: bool
+    is_open: bool,
 }
 
 impl About {
@@ -23,7 +23,7 @@ impl EditorWindow for About {
     }
     fn draw(ui: &imgui::Ui, editor: &mut Editor, _state: EngineState) -> anyhow::Result<()> {
         let about = &mut editor.about;
-        
+
         ui.window("About")
             .size([500.0, 150.0], imgui::Condition::Always)
             .position_pivot([0.5, 0.5])
@@ -34,8 +34,8 @@ impl EditorWindow for About {
                 ui.text(name);
                 ui.text(format!("Version: {}", env!("CARGO_PKG_VERSION")));
                 ui.text(format!("Commit: {}", env!("GIT_HASH")));
-        });
-            
+            });
+
         Ok(())
     }
 }

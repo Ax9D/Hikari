@@ -162,8 +162,16 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
     pub fn end_debug_region(&mut self) {
         self.cmd.end_debug_region()
     }
-    pub fn copy_image(&self, src: &SampledImage, src_layout: vk::ImageLayout, dst: &SampledImage, dst_layout: vk::ImageLayout, copy_info: &[vk::ImageCopy]) {
-        self.cmd.copy_image(src, src_layout, dst, dst_layout, copy_info)
+    pub fn copy_image(
+        &self,
+        src: &SampledImage,
+        src_layout: vk::ImageLayout,
+        dst: &SampledImage,
+        dst_layout: vk::ImageLayout,
+        copy_info: &[vk::ImageCopy],
+    ) {
+        self.cmd
+            .copy_image(src, src_layout, dst, dst_layout, copy_info)
     }
     fn flush_compute_state(&mut self) {
         hikari_dev::profile_function!();

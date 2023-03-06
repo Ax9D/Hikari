@@ -3,7 +3,7 @@ use std::sync::Arc;
 use hikari_asset::{Asset, AssetManager, AssetManagerBuilder, Loader, Saver};
 use hikari_systems::*;
 
-use rayon::{ThreadPoolBuilder};
+use rayon::ThreadPoolBuilder;
 use winit::{
     event::Event,
     event_loop::{ControlFlow, EventLoop},

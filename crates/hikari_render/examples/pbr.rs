@@ -1,4 +1,4 @@
-use hikari_3d::{ShadowInfo, WrapMode, Format, TextureConfig, FilterMode};
+use hikari_3d::{FilterMode, Format, ShadowInfo, TextureConfig, WrapMode};
 use hikari_math::Transform;
 use itertools::izip;
 use simple_logger::SimpleLogger;

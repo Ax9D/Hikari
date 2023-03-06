@@ -7,14 +7,10 @@ pub fn run(path: PathBuf) -> anyhow::Result<()> {
             path.display()
         ));
     }
-    let file_name = path
-        .file_name()
-        .unwrap()
-        .to_str()
-        .ok_or(anyhow::anyhow!(
-            "Project name must be a valid unicode string"
-        ))?;
-        
+    let file_name = path.file_name().unwrap().to_str().ok_or(anyhow::anyhow!(
+        "Project name must be a valid unicode string"
+    ))?;
+
     let mut file_name_with_extension = PathBuf::from(&file_name);
     file_name_with_extension.set_extension(hikari_editor::PROJECT_EXTENSION);
     let file_path = path.join(file_name_with_extension);

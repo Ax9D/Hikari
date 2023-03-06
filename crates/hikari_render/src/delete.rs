@@ -1,4 +1,4 @@
-use std::sync::{atomic::AtomicUsize};
+use std::sync::atomic::AtomicUsize;
 
 use ash::vk;
 use gpu_allocator::vulkan::Allocation;
@@ -14,16 +14,16 @@ impl DeleteRequest {
         match self {
             DeleteRequest::VkImage(image, allocation) => {
                 crate::image::delete_image(device, image, allocation)?;
-            },
+            }
             DeleteRequest::VkImageView(view) => {
                 crate::image::delete_image_view(device, view);
-            },
+            }
             DeleteRequest::VkSampler(sampler) => {
                 crate::image::delete_sampler(device, sampler);
-            },
+            }
             DeleteRequest::VkBuffer(buffer, allocation) => {
                 crate::buffer::delete_buffer(device, buffer, allocation)?;
-            },
+            }
         }
 
         Ok(())
@@ -31,14 +31,14 @@ impl DeleteRequest {
 }
 struct RequestPacket {
     request: DeleteRequest,
-    frame_number: usize
+    frame_number: usize,
 }
 
 pub const DELETION_FRAME_DELAY: usize = 2;
 pub struct Deleter {
     frame_number: AtomicUsize,
     deletion_queue_send: flume::Sender<RequestPacket>,
-    deletion_queue_recv: flume::Receiver<RequestPacket>
+    deletion_queue_recv: flume::Receiver<RequestPacket>,
 }
 
 impl Deleter {
@@ -51,14 +51,16 @@ impl Deleter {
         }
     }
     fn send_packet(&self, packet: RequestPacket) {
-        self.deletion_queue_send.send(packet).expect("Failed to send RequestPacket")
+        self.deletion_queue_send
+            .send(packet)
+            .expect("Failed to send RequestPacket")
     }
     pub fn request_delete(&self, request: DeleteRequest) {
         let frame_number = self.frame_number.load(std::sync::atomic::Ordering::Relaxed);
 
         let packet = RequestPacket {
             request,
-            frame_number
+            frame_number,
         };
 
         self.send_packet(packet);
@@ -68,7 +70,9 @@ impl Deleter {
     }
     pub(crate) fn new_frame(&self, device: &crate::Device) -> anyhow::Result<()> {
         hikari_dev::profile_function!();
-        let current_frame = 1 + self.frame_number.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let current_frame = 1 + self
+            .frame_number
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         for packet in self.deletion_queue_recv.drain() {
             // If more than `DELETION_FRAME_DELAY` frames have passed, delete our resource
             if current_frame - packet.frame_number >= DELETION_FRAME_DELAY {
@@ -97,7 +101,7 @@ fn delete_once() -> anyhow::Result<()> {
     let device = gfx.device();
     let deleter = device.deleter();
     {
-    let image = SampledImage::with_dimensions(device, 20, 20, 1, 1, ImageConfig::default());
+        let image = SampledImage::with_dimensions(device, 20, 20, 1, 1, ImageConfig::default());
     }
     assert!(device.new_frame().is_ok());
 

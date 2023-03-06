@@ -1,6 +1,6 @@
-use std::{path::Path, io::{BufRead}};
+use std::{io::BufRead, path::Path};
 
-use image::{ImageResult, EncodableLayout};
+use image::{EncodableLayout, ImageResult};
 
 pub fn open_rgba8(path: impl AsRef<Path>) -> ImageResult<(Vec<u8>, u32, u32)> {
     let dyn_image = image::open(path)?;

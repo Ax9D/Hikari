@@ -1,5 +1,5 @@
 use crate::DirLight;
-use hikari_math::{Vec3A, Mat4};
+use hikari_math::{Mat4, Vec3A};
 
 #[repr(C)]
 #[derive(Copy, Clone, Default)]

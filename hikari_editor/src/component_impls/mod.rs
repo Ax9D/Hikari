@@ -3,11 +3,11 @@ use hikari::core::serde::{Registry, SerializeComponent};
 use crate::components::{EditorComponent, EditorComponents};
 
 mod camera;
+mod environment;
 mod light;
 mod mesh_render;
 mod meta;
 mod transform;
-mod environment;
 
 fn register_component<C: EditorComponent + SerializeComponent>(
     components: &mut EditorComponents,

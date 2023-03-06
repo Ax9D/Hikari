@@ -21,8 +21,8 @@ use ash::prelude::VkResult;
 use ash::{vk, Entry};
 use parking_lot::Mutex;
 
-use winit::window::Window;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use winit::window::Window;
 
 use crate::swapchain::SurfaceData;
 use crate::swapchain::Swapchain;
@@ -114,7 +114,8 @@ impl Gfx {
         let mut extensions = Vec::new();
 
         if let Some(window) = window {
-            let window_extensions = ash_window::enumerate_required_extensions(window.raw_display_handle()).unwrap();
+            let window_extensions =
+                ash_window::enumerate_required_extensions(window.raw_display_handle()).unwrap();
 
             for extension in window_extensions {
                 extensions.push(unsafe { CStr::from_ptr(*extension) });
@@ -184,12 +185,17 @@ impl Gfx {
         instance: &ash::Instance,
         window: &Window,
     ) -> Result<vk::SurfaceKHR, ash::vk::Result> {
-        unsafe { ash_window::create_surface(entry, instance, window.raw_display_handle(), window.raw_window_handle(), None) }
+        unsafe {
+            ash_window::create_surface(
+                entry,
+                instance,
+                window.raw_display_handle(),
+                window.raw_window_handle(),
+                None,
+            )
+        }
     }
-    fn new_inner(
-        window: Option<&Window>,
-        config: GfxConfig,
-    ) -> anyhow::Result<Self> {
+    fn new_inner(window: Option<&Window>, config: GfxConfig) -> anyhow::Result<Self> {
         let entry = unsafe { Entry::load() }?;
 
         log::debug!("Available instance extension properties: ");

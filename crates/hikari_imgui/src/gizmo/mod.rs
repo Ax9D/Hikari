@@ -245,7 +245,6 @@ impl GizmoState {
         } else {
             projection.z_axis.w > 0.0
         };
-
     }
     /// Forward vector of the view camera
     pub fn view_forward(&self) -> Vec3 {

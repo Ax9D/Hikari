@@ -10,8 +10,8 @@ use std::path::PathBuf;
 
 use crate::{components::EditorComponents, imgui};
 
-use hikari_editor::*;
 use hikari::imgui::*;
+use hikari_editor::*;
 
 use super::{meta::EditorOnly, Editor, EditorWindow};
 
@@ -94,7 +94,7 @@ pub struct ProjectManager {
     current_scene: Option<Handle<Scene>>,
     new_scene_scratch: Option<Handle<Scene>>,
     scene_creator: SceneCreator,
-    imgui_settings_event: Option<ImguiSettingsEvent>
+    imgui_settings_event: Option<ImguiSettingsEvent>,
 }
 
 impl ProjectManager {
@@ -198,14 +198,14 @@ impl ProjectManager {
     pub fn save_imgui_settings(&mut self, context: &mut imgui::Context) {
         if let Some(ImguiSettingsEvent::SaveSettings) = &self.imgui_settings_event {
             let mut buffer = String::new();
-            
+
             context.save_ini_settings(&mut buffer);
             let (project_path, _) = self.current.as_ref().unwrap();
 
             let result = std::fs::write(project_path.join("imgui.ini"), buffer);
 
             if let Err(err) = result {
-               log::error!("Failed to save imgui settings: {}", err);
+                log::error!("Failed to save imgui settings: {}", err);
             }
 
             self.imgui_settings_event.take();

@@ -5,7 +5,7 @@ use super::{icons, EditorConfig};
 pub fn load_fonts(ctx: &mut Context, config: &EditorConfig) {
     let font_path = hikari::utils::engine_dir().join("data/assets/fonts/Roboto/Roboto-Regular.ttf");
     let icon_path = hikari::utils::engine_dir().join("data/assets/fonts/icons/icons.ttf");
-    let font_data = std::fs::read(font_path).expect("Failed to load font"); 
+    let font_data = std::fs::read(font_path).expect("Failed to load font");
     let icon_data = std::fs::read(icon_path).expect("Failed to load icons");
 
     let font = [

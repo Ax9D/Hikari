@@ -1,5 +1,5 @@
 use hikari_math::{Vec3, Vec4};
-use imgui::{SliderFlags, Ui, sys, TableColumnSetup, TableFlags, StyleVar, StyleColor};
+use imgui::{sys, SliderFlags, StyleColor, StyleVar, TableColumnSetup, TableFlags, Ui};
 
 use crate::ImguiInternalExt;
 
@@ -111,7 +111,13 @@ impl<L: AsRef<str>> DragVec3<L> {
         let mut changed = false;
         let old = *value;
 
-        if let Some(_token) = ui.begin_table_with_sizing(self.label.as_ref(), 2, TableFlags::SIZING_STRETCH_PROP, [self.width, 0.0], 0.0) {
+        if let Some(_token) = ui.begin_table_with_sizing(
+            self.label.as_ref(),
+            2,
+            TableFlags::SIZING_STRETCH_PROP,
+            [self.width, 0.0],
+            0.0,
+        ) {
             ui.table_setup_column_with(TableColumnSetup {
                 name: "",
                 init_width_or_weight: 15.0,
@@ -129,8 +135,9 @@ impl<L: AsRef<str>> DragVec3<L> {
             ui.text(self.label.as_ref());
             ui.table_next_column();
 
-            unsafe { sys::igPushMultiItemsWidths(3, ui.calc_item_width()); }
-
+            unsafe {
+                sys::igPushMultiItemsWidths(3, ui.calc_item_width());
+            }
 
             let _style_token = ui.push_style_var(StyleVar::ItemSpacing([0.0, 0.0]));
 
@@ -153,7 +160,7 @@ impl<L: AsRef<str>> DragVec3<L> {
             changed |= self.build_drag(ui, "##X", &mut value.x);
 
             ui.same_line_with_spacing(0.0, SPACE);
-            unsafe {sys::igPopItemWidth()};
+            unsafe { sys::igPopItemWidth() };
 
             //Y
             {
@@ -171,7 +178,7 @@ impl<L: AsRef<str>> DragVec3<L> {
             changed |= self.build_drag(ui, "##Y", &mut value.y);
 
             ui.same_line_with_spacing(0.0, SPACE);
-            unsafe {sys::igPopItemWidth()};
+            unsafe { sys::igPopItemWidth() };
 
             //Z
             {
@@ -189,7 +196,7 @@ impl<L: AsRef<str>> DragVec3<L> {
             changed |= self.build_drag(ui, "##Z", &mut value.z);
 
             ui.same_line_with_spacing(0.0, SPACE);
-            unsafe {sys::igPopItemWidth()};
+            unsafe { sys::igPopItemWidth() };
         }
 
         if changed && self.proportional {

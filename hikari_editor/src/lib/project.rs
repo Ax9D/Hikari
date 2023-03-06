@@ -1,4 +1,7 @@
-use std::{fs::File, path::{Path, PathBuf}};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use hikari::asset::{AssetManager, Handle, LazyHandle};
 use serde::{Deserialize, Serialize};
@@ -95,8 +98,5 @@ impl Into<Project> for SerializedProject {
 
 #[test]
 fn serialize() {
-    println!(
-        "{}",
-        serde_yaml::to_string(&Project::new("Test")).unwrap()
-    );
+    println!("{}", serde_yaml::to_string(&Project::new("Test")).unwrap());
 }

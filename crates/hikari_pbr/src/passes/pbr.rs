@@ -39,67 +39,76 @@ impl PBRPass {
         primitives: &Arc<hikari_3d::primitives::Primitives>,
         shadow_atlas: &GpuHandle<SampledImage>,
         cascade_render_buffer: &GpuHandle<GpuBuffer<CascadeRenderInfo>>,
-        depth_prepass: &GpuHandle<SampledImage>) -> anyhow::Result<GpuHandle<SampledImage>> {
-    let layout = VertexInputLayout::builder()
-    .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
-    .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
-    .buffer(&[ShaderDataType::Vec2f], StepMode::Vertex)
-    .buffer(&[ShaderDataType::Vec2f], StepMode::Vertex)
-    .build();
+        depth_prepass: &GpuHandle<SampledImage>,
+    ) -> anyhow::Result<GpuHandle<SampledImage>> {
+        let layout = VertexInputLayout::builder()
+            .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
+            .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
+            .buffer(&[ShaderDataType::Vec2f], StepMode::Vertex)
+            .buffer(&[ShaderDataType::Vec2f], StepMode::Vertex)
+            .build();
 
-    let skybox_layout = VertexInputLayout::builder()
-    .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
-    .build();
+        let skybox_layout = VertexInputLayout::builder()
+            .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
+            .build();
 
-    shader_lib.insert("pbr")?;
-    shader_lib.insert("unlit")?;
-    shader_lib.insert("skybox")?;
+        shader_lib.insert("pbr")?;
+        shader_lib.insert("unlit")?;
+        shader_lib.insert("skybox")?;
 
-    let primitives = primitives.clone();
-    let mut config = ImageConfig::color2d_attachment();
-    config.format = vk::Format::R16G16B16A16_SFLOAT;
-    let color_output = graph
-        .create_image("PBRColor", config, ImageSize::default_xy())
-        .expect("Failed to create PBR attachments");
+        let primitives = primitives.clone();
+        let mut config = ImageConfig::color2d_attachment();
+        config.format = vk::Format::R16G16B16A16_SFLOAT;
+        let color_output = graph
+            .create_image("PBRColor", config, ImageSize::default_xy())
+            .expect("Failed to create PBR attachments");
 
-    let shadow_atlas = shadow_atlas.clone();
-    let cascade_render_buffer = cascade_render_buffer.clone();
+        let shadow_atlas = shadow_atlas.clone();
+        let cascade_render_buffer = cascade_render_buffer.clone();
 
-    let mut renderer = Self {
-        layout,
-        skybox_layout,
-        primitives,
-        shadow_atlas,
-        cascade_render_buffer,
-    };
+        let mut renderer = Self {
+            layout,
+            skybox_layout,
+            primitives,
+            shadow_atlas,
+            cascade_render_buffer,
+        };
 
         let renderpass = Renderpass::<Args>::new("PBR", ImageSize::default_xy())
-        .read_image(
-            &shadow_atlas,
-            AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
-        )
-        .read_buffer(&cascade_render_buffer, AccessType::FragmentShaderReadOther)
-        .draw_image(&color_output, AttachmentConfig::color_default(0))
-        .draw_image(
-            &depth_prepass,
-            AttachmentConfig {
-                kind: AttachmentKind::DepthOnly,
-                access: AccessType::DepthStencilAttachmentRead,
-                load_op: hikari_render::vk::AttachmentLoadOp::LOAD,
-                store_op: hikari_render::vk::AttachmentStoreOp::STORE,
-                stencil_load_op: hikari_render::vk::AttachmentLoadOp::DONT_CARE,
-                stencil_store_op: hikari_render::vk::AttachmentStoreOp::DONT_CARE,
-            },
-        )
-        .cmd(
-            move |cmd, graph_res, record_info, (world, res, shader_lib, asset_manager)| {
-                renderer.render(cmd, world, asset_manager, graph_res, res, record_info, shader_lib);
-            },
-    );
+            .read_image(
+                &shadow_atlas,
+                AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
+            )
+            .read_buffer(&cascade_render_buffer, AccessType::FragmentShaderReadOther)
+            .draw_image(&color_output, AttachmentConfig::color_default(0))
+            .draw_image(
+                &depth_prepass,
+                AttachmentConfig {
+                    kind: AttachmentKind::DepthOnly,
+                    access: AccessType::DepthStencilAttachmentRead,
+                    load_op: hikari_render::vk::AttachmentLoadOp::LOAD,
+                    store_op: hikari_render::vk::AttachmentStoreOp::STORE,
+                    stencil_load_op: hikari_render::vk::AttachmentLoadOp::DONT_CARE,
+                    stencil_store_op: hikari_render::vk::AttachmentStoreOp::DONT_CARE,
+                },
+            )
+            .cmd(
+                move |cmd, graph_res, record_info, (world, res, shader_lib, asset_manager)| {
+                    renderer.render(
+                        cmd,
+                        world,
+                        asset_manager,
+                        graph_res,
+                        res,
+                        record_info,
+                        shader_lib,
+                    );
+                },
+            );
 
-    graph.add_renderpass(renderpass);
+        graph.add_renderpass(renderpass);
 
-    Ok(color_output)
+        Ok(color_output)
     }
     fn prepare_ibl(
         &self,
@@ -188,12 +197,7 @@ impl PBRPass {
             }
         }
     }
-    fn render_world(
-        &self,
-        cmd: &mut RenderpassCommands,
-        world: &World,
-        assets: &Assets,
-    ) {
+    fn render_world(&self, cmd: &mut RenderpassCommands, world: &World, assets: &Assets) {
         hikari_dev::profile_function!();
 
         let scenes = &assets.scenes;
@@ -230,9 +234,9 @@ impl PBRPass {
                             .unwrap_or_else(|| &primitives.default_mat);
 
                         let mut textures_present = 0;
-                        textures_present |=  (material.albedo.is_some() as u32) << 0;
-                        textures_present |=  (material.roughness.is_some() as u32) << 1;
-                        textures_present |=  (material.metallic.is_some() as u32) << 2;
+                        textures_present |= (material.albedo.is_some() as u32) << 0;
+                        textures_present |= (material.roughness.is_some() as u32) << 1;
+                        textures_present |= (material.metallic.is_some() as u32) << 2;
                         textures_present |= (material.normal.is_some() as u32) << 3;
                         textures_present |= (material.emissive.is_some() as u32) << 4;
                         //let has_albedo_tex = material.albedo.is_some() as u32;
@@ -251,7 +255,6 @@ impl PBRPass {
                             ..Default::default()
                         };
 
-
                         let pc = PushConstants {
                             view_transform: transform,
                             material_data,
@@ -259,7 +262,8 @@ impl PBRPass {
 
                         cmd.push_constants(&pc, 0);
 
-                        let albedo = resolve_texture(&material.albedo, &textures, &primitives.black);
+                        let albedo =
+                            resolve_texture(&material.albedo, &textures, &primitives.black);
                         let roughness =
                             resolve_texture(&material.roughness, &textures, &primitives.black);
                         let metallic =
@@ -267,7 +271,8 @@ impl PBRPass {
                         let emissive =
                             resolve_texture(&material.emissive, &textures, &primitives.black);
 
-                        let normal = resolve_texture(&material.normal, &textures, &primitives.black);
+                        let normal =
+                            resolve_texture(&material.normal, &textures, &primitives.black);
 
                         cmd.set_image(albedo.raw(), 1, 0);
                         cmd.set_image(roughness.raw(), 1, 1);
@@ -281,7 +286,8 @@ impl PBRPass {
             }
         }
     }
-    pub fn render(&mut self,
+    pub fn render(
+        &mut self,
         cmd: &mut RenderpassCommands,
         world: &World,
         asset_manager: &AssetManager,
@@ -290,69 +296,61 @@ impl PBRPass {
         record_info: &PassRecordInfo,
         shader_lib: &ShaderLibrary,
     ) {
-            hikari_dev::profile_function!();
-            let camera = res.camera;
+        hikari_dev::profile_function!();
+        let camera = res.camera;
 
+        if camera.is_some() {
+            let assets = Assets::fetch(asset_manager);
 
-            if camera.is_some() {
-                let assets = Assets::fetch(asset_manager);
+            let mut environment_comp = world.query::<(&Environment, &Transform)>();
+            let environment = environment_comp.iter().next().map(|(_, env)| env);
 
-                let mut environment_comp = world.query::<(&Environment, &Transform)>();
-                let environment = environment_comp.iter().next().map(|(_, env)| env);
+            cmd.set_viewport(
+                0.0,
+                0.0,
+                record_info.framebuffer_width as f32,
+                record_info.framebuffer_height as f32,
+            );
+            cmd.set_scissor(
+                0,
+                0,
+                record_info.framebuffer_width,
+                record_info.framebuffer_height,
+            );
 
-                cmd.set_viewport(
-                    0.0,
-                    0.0,
-                    record_info.framebuffer_width as f32,
-                    record_info.framebuffer_height as f32,
-                );
-                cmd.set_scissor(
-                    0,
-                    0,
-                    record_info.framebuffer_width,
-                    record_info.framebuffer_height,
-                );
-
-                if res.settings.debug.wireframe {
-                    cmd.set_shader(shader_lib.get("unlit").unwrap());
-                    cmd.set_rasterizer_state(RasterizerState {
-                        polygon_mode: PolygonMode::Line,
-                        line_width: 2.0,
-                        ..Default::default()
-                    });
-                } else {
-                    self.render_skybox(
-                        cmd,
-                        environment,
-                        &assets,
-                        res,
-                        shader_lib,
-                    );
-                    cmd.set_shader(shader_lib.get("pbr").unwrap());
-                    cmd.set_rasterizer_state(RasterizerState::default());
-                }
-                cmd.set_depth_stencil_state(DepthStencilState {
-                    depth_test_enabled: true,
-                    depth_write_enabled: false,
-                    depth_compare_op: CompareOp::Equal,
+            if res.settings.debug.wireframe {
+                cmd.set_shader(shader_lib.get("unlit").unwrap());
+                cmd.set_rasterizer_state(RasterizerState {
+                    polygon_mode: PolygonMode::Line,
+                    line_width: 2.0,
                     ..Default::default()
                 });
-
-                cmd.set_vertex_input_layout(self.layout);
-
-                cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
-                cmd.set_image(graph_res.get_image(&self.shadow_atlas).unwrap(), 0, 1);
-
-                let cascade_render_buffer =
-                    graph_res.get_buffer(&self.cascade_render_buffer).unwrap();
-
-                cmd.set_buffer(cascade_render_buffer, 0..cascade_render_buffer.len(), 0, 2);
-
-                self.prepare_ibl(cmd, environment, &assets);
-                self.render_world(cmd, world, &assets);
             } else {
-                log::warn!("No camera in the world");
+                self.render_skybox(cmd, environment, &assets, res, shader_lib);
+                cmd.set_shader(shader_lib.get("pbr").unwrap());
+                cmd.set_rasterizer_state(RasterizerState::default());
             }
+            cmd.set_depth_stencil_state(DepthStencilState {
+                depth_test_enabled: true,
+                depth_write_enabled: false,
+                depth_compare_op: CompareOp::Equal,
+                ..Default::default()
+            });
+
+            cmd.set_vertex_input_layout(self.layout);
+
+            cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
+            cmd.set_image(graph_res.get_image(&self.shadow_atlas).unwrap(), 0, 1);
+
+            let cascade_render_buffer = graph_res.get_buffer(&self.cascade_render_buffer).unwrap();
+
+            cmd.set_buffer(cascade_render_buffer, 0..cascade_render_buffer.len(), 0, 2);
+
+            self.prepare_ibl(cmd, environment, &assets);
+            self.render_world(cmd, world, &assets);
+        } else {
+            log::warn!("No camera in the world");
+        }
     }
 }
 
@@ -405,5 +403,12 @@ pub fn build_pass(
     cascade_render_buffer: &GpuHandle<GpuBuffer<CascadeRenderInfo>>,
     depth_prepass: &GpuHandle<SampledImage>,
 ) -> anyhow::Result<GpuHandle<SampledImage>> {
-    PBRPass::build(graph, shader_lib, primitives, shadow_atlas, cascade_render_buffer, depth_prepass)
+    PBRPass::build(
+        graph,
+        shader_lib,
+        primitives,
+        shadow_atlas,
+        cascade_render_buffer,
+        depth_prepass,
+    )
 }

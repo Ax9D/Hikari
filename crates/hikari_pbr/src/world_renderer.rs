@@ -32,7 +32,11 @@ impl WorldRenderer {
     ) -> anyhow::Result<Self> {
         let res = RenderResources::new(gfx.device(), width, height)?;
         let graph = Self::build_graph(gfx, width, height, shader_library, primitives, &res)?;
-        Ok(Self { graph, res, primitives: primitives.clone() })
+        Ok(Self {
+            graph,
+            res,
+            primitives: primitives.clone(),
+        })
     }
     fn build_graph(
         gfx: &mut Gfx,
@@ -103,7 +107,14 @@ impl WorldRenderer {
             let (width, height) = self.graph.size();
 
             self.graph.finish()?;
-            self.graph = Self::build_graph(gfx, width, height, shader_library, &self.primitives, &self.res)?;
+            self.graph = Self::build_graph(
+                gfx,
+                width,
+                height,
+                shader_library,
+                &self.primitives,
+                &self.res,
+            )?;
         }
 
         gfx.set_vsync(self.res.settings.vsync);
@@ -147,7 +158,9 @@ impl WorldRenderer {
             ubo_data.camera_far = camera.far;
             ubo_data.exposure = camera.exposure;
 
-            if let Some((_, (transform, environment))) = world.query::<(&Transform, &Environment)>().iter().next() {
+            if let Some((_, (transform, environment))) =
+                world.query::<(&Transform, &Environment)>().iter().next()
+            {
                 ubo_data.environment_intensity = environment.intensity;
                 ubo_data.environment_transform = transform.get_rotation_matrix();
             }

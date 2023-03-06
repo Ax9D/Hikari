@@ -13,8 +13,8 @@ use winit::dpi::LogicalSize;
 use winit::event::*;
 
 use hikari::core::*;
-use hikari::render::*;
 use hikari::imgui;
+use hikari::render::*;
 use winit::event_loop::ControlFlow;
 
 use crate::editor::EditorConfig;
