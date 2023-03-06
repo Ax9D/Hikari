@@ -187,14 +187,14 @@ pub struct RasterizerState {
 }
 impl Default for RasterizerState {
     fn default() -> Self {
-        Self { 
+        Self {
             polygon_mode: PolygonMode::Fill,
-            cull_mode: CullMode::Back, 
-            depth_clamp_enable: false, 
-            rasterizer_discard_enable: false, 
+            cull_mode: CullMode::Back,
+            depth_clamp_enable: false,
+            rasterizer_discard_enable: false,
             depth_bias_enable: false,
-            depth_bias_constant_factor: 0.0, 
-            depth_bias_clamp: 0.0, 
+            depth_bias_constant_factor: 0.0,
+            depth_bias_clamp: 0.0,
             depth_bias_slope_factor: 0.0,
             line_width: 1.0 }
     }
@@ -207,7 +207,7 @@ impl RasterizerState {
             .polygon_mode(self.polygon_mode.into_vk())
             .line_width(self.line_width)
             .cull_mode(self.cull_mode.into_vk())
-            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+            .front_face(vk::FrontFace::CLOCKWISE)
             .depth_bias_enable(self.depth_bias_enable)
             .depth_bias_constant_factor(self.depth_bias_constant_factor)
             .depth_bias_clamp(self.depth_bias_clamp)

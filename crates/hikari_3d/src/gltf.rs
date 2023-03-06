@@ -490,12 +490,9 @@ fn load_mesh(
                 scale: [1.0, 1.0, 1.0],
             });
 
-    let (positions, rotation, scale) = transform.decomposed();
-    let transform = hikari_math::Transform {
-        position: Vec3::from(positions),
-        rotation: Quat::from_array(rotation),
-        scale: Vec3::from(scale),
-    };
+    let transform_matrix = hikari_math::Mat4::from_cols_array_2d(&transform.matrix());
+    let mut transform = hikari_math::Transform::from_matrix(transform_matrix);
+    transform = processing::left_handed_correction(transform);
 
     //println!("Loading model {}", name);
     for primitive in mesh.primitives() {
@@ -531,12 +528,17 @@ fn load_mesh(
             vec![Vec2::ZERO; positions.len()]
         };
 
-        let indices = if let Some(iter) = reader.read_indices() {
+        let mut indices = if let Some(iter) = reader.read_indices() {
             let iter = iter.into_u32();
             iter.collect::<Vec<_>>()
         } else {
             (0..positions.len()).map(|x| x as u32).collect::<Vec<_>>()
         };
+
+        //GLTF winding order is CCW
+        //Change winding order to CW
+        processing::ccw_to_cw(&mut indices);
+
         //let vertices = pack_for_gpu(positions, normals, texcoord0, texcoord1);
         let mut positions_buffer = hikari_render::create_vertex_buffer(device, positions.len())?;
         positions_buffer.upload(&positions, 0)?;

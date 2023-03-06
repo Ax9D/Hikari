@@ -1,3 +1,5 @@
+use hikari_math::{Mat4};
+
 #[derive(Clone, Copy, Debug, type_uuid::TypeUuid)]
 #[uuid = "81dd6242-c4cd-4059-a3a0-ed1d0e44e68b"]
 #[cfg_attr(
@@ -33,15 +35,17 @@ pub enum Projection {
 }
 
 impl Camera {
-    pub fn get_projection_matrix(&self, width: f32, height: f32) -> hikari_math::Mat4 {
+    pub fn get_projection_matrix(&self, width: f32, height: f32) -> Mat4 {
         match self.projection {
-            Projection::Perspective(fov) => hikari_math::Mat4::perspective_rh(
-                fov.to_radians(),
-                width / height,
-                self.near,
-                self.far,
-            ),
-            Projection::Orthographic => hikari_math::Mat4::orthographic_rh(
+            Projection::Perspective(fov) => {
+                Mat4::perspective_lh(
+                    fov.to_radians(),
+                    width / height,
+                    self.near,
+                    self.far,
+                )
+            },
+            Projection::Orthographic => Mat4::orthographic_lh(
                 -width, width, -height, height, self.near, self.far,
             ),
         }

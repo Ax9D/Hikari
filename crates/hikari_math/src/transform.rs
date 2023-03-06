@@ -25,8 +25,16 @@ impl Transform {
             ..Default::default()
         }
     }
+    pub fn from_matrix(mat: Mat4) -> Self {
+        let (scale, rotation, position) = mat.to_scale_rotation_translation();
+        Self {
+            position,
+            scale,
+            rotation
+        }
+    }
     pub fn forward(&self) -> Vec3 {
-        self.rotation * (-Vec3::Z)
+        self.rotation * Vec3::Z
     }
     pub fn up(&self) -> Vec3 {
         self.rotation * Vec3::Y
@@ -37,5 +45,9 @@ impl Transform {
     #[inline]
     pub fn get_matrix(&self) -> Mat4 {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.position)
+    }
+    #[inline]
+    pub fn get_rotation_matrix(&self) -> Mat4 {
+        Mat4::from_rotation_translation(self.rotation, Vec3::ZERO)
     }
 }

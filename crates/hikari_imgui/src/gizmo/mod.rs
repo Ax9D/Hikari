@@ -184,6 +184,7 @@ pub(crate) struct GizmoState {
     pub gizmo_size: f32,
     pub focus_distance: f32,
     pub scale_factor: f32,
+    pub left_handed: bool,
 }
 impl Default for GizmoState {
     fn default() -> Self {
@@ -202,6 +203,7 @@ impl Default for GizmoState {
             scale_factor: 0.0,
             gizmo_size: 75.0,
             focus_distance: 0.0,
+            left_handed: false,
         }
     }
 }
@@ -237,6 +239,13 @@ impl GizmoState {
             self.mvp.as_ref()[15] / projection.as_ref()[0] / self.viewport.width() * 2.0;
 
         self.focus_distance = self.scale_factor * (style.line_thickness / 2.0 + 5.0);
+
+        self.left_handed = if projection.z_axis.w == 0.0 {
+            projection.z_axis.z > 0.0
+        } else {
+            projection.z_axis.w > 0.0
+        };
+
     }
     /// Forward vector of the view camera
     pub fn view_forward(&self) -> Vec3 {
@@ -500,6 +509,7 @@ impl<'a, 'ui> Gizmo<'a, 'ui> {
         };
         let dragging = ui.is_mouse_dragging(imgui::MouseButton::Left);
         let drag_started = !self.drag_last_frame && dragging;
+
         if ui.is_window_focused() {
             let ray = self.state.pointer_ray(ui);
 

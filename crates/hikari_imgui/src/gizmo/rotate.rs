@@ -43,7 +43,10 @@ pub(crate) fn pick(subgizmo: &SubGizmo, context: &mut GizmoContext, ray: &Ray) -
     let angle = if subgizmo.direction == Direction::Screen {
         f32::atan2(tangent.cross(normal).dot(offset), tangent.dot(offset))
     } else {
-        let forward = state.view_forward();
+        let mut forward = state.view_forward();
+        if subgizmo.state.left_handed {
+            forward *= -1.0;
+        }
         f32::atan2(offset.cross(forward).dot(normal), offset.dot(forward))
     };
 
@@ -156,12 +159,12 @@ pub(crate) fn draw(subgizmo: &SubGizmo, context: &mut GizmoContext, ui: &imgui::
         painter.circle(radius, color, subgizmo.style.line_thickness);
 
         drop(painter);
-        let delta_angles = subgizmo.local_normal() * state.current_delta;
+        let delta_angles = subgizmo.normal() * state.current_delta;
         let delta_string = format!(
             "dx: {:.1}° dy: {:.1}° dz: {:.1}°",
-            /*-*/ delta_angles.x.to_degrees(),
-            /*-*/ delta_angles.y.to_degrees(),
-            /*-*/ delta_angles.z.to_degrees()
+            delta_angles.x.to_degrees(),
+            delta_angles.y.to_degrees(),
+            delta_angles.z.to_degrees()
         );
         ui.get_window_draw_list().add_text(
             subgizmo.state.viewport.max - Vec2::new(250.0, 75.0),
@@ -212,7 +215,10 @@ fn rotation_matrix(subgizmo: &SubGizmo) -> Mat4 {
 
         let tangent = tangent(subgizmo);
         let normal = subgizmo.normal();
-        let forward = state.view_forward();
+        let mut forward = state.view_forward();
+        if subgizmo.state.left_handed {
+            forward *= -1.0;
+        }
         let angle = f32::atan2(tangent.cross(forward).dot(normal), tangent.dot(forward));
 
         // Rotate towards the camera, along the rotation axis.
