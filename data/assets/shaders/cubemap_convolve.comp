@@ -1,0 +1,38 @@
+#version 450
+
+#include<ibl.glsl>
+#include<utils.glsl>
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform samplerCube envMap;
+layout(rgba16f, set = 0, binding = 1) uniform writeonly imageCube img;
+
+#define DIFFUSE_IRRADIANCE 1
+#define SPECULAR_PREFILTER 2
+
+layout(push_constant) uniform PushConstants {
+    uint convolveType;
+    float roughness;
+} pc;
+
+void main() {
+    const vec2 uv = ( gl_GlobalInvocationID.xy + vec2(0.5) ) / imageSize(img).xy;
+
+    for(uint i = 0; i < 6; i++) {
+        vec3 n = normalize(cubeNormal(i, uv));
+
+        vec3 color;
+        
+        switch(pc.convolveType) {
+            case DIFFUSE_IRRADIANCE:
+                color = diffuseIrradianceConvolve(n, envMap);
+                break;
+            case SPECULAR_PREFILTER:
+                color = specularPrefilterConvolve(n, pc.roughness, envMap);
+                break;
+        }
+
+        imageStore(img, ivec3(gl_GlobalInvocationID.xy, i), vec4(color, 0.0));
+    }
+}

@@ -1,0 +1,28 @@
+#version 450
+
+#include<utils.glsl>
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0) uniform sampler2D hdrMap;
+layout(rgba16f, set = 0, binding = 1) uniform writeonly imageCube cubeMap;
+
+void main() {
+    const vec2 uv = ( gl_GlobalInvocationID.xy + vec2(0.5) ) / imageSize(cubeMap).xy;
+
+    vec3 debugColors[] = {
+        vec3(1.0, 0.0, 0.0),
+        vec3(0.3, 0.0, 0.0),
+        vec3(0.0, 1.0, 0.0),
+        vec3(0.0, 0.3, 0.0),
+        vec3(0.0, 0.0, 1.0),
+        vec3(0.0, 0.0, 0.3),
+    };
+    for(uint i = 0; i < 6; i++) {
+        vec3 n = normalize(cubeNormal(i, uv));
+        vec2 equiangularUV = cubeToEquiangular(n);
+        vec3 color = texture(hdrMap, equiangularUV).rgb;
+
+        imageStore(cubeMap, ivec3(gl_GlobalInvocationID.xy, i), vec4(color, 0.0));
+    }
+}

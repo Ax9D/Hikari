@@ -1,0 +1,246 @@
+#version 450
+#extension GL_EXT_control_flow_attributes: enable
+#include <world.glsl>
+
+#define N_CASCADES 4
+
+layout(local_size_x = N_CASCADES, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform WorldUBO {
+    World world;
+};
+
+layout(set = 0, binding = 1, rg32f) uniform readonly image2D reducedDepthImage;
+
+layout(set = 0, binding = 2, std140) writeonly buffer cascadeData {
+    CascadeRenderInfo[] cascadeRenderInfo;
+};
+
+mat4 orthographic_rh(
+    float left,
+    float right,
+    float bottom,
+    float top,
+    float near,
+    float far
+) {
+    float rcpWidth = 1.0 / (right - left);
+    float rcpHeight = 1.0 / (top - bottom);
+    float r = 1.0 / (near - far);
+    // let rcp_width = 1.0 / (right - left);
+    // let rcp_height = 1.0 / (top - bottom);
+    // let r = 1.0 / (near - far);
+    // Self::from_cols(
+    //     Vec4::new(rcp_width + rcp_width, 0.0, 0.0, 0.0),
+    //     Vec4::new(0.0, rcp_height + rcp_height, 0.0, 0.0),
+    //     Vec4::new(0.0, 0.0, r, 0.0),
+    //     Vec4::new(
+    //         -(left + right) * rcp_width,
+    //         -(top + bottom) * rcp_height,
+    //         r * near,
+    //         1.0,
+    //     ),
+    // )
+    mat4 ret = mat4(
+        vec4(rcpWidth + rcpWidth, 0.0, 0.0, 0.0),
+        vec4(0.0, rcpHeight + rcpHeight, 0.0, 0.0),
+        vec4(0.0, 0.0, r, 0.0),
+        vec4(
+            -(left + right) * rcpWidth,
+            -(top + bottom) * rcpHeight,
+            r * near,
+            1.0
+        ));
+
+    return ret;
+}
+
+mat4 orthographic_lh(
+    float left,
+    float right,
+    float bottom,
+    float top,
+    float near,
+    float far
+) {
+    float rcpWidth = 1.0 / (right - left);
+    float rcpHeight = 1.0 / (top - bottom);
+    float r = 1.0 / (far - near);
+    // let rcp_width = 1.0 / (right - left);
+    // let rcp_height = 1.0 / (top - bottom);
+    // let r = 1.0 / (far - near);
+    // Self::from_cols(
+    //     Vec4::new(rcp_width + rcp_width, 0.0, 0.0, 0.0),
+    //     Vec4::new(0.0, rcp_height + rcp_height, 0.0, 0.0),
+    //     Vec4::new(0.0, 0.0, r, 0.0),
+    //     Vec4::new(
+    //         -(left + right) * rcp_width,
+    //         -(top + bottom) * rcp_height,
+    //         -r * near,
+    //         1.0,
+    //     ),
+    // )
+
+    mat4 ret = mat4(
+        vec4(rcpWidth + rcpWidth, 0.0, 0.0, 0.0),
+        vec4(0.0, rcpHeight + rcpHeight, 0.0, 0.0),
+        vec4(0.0, 0.0, r, 0.0),
+        vec4(
+            -(left + right) * rcpWidth,
+            -(top + bottom) * rcpHeight,
+            -r * near,
+            1.0
+        ));
+
+    return ret;
+}
+
+
+mat4 lookTo_rh(vec3 eye, vec3 dir, vec3 up) {
+    vec3 f = normalize(dir);
+    vec3 s = normalize(cross(up, f));
+    vec3 u = cross(f, s);
+    return mat4(
+            vec4(s.x, u.x, f.x, 0.0),
+            vec4(s.y, u.y, f.y, 0.0),
+            vec4(s.z, u.z, f.z, 0.0),
+            vec4(dot(-s, eye), dot(-u, eye), dot(-f, eye), 1.0)
+    );
+}
+
+mat4 lookTo_lh(vec3 eye, vec3 dir, vec3 up) {
+    return lookTo_rh(eye, -dir, up);
+}
+
+mat4 scaleMatrix(vec3 scale) {
+    return mat4(
+    vec4(scale.x, 0.0, 0.0, 0.0),
+    vec4(0.0, scale.y, 0.0, 0.0),
+    vec4(0.0, 0.0, scale.z, 0.0),
+    vec4(0.0, 0.0, 0.0, 1.0));
+}
+
+mat4 lookAt_rh(vec3 eye, vec3 center, vec3 up) {
+    return lookTo_rh(eye, eye - center, up);
+}
+mat4 lookAt_lh(vec3 eye, vec3 center, vec3 up) {
+    return lookTo_lh(eye, eye - center, up);
+}
+
+vec3 moveFrustumByTexelSize(float shadowMapSize, float radius, mat4 lookAt, vec3 frustumCenter) {
+    float texelsPerUnit = shadowMapSize / (radius * 2.0);
+    mat4 lookAtScaled = lookAt * scaleMatrix(vec3(texelsPerUnit));
+
+    vec4 frustumCenterTransformed = lookAtScaled * vec4(frustumCenter, 1.0);
+    frustumCenterTransformed.x = floor(frustumCenterTransformed.x);
+    frustumCenterTransformed.y = floor(frustumCenterTransformed.y);
+
+    mat4 lookAtInv = inverse(lookAtScaled);
+    frustumCenterTransformed = lookAtInv * vec4(frustumCenterTransformed.xyz, 1.0);
+
+    return frustumCenterTransformed.xyz;
+}
+
+void main() {
+    uint cascadeIndex = gl_LocalInvocationIndex;
+
+    vec2 reducedDepth = imageLoad(reducedDepthImage, ivec2(0, 0)).xy;
+    float minDistance = reducedDepth.x;
+    float maxDistance = reducedDepth.y;
+
+    float nearClip = world.cameraNear;
+    float farClip = world.cameraFar;
+    float clipRange = farClip - nearClip;
+
+    float minZ = nearClip + minDistance * clipRange;
+    float maxZ = nearClip + maxDistance * clipRange;
+
+    maxZ = min(maxZ, world.dirLight.maxShadowDistance);
+
+    float range = maxZ - minZ;
+    float ratio = maxZ / minZ;
+
+    float splits[N_CASCADES] = {0.0, 0.0, 0.0, 0.0};
+
+    for(uint i = 0; i < N_CASCADES; i++) {
+        float p = (i + 1) / float(N_CASCADES);
+        float logScale = minZ * pow(ratio, p);
+        float uniformScale = minZ + range * p;
+        float d = world.dirLight.shadowSplitLambda * (logScale - uniformScale) + uniformScale;
+        splits[i] = (d - nearClip) / clipRange;
+    }
+
+    vec3 frustumCorners[] = {
+        vec3(-1.0,  1.0, 0.0),
+        vec3( 1.0,  1.0, 0.0),
+        vec3(-1.0, -1.0, 0.0),
+        vec3(-1.0, -1.0, 0.0),
+        vec3(-1.0,  1.0, 1.0),
+        vec3( 1.0,  1.0, 1.0),
+        vec3( 1.0, -1.0, 1.0),
+        vec3(-1.0, -1.0, 1.0)
+    };
+
+    mat4 view_proj_inv = inverse(world.viewProj);
+
+    [[unroll]]
+    for(uint i = 0; i < 8; i++) {
+        vec3 corner = frustumCorners[i];
+        vec4 cornerWorld = view_proj_inv * vec4(corner, 1.0);
+        cornerWorld /= cornerWorld.w;
+        frustumCorners[i] = cornerWorld.xyz;
+    }
+
+    float lastSplitDist = cascadeIndex == 0 ? minDistance : splits[cascadeIndex - 1];
+
+    float currentSplitDistance = splits[cascadeIndex];
+
+    [[unroll]]
+    for (uint i = 0; i < 4; i++) {
+        vec3 dist = frustumCorners[i + 4] - frustumCorners[i];
+        frustumCorners[i + 4] = frustumCorners[i] + (dist * currentSplitDistance);
+        frustumCorners[i] = frustumCorners[i] + (dist * lastSplitDist);
+    }
+
+
+    vec3 frustumCenter = vec3(0.0);
+
+    [[unroll]]
+    for(uint i = 0; i < 8; i++) {
+        frustumCenter += frustumCorners[i];
+    }
+
+    frustumCenter/= 8.0;
+
+    float radius = 0.0;
+    [[unroll]]
+    for(uint i = 0; i < 8; i++) {
+        float dist = length(frustumCorners[i] - frustumCenter);
+        radius = max(radius, dist);
+    }
+
+    radius = ceil(radius * 16.0) / 16.0;
+
+    vec3 lightDir = world.dirLight.direction;
+    //vec3 upDir = vec3(0.0, 1.0, 0.0);
+    vec3 upDir = world.dirLight.upDirection;
+
+    ShadowCascade cascadeInfo = world.dirLight.cascades[cascadeIndex];
+    float mapSize = cascadeInfo.mapSize;
+    //Fixes shimmering by moving the frustum center by texel size increments
+    frustumCenter = moveFrustumByTexelSize(mapSize, radius, lookAt_lh(vec3(0.0), -lightDir, upDir), frustumCenter);
+
+    vec3 maxExtents = vec3(radius);
+    vec3 minExtents = -maxExtents;
+
+    float near = 0.0;
+    float far = maxExtents.z - minExtents.z;
+    mat4 lightOrtho = orthographic_lh(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, near, far);
+    mat4 lightView = lookAt_lh(frustumCenter - lightDir * maxExtents.z, frustumCenter, upDir);
+
+    cascadeRenderInfo[cascadeIndex].split = (nearClip + currentSplitDistance * clipRange);
+    cascadeRenderInfo[cascadeIndex].view = lightView;
+    cascadeRenderInfo[cascadeIndex].viewProj = (lightOrtho * lightView);
+    cascadeRenderInfo[cascadeIndex].near = near;
+    cascadeRenderInfo[cascadeIndex].far = far;
+}
