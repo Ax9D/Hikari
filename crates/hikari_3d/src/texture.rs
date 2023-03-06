@@ -1,69 +1,18 @@
-use image::EncodableLayout;
+use ::image::EncodableLayout;
 
 use std::{sync::Arc};
 use crate::config::*;
 
 use hikari_asset::{Asset, LoadContext, Loader};
 use hikari_render::*;
-
-fn into_vk_config(config: &TextureConfig, width: u32, height: u32) -> ImageConfig {
-    let format = match config.format {
-        //Format::RGB8 => vk::Format::R8G8B8_SNORM,
-        Format::RGBA8 => vk::Format::R8G8B8A8_UNORM,
-        //Format::SRGB => vk::Format::R8G8B8_SRGB,
-        Format::SRGBA => vk::Format::R8G8B8A8_SRGB,
-        Format::RGBAFloat16 => vk::Format::R16G16B16A16_SFLOAT,
-        Format::RGBAFloat32 => vk::Format::R32G32B32A32_SFLOAT,
-    };
-    let filtering = match config.filtering {
-        FilterMode::Closest => vk::Filter::NEAREST,
-        FilterMode::Linear => vk::Filter::LINEAR,
-    };
-    let wrap_x = match config.wrap_x {
-        WrapMode::Clamp => vk::SamplerAddressMode::CLAMP_TO_EDGE,
-        WrapMode::Repeat => vk::SamplerAddressMode::REPEAT,
-    };
-    let wrap_y = match config.wrap_y {
-        WrapMode::Clamp => vk::SamplerAddressMode::CLAMP_TO_EDGE,
-        WrapMode::Repeat => vk::SamplerAddressMode::REPEAT,
-    };
-    let wrap_z = vk::SamplerAddressMode::REPEAT;
-
-    let mip_filtering = match config.filtering {
-        FilterMode::Closest => vk::SamplerMipmapMode::NEAREST,
-        FilterMode::Linear => vk::SamplerMipmapMode::LINEAR,
-    };
-
-    ImageConfig {
-        format,
-        filtering,
-        wrap_x,
-        wrap_y,
-        wrap_z,
-        sampler_reduction_mode: None,
-        aniso_level: config.aniso_level,
-        mip_levels: if config.generate_mips {
-            TextureConfig::get_mip_count(width, height)
-        } else {
-            1
-        },
-        mip_filtering,
-        usage: vk::ImageUsageFlags::SAMPLED,
-        flags: vk::ImageCreateFlags::empty(),
-        image_type: vk::ImageType::TYPE_2D,
-        image_view_type: vk::ImageViewType::TYPE_2D,
-        initial_layout: vk::ImageLayout::UNDEFINED,
-        host_readable: false,
-    }
-}
 pub struct Texture2D {
     image: SampledImage,
     config: TextureConfig,
 }
 impl Texture2D {
-    pub fn new(
+    pub fn new<T: Copy>(
         device: &Arc<hikari_render::Device>,
-        data: &[u8],
+        data: &[T],
         width: u32,
         height: u32,
         config: TextureConfig,
@@ -75,10 +24,34 @@ impl Texture2D {
                 width,
                 height,
                 1,
-                into_vk_config(&config, width, height),
+                config.into_image_config_2d(width, height)?,
             )?,
             config,
         })
+    }
+    pub fn with_dimensions(
+        device: &Arc<hikari_render::Device>,
+        width: u32,
+        height: u32,
+        config: TextureConfig,
+    ) -> Result<Texture2D, anyhow::Error> {
+        Ok(Self {
+            image: SampledImage::with_dimensions(
+                device,
+                width,
+                height,
+                1,
+                1,
+                config.into_image_config_2d(width, height)?,
+            )?,
+            config,
+        })
+    }
+    pub fn from_parts(image: SampledImage, config: TextureConfig) -> Self {
+        Self {
+            image,
+            config
+        }
     }
     pub fn raw(&self) -> &SampledImage {
         &self.image
@@ -93,6 +66,8 @@ impl Texture2D {
         &self.config
     }
 }
+
+pub const SUPPORTED_TEXTURE_EXTENSIONS: [&'static str; 7] = ["png", "jpg", "jpeg", "dds", "bmp", "gif", "tga"];
 pub struct TextureLoader {
     pub device: Arc<Device>,
 }
@@ -105,9 +80,9 @@ impl Loader for TextureLoader {
         //let mut raw_data = vec![];
         //context.reader().read_to_end(&mut raw_data)?;
 
-        let format = image::ImageFormat::from_path(context.path())?;
+        let format = ::image::ImageFormat::from_path(context.path())?;
 
-        let image = image::load(context.reader(), format)?;
+        let image = ::image::load(context.reader(), format)?;
         //let image = image::load_from_memory(&buf_reader)?;
         let width = image.width();
         let height = image.height();
@@ -130,7 +105,7 @@ impl Loader for TextureLoader {
     }
 
     fn extensions(&self) -> &[&str] {
-        &["png", "jpg", "jpeg", "dds", "bmp", "gif", "tga"]
+        &SUPPORTED_TEXTURE_EXTENSIONS
     }
 }
 
