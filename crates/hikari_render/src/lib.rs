@@ -17,6 +17,9 @@ pub mod image;
 #[cfg(feature = "imgui-support")]
 pub mod imgui_support;
 
+#[cfg(feature = "renderdoc")]
+pub mod renderdoc;
+
 pub use device::Device;
 pub use device::Features;
 pub use error::*;
@@ -55,6 +58,9 @@ impl hikari_core::Plugin for GfxPlugin {
     fn build(self, game: &mut hikari_core::Game) {
         let gfx = Gfx::new(game.window(), self.config).expect("Failed to create render context");
         game.add_state(gfx);
+
+        #[cfg(feature="renderdoc")]
+        game.add_plugin(renderdoc::RenderdocPlugin);
 
         game.add_task(hikari_core::FIRST, hikari_core::Task::new("Gfx New Frame", |gfx: &mut Gfx| {
             gfx.new_frame().expect("Failed to update gfx");
