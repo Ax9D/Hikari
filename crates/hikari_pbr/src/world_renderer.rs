@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use hikari_3d::*;
 use hikari_asset::AssetManager;
 use hikari_core::{Entity, World};
@@ -16,6 +18,7 @@ use crate::{
 
 pub struct WorldRenderer {
     graph: hikari_render::Graph<Args>,
+    primitives: Arc<hikari_3d::primitives::Primitives>,
     res: RenderResources,
 }
 
@@ -25,16 +28,18 @@ impl WorldRenderer {
         width: u32,
         height: u32,
         shader_library: &mut ShaderLibrary,
+        primitives: &Arc<hikari_3d::primitives::Primitives>,
     ) -> anyhow::Result<Self> {
         let res = RenderResources::new(gfx.device(), width, height)?;
-        let graph = Self::build_graph(gfx, width, height, shader_library, &res)?;
-        Ok(Self { graph, res })
+        let graph = Self::build_graph(gfx, width, height, shader_library, primitives, &res)?;
+        Ok(Self { graph, res, primitives: primitives.clone() })
     }
     fn build_graph(
         gfx: &mut Gfx,
         width: u32,
         height: u32,
         shader_library: &mut ShaderLibrary,
+        primitives: &Arc<hikari_3d::primitives::Primitives>,
         res: &RenderResources,
     ) -> anyhow::Result<hikari_render::Graph<Args>> {
         let device = gfx.device().clone();
@@ -51,6 +56,7 @@ impl WorldRenderer {
             &device,
             &mut graph,
             shader_library,
+            primitives,
             &shadow_cascades,
             &cascade_render_buffer,
             &depth_prepass,
@@ -97,7 +103,7 @@ impl WorldRenderer {
             let (width, height) = self.graph.size();
 
             self.graph.finish()?;
-            self.graph = Self::build_graph(gfx, width, height, shader_library, &self.res)?;
+            self.graph = Self::build_graph(gfx, width, height, shader_library, &self.primitives, &self.res)?;
         }
 
         gfx.set_vsync(self.res.settings.vsync);
@@ -134,11 +140,17 @@ impl WorldRenderer {
 
             let camera_view_proj = projection * view;
             ubo_data.camera_position = transform.position.into();
-            ubo_data.view = view.to_cols_array();
-            ubo_data.view_proj = camera_view_proj.to_cols_array();
+            ubo_data.proj = projection;
+            ubo_data.view = view;
+            ubo_data.view_proj = camera_view_proj;
             ubo_data.camera_near = camera.near;
             ubo_data.camera_far = camera.far;
             ubo_data.exposure = camera.exposure;
+
+            if let Some((_, (transform, environment))) = world.query::<(&Transform, &Environment)>().iter().next() {
+                ubo_data.environment_intensity = environment.intensity;
+                ubo_data.environment_transform = transform.get_rotation_matrix();
+            }
 
             if let Some(entity) = directional_light {
                 let mut query = world.query_one::<(&Transform, &Light)>(entity).unwrap();
@@ -153,6 +165,7 @@ impl WorldRenderer {
                 ubo_data.dir_light.direction = direction.into();
                 ubo_data.dir_light.up_direction = up_direction.into();
                 ubo_data.dir_light.cascade_split_lambda = light.shadow.cascade_split_lambda;
+                ubo_data.dir_light.cast_shadows = light.shadow.enabled.into();
                 ubo_data.show_cascades = res.settings.debug.show_shadow_cascades as u32;
                 if light.shadow.enabled {
                     let shadow = &light.shadow;

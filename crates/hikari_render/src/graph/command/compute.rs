@@ -57,6 +57,9 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
             pipeline_ctx: PipelineContext::new(),
         }
     }
+    pub fn raw(&mut self) -> vk::CommandBuffer {
+        self.cmd.raw()
+    }
     #[inline]
     pub(crate) fn inner(&mut self) -> &mut &'cmd mut CommandBuffer<'graph> {
         &mut self.cmd
@@ -131,7 +134,7 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
                 return;
             }
         }
-
+        //self.cmd.saved_state.descriptor_state.dirty_sets = shader.pipeline_layout().set_mask();
         self.pipeline_ctx.pipeline_dirty = true;
     }
     pub fn push_constants<T: Copy>(&mut self, data: &T, offset: usize) {
@@ -158,6 +161,9 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
     }
     pub fn end_debug_region(&mut self) {
         self.cmd.end_debug_region()
+    }
+    pub fn copy_image(&self, src: &SampledImage, src_layout: vk::ImageLayout, dst: &SampledImage, dst_layout: vk::ImageLayout, copy_info: &[vk::ImageCopy]) {
+        self.cmd.copy_image(src, src_layout, dst, dst_layout, copy_info)
     }
     fn flush_compute_state(&mut self) {
         hikari_dev::profile_function!();

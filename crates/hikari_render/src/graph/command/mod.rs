@@ -382,24 +382,29 @@ impl<'a> CommandBuffer<'a> {
     }
     pub(crate) fn begin_debug_region<'cmd>(&'cmd mut self, name: impl AsRef<str>, color: hikari_math::Vec4) {
         if let Some(debug_utils) = &self.device.extensions().debug_utils {
-            
+
             let name = name.as_ref();
             let name_cstring = std::ffi::CString::new(name).expect("Debug Label is not a valid CString");
-            
+
             let label = vk::DebugUtilsLabelEXT::builder()
             .label_name(&name_cstring)
             .color(color.to_array());
 
-            unsafe { 
+            unsafe {
                 debug_utils.cmd_begin_debug_utils_label(self.cmd, &label);
             }
         }
     }
     pub(crate) fn end_debug_region<'cmd>(&'cmd mut self) {
         if let Some(debug_utils) = &self.device.extensions().debug_utils {
-            unsafe { 
+            unsafe {
                 debug_utils.cmd_end_debug_utils_label(self.cmd);
             }
+        }
+    }
+    pub fn copy_image(&self, src: &SampledImage, src_layout: vk::ImageLayout, dst: &SampledImage, dst_layout: vk::ImageLayout, copy_info: &[vk::ImageCopy]) {
+        unsafe {
+            self.device.raw().cmd_copy_image(self.cmd, src.image(), src_layout, dst.image(), dst_layout, copy_info);
         }
     }
     pub(crate) fn reset(&mut self) -> VkResult<()> {

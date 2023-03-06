@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use hikari_3d::ShaderLibrary;
 use hikari_asset::AssetManager;
 use hikari_core::{Plugin, World};
@@ -37,7 +39,7 @@ pub enum ShadowResolution {
 }
 
 impl ShadowResolution {
-    pub fn size(self) -> u32 {
+    pub const fn size(self) -> u32 {
         match self {
             ShadowResolution::D256 => 256,
             ShadowResolution::D512 => 512,
@@ -75,11 +77,12 @@ impl Plugin for PBRPlugin {
     fn build(self, game: &mut hikari_core::Game) {
         let mut gfx = game.get_mut::<Gfx>();
         let mut shader_lib = game.get_mut::<ShaderLibrary>();
-
-        let renderer = WorldRenderer::new(&mut gfx, self.width, self.height, &mut shader_lib)
+        let primitives = game.get::<Arc<hikari_3d::primitives::Primitives>>();
+        let renderer = WorldRenderer::new(&mut gfx, self.width, self.height, &mut shader_lib, &primitives)
             .expect("Failed to create WorldRenderer");
         drop(gfx);
         drop(shader_lib);
+        drop(primitives);
 
         game.add_state(renderer);
         #[cfg(not(feature = "editor"))]

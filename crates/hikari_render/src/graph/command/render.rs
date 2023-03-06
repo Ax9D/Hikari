@@ -2,7 +2,7 @@ use ash::vk::{self};
 
 use crate::buffer::Buffer;
 use crate::graph::graphics::pipeline::*;
-use crate::texture::SampledImage;
+use crate::image::SampledImage;
 use crate::{IndexType, PhysicalRenderpass};
 
 use super::{CommandBuffer, PipelineLookup};
@@ -75,7 +75,7 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
                 return;
             }
         }
-
+        //self.cmd.saved_state.descriptor_state.dirty_sets = shader.pipeline_layout().set_mask();
         self.pipeline_ctx.pipeline_dirty = true;
     }
     pub fn set_pipeline_state(&mut self, pipeline_state: PipelineState) {
@@ -127,7 +127,7 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         self.cmd.set_image_mip(image, mip_level, set, binding)
     }
     #[inline]
-    pub(crate) fn set_image_view_and_sampler(
+    pub fn set_image_view_and_sampler(
         &mut self,
         image_view: vk::ImageView,
         sampler: vk::Sampler,
@@ -163,6 +163,25 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         binding: u32,
     ) {
         self.set_buffer(buffer, span, set, binding)
+    }
+    #[inline]
+    pub fn apply_image_barrier(
+        &mut self,
+        image: &SampledImage,
+        previous_accesses: &[crate::vk_sync::AccessType],
+        next_accesses: &[crate::vk_sync::AccessType],
+        previous_layout: crate::vk_sync::ImageLayout,
+        next_layout: crate::vk_sync::ImageLayout,
+        range: vk::ImageSubresourceRange,
+    ) {
+        self.cmd.apply_image_barrier(
+            image,
+            previous_accesses,
+            next_accesses,
+            previous_layout,
+            next_layout,
+            range,
+        )
     }
     pub fn set_buffer<B: Buffer>(
         &mut self,

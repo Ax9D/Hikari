@@ -5,7 +5,7 @@ use crate::{
         command::{compute::ComputepassCommands, render::PassRecordInfo},
         GpuHandle,
     },
-    texture::SampledImage,
+    image::SampledImage,
     Args, Buffer, ByRef, GraphResources,
 };
 
@@ -81,7 +81,8 @@ impl<T: Args> ComputePass<T> {
             | AccessType::DepthStencilAttachmentRead
             | AccessType::ComputeShaderReadOther
             | AccessType::AnyShaderReadSampledImageOrUniformTexelBuffer
-            | AccessType::AnyShaderReadOther => {}
+            | AccessType::AnyShaderReadOther 
+            | AccessType::TransferRead => {}
             _ => panic!(
                 "Invalid access type {:?} for image read in computepass",
                 access_type

@@ -11,7 +11,7 @@ use crate::{
     material::Material,
     texture::{Texture2D},
 
-    SubMesh, TextureConfig,
+    SubMesh, TextureConfig, processing,
 };
 #[allow(unused)]
 struct ImportData {
@@ -61,129 +61,11 @@ impl ImportData {
     //     &self.images
     // }
 }
-// fn load_mesh_data(import_data: &ImportData, mesh: &gltf::Mesh<'_>) -> crate::mesh::Mesh {
-//     let mut meshes = Vec::new();
-//     let name = mesh
-//         .name()
-//         .unwrap_or(&format!(
-//             "{}_model_{}",
-//             import_data.filename(),
-//             mesh.index()
-//         ))
-//         .to_owned();
-//     //println!("Loading model {}", name);
-//     for primitive in mesh.primitives() {
-//         let reader = primitive.reader(|buffer| Some(&import_data.buffers()[buffer.index()]));
-
-//         let positions: Vec<_> = if let Some(iter) = reader.read_positions() {
-//             let positions = iter.collect::<Vec<_>>();
-//             positions
-//                 .iter()
-//                 .map(|position| Vec3::from(*position))
-//                 .collect()
-//         } else {
-//             continue;
-//         };
-
-//         let normals = if let Some(iter) = reader.read_normals() {
-//             let normals = iter.collect::<Vec<_>>();
-//             normals.iter().map(|normal| Vec3::from(*normal)).collect()
-//         } else {
-//             crate::mesh::default_normals(positions.len())
-//         };
-
-//         let texcoord0 = if let Some(iter) = reader.read_tex_coords(0) {
-//             let iter = iter.into_f32();
-//             let texcoord0 = iter.collect::<Vec<_>>();
-//             texcoord0
-//                 .iter()
-//                 .map(|texcoord0| Vec2::from(*texcoord0))
-//                 .collect()
-//         } else {
-//             vec![Vec2::ZERO; positions.len()]
-//         };
-
-//         let texcoord1 = if let Some(iter) = reader.read_tex_coords(1) {
-//             let iter = iter.into_f32();
-//             let texcoord1 = iter.collect::<Vec<_>>();
-//             texcoord1
-//                 .iter()
-//                 .map(|texcoord1| Vec2::from(*texcoord1))
-//                 .collect()
-//         } else {
-//             vec![Vec2::ZERO; positions.len()]
-//         };
-
-//         let indices = if let Some(iter) = reader.read_indices() {
-//             let iter = iter.into_u32();
-//             iter.collect::<Vec<_>>()
-//         } else {
-//             (0..positions.len()).map(|x| x as u32).collect::<Vec<_>>()
-//         };
-//         meshes.push(crate::mesh::SubMesh {
-//             positions,
-//             normals,
-//             texcoord0,
-//             texcoord1,
-//             indices,
-//             material: primitive.material().index(),
-//         })
-//     }
-
-//     crate::mesh::Model { name, meshes }
-// }
-// fn load_meshes(import_data: &ImportData) -> Vec<crate::Mesh> {
-//     // for mesh in importData.document().meshes() {
-//     //     tokio::spawn(loadModelData(importData, mesh));
-//     // }
-
-//     import_data
-//         .document()
-//         .meshes()
-//         .collect::<Vec<_>>()
-//         .par_iter()
-//         .map(|model| load_submeshes(&import_data, model))
-//         .collect()
-
-//     // for model in models {
-//     //     for mesh in model {
-//     //         crate::Me
-//     //     }
-//     // }
-// }
-// pub fn load_scene(path: &Path) -> Result<crate::Scene, crate::Error> {
-//     let import_data = ImportData::new(path)
-//         .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
-
-//     let now = std::time::Instant::now();
-//     let textures = load_textures(&import_data)
-//         .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
-
-//     //println!("Textures {:?}", now.elapsed());
-//     //println!("First import texture {}", importData.document().textures().next().unwrap().index());
-//     //println!("First texture {}", textures[0].name());
-
-//     let now = std::time::Instant::now();
-//     let materials = load_materials(&textures, &import_data);
-
-//     let now = std::time::Instant::now();
-//     //println!("Materials {:?}", now.elapsed());
-//     let models = load_meshes(&import_data);
-
-//     //println!("Models {:?}", now.elapsed());
-
-//     Ok(crate::Scene {
-//         textures,
-//         materials,
-//         models,
-//     })
-// }
-
 fn load_texture(
     import_data: &ImportData,
     texture: &gltf::Texture,
     load_context: &mut LoadContext,
-    is_albedo: bool,
+    is_srgb: bool,
 ) -> Result<Handle<Texture2D>, anyhow::Error> {
     // let is_albedo = import_data.document().materials().find(|mat| {
     //     if let Some(albedo) = mat.pbr_metallic_roughness().base_color_texture() {
@@ -237,7 +119,7 @@ fn load_texture(
     // }).is_some();
 
     //Albedo textures are treated as SRGB
-    let format = if is_albedo {
+    let format = if is_srgb {
         crate::config::Format::SRGBA
     } else {
         crate::config::Format::RGBA8
@@ -250,6 +132,7 @@ fn load_texture(
         wrap_y,
         aniso_level: 8.0,
         generate_mips,
+        ..Default::default()
     };
 
     parse_texture_data(texture, import_data, config, load_context)
@@ -383,67 +266,68 @@ fn load_material(
 
     let material_path = import_data.parent_path().join(file_name);
     if !material_path.exists() {
-        let (albedo, albedo_set) =
-            if let Some(info) = material.pbr_metallic_roughness().base_color_texture() {
-                (
-                    Some(load_texture(import_data, &info.texture(), load_context, true)?),
-                    info.tex_coord(),
-                )
+        let pbr = material.pbr_metallic_roughness();
+
+        let uv_set =pbr
+        .base_color_texture()
+        .or(pbr.metallic_roughness_texture())
+        .map(|info| info.tex_coord())
+        .unwrap_or(0);// Try to guess the uv_set
+
+        let albedo = if let Some(info) = pbr.base_color_texture() {
+            Some(load_texture(import_data, &info.texture(), load_context, true)?)
             } else {
-                (None, 0)
+                None
+        };
+
+        let albedo_factor = Vec4::from(pbr.base_color_factor());
+
+        let roughness = if let Some(info) = pbr.metallic_roughness_texture() {
+        Some(load_texture(import_data, &info.texture(), load_context, false)?)
+        } else {
+            None
+        };
+
+        let roughness_factor = pbr.roughness_factor();
+
+        let metallic = if let Some(info) = pbr.metallic_roughness_texture() {
+                Some(load_texture(import_data, &info.texture(), load_context, false)?)
+            } else {
+                None
             };
-        let albedo_factor = Vec4::from(material.pbr_metallic_roughness().base_color_factor());
 
-        // const GAMMA: f32 = 2.2;
-        // *albedo_factor = *albedo_factor.powf(GAMMA); //SRGB To Linear
+        let metallic_factor = pbr.metallic_factor();
 
-        let (roughness, roughness_set) = if let Some(info) = material
-            .pbr_metallic_roughness()
-            .metallic_roughness_texture()
-        {
-            (
-                Some(load_texture(import_data, &info.texture(), load_context, false)?),
-                info.tex_coord(),
-            )
+        let emissive = if let Some(info) = material
+            .emissive_texture() {
+                Some(load_texture(import_data, &info.texture(), load_context, true)?)
+            } else {
+                None
+            };
+
+
+        let emissive_factor = material.emissive_factor().into();
+
+        let normal = if let Some(info) = material
+        .normal_texture() {
+            Some(load_texture(import_data, &info.texture(), load_context, false)?)
         } else {
-            (None, 0)
+            None
         };
-        let roughness_factor = material.pbr_metallic_roughness().roughness_factor();
 
-        let (metallic, metallic_set) = if let Some(info) = material
-            .pbr_metallic_roughness()
-            .metallic_roughness_texture()
-        {
-            (
-                Some(load_texture(import_data, &info.texture(), load_context, false)?),
-                info.tex_coord(),
-            )
-        } else {
-            (None, 0)
-        };
-        let metallic_factor = material.pbr_metallic_roughness().metallic_factor();
-
-        let (normal, normal_set) = if let Some(info) = material.normal_texture() {
-            (
-                Some(load_texture(import_data, &info.texture(), load_context, false)?),
-                info.tex_coord(),
-            )
-        } else {
-            (None, 0)
-        };
 
         let material = Material {
             albedo,
-            albedo_set,
+            uv_set,
             albedo_factor,
             roughness,
-            roughness_set,
             roughness_factor,
             metallic,
-            metallic_set,
             metallic_factor,
             normal,
-            normal_set,
+            emissive,
+            emissive_factor,
+            ..Default::default()
         };
 
         let handle = load_context.asset_manager().create(&material_path, material, None)?;
@@ -470,12 +354,6 @@ fn load_mesh(
     materials: &[Handle<crate::Material>],
 ) -> Result<crate::mesh::Mesh, anyhow::Error> {
     let mut sub_meshes = Vec::new();
-
-
-    let mesh_id = mesh.index().to_string();
-    let mesh_name = mesh.name().unwrap_or(&mesh_id);
-
-    let _mesh_name = format!("{}_texture_{}", import_data.filename(), mesh_name);
 
     let node = import_data
         .document()
@@ -585,7 +463,6 @@ pub fn load_scene(
 ) -> Result<crate::Scene, anyhow::Error> {
     let import_data = ImportData::new(path, data)
         .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
-    println!("Parsed GLTF");
 
     //let textures = load_textures(&import_data, load_context)?;
     let materials = load_materials(&import_data, load_context)?;
@@ -619,7 +496,7 @@ pub fn load_scene(
         })
         .unwrap_or(crate::Camera {
             near: 0.1,
-            far: 10_000.0,
+            far: 1000.0,
             exposure: 1.0,
             projection: crate::Projection::Perspective(45.0),
             is_primary: false,
