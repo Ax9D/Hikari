@@ -10,7 +10,7 @@ pub use ecs::*;
 pub use game::*;
 pub use time::*;
 
-use hikari_systems::Task;
+pub use hikari_systems::*;
 pub use plugin::*;
 use rayon::ThreadPoolBuilder;
 
