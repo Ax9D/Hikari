@@ -1,89 +1,147 @@
 use std::any::TypeId;
 
-use crate::{editor::meta::EditorInfo, imgui};
+use crate::{components::ComponentDispatch, editor::meta::EditorInfo, imgui};
 use hikari::core::*;
 use hikari_editor::*;
+use imgui::{ImguiUiExt, TreeNodeFlags};
 
-use super::{meta::EditorOnly, Editor, EditorComponents};
+use super::{meta::EditorOnly, Editor, EditorComponents, EditorWindow};
 
 #[derive(Default)]
-pub struct Properties;
+pub struct Properties {
+    pub position_locked: bool,
+    pub scale_locked: bool,
+    pub rotation_locked: bool,
+}
 
-pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
-    let filtered_types = [TypeId::of::<EditorInfo>(), TypeId::of::<EditorOnly>()];
-
-    let result = ui
-        .window("Properties")
-        .size([300.0, 400.0], imgui::Condition::Once)
-        .resizable(true)
-        .build(|| -> anyhow::Result<()> {
-            let components = state.get::<EditorComponents>().unwrap();
-            let outliner = &editor.outliner;
-
-            if let Some(entity) = outliner.selected {
-                let mut world = state.get_mut::<World>().unwrap();
-                ui.popup("component_selection", || {
-                    for (_, component) in components
-                        .iter()
-                        .filter(|(type_id, _)| !filtered_types.contains(*type_id))
-                    {
-                        if ui.selectable(component.name()) {
-                            component.add_component(entity, &mut world).unwrap();
-                        }
-                    }
-                });
-
-                if ui.button("+") {
-                    ui.open_popup("component_selection");
+fn component_selection(
+    ui: &imgui::Ui,
+    entity: Entity,
+    world: &mut World,
+    components: &EditorComponents,
+    filtered_types: &[TypeId],
+) {
+    ui.popup("ComponentSelection", || {
+        let mut sorted_components: Vec<_> = components
+            .iter()
+            .filter_map(|(type_id, component)| {
+                if filtered_types.contains(type_id) {
+                    None
+                } else {
+                    Some(component)
                 }
+            })
+            .collect();
 
-                {
-                    hikari::dev::profile_scope!("Draw Components");
-                    let _id = ui.push_id_int(entity.id() as i32);
-                    let entity_ref = world.entity(entity).unwrap();
+        sorted_components.sort_by_key(|component| component.sort_key());
 
-                    let type_ids = entity_ref
-                        .component_types()
-                        .filter(|type_id| !filtered_types.contains(type_id))
-                        .collect::<Vec<_>>();
-
-                    for ty in type_ids {
-                        if let Some(dispatch) = components.get(ty) {
-                            let _token = ui
-                                .tree_node_config(dispatch.name())
-                                .opened(true, imgui::Condition::FirstUseEver)
-                                .frame_padding(true)
-                                .flags(imgui::TreeNodeFlags::FRAMED)
-                                .allow_item_overlap(true)
-                                .push();
-
-                            ui.same_line_with_pos(
-                                ui.window_content_region_max()[0]
-                                    - ui.window_content_region_min()[0]
-                                    - ui.frame_height() / 2.0
-                                    + 1.0,
-                            );
-                            let remove =
-                                ui.button_with_size("x", [ui.frame_height(), ui.frame_height()]);
-                            ui.new_line();
-
-                            if let Some(_) = _token {
-                                dispatch.draw_component(ui, entity, &mut world, editor, state)?;
-                            }
-
-                            if remove {
-                                dispatch.remove_component(entity, &mut world).unwrap();
-                            }
-                        }
-                    }
-                }
+        for component in sorted_components {
+            if ui.selectable(component.name()) {
+                component.add_component(entity, world).unwrap();
             }
-            Ok(())
-        });
+        }
+    });
 
-    if let Some(result) = result {
-        result?;
+    ui.new_line();
+    ui.horizontal_align(
+        || {
+            if ui.button("Add Component") {
+                ui.open_popup("ComponentSelection");
+            }
+        },
+        0.5,
+        ui.calc_text_size("Add Component")[0],
+    );
+}
+fn draw_component(
+    ui: &imgui::Ui,
+    entity: Entity,
+    component: &ComponentDispatch,
+    world: &mut World,
+    editor: &mut Editor,
+    state: EngineState,
+) -> anyhow::Result<()> {
+    // let token = ui
+    //                         .tree_node_config(component.name())
+    //                         .opened(true, imgui::Condition::FirstUseEver)
+    //                         //.frame_padding(true)
+    //                         .flags(imgui::TreeNodeFlags::FRAMED)
+    //                         .allow_item_overlap(true)
+    //                         .push();
+    //     ui.same_line_with_pos(
+    //         ui.window_content_region_max()[0]
+    //             - ui.window_content_region_min()[0]
+    //             - ui.frame_height() / 2.0
+    //             + 1.0,
+    //     );
+    //     let remove = ui.button_with_size("x", [ui.frame_height(), ui.frame_height()]);
+    //     if let Some(_token) = token {
+    //     ui.new_line();
+    //     component.draw_component(ui, entity, world, editor, state)?;
+    // }
+
+    let mut open = true;
+
+    if ui.collapsing_header_with_close_button(
+        component.name(),
+        TreeNodeFlags::DEFAULT_OPEN,
+        &mut open,
+    ) {
+        component.draw_component(ui, entity, world, editor, state)?;
+    }
+
+    if !open {
+        component.remove_component(entity, world).unwrap();
     }
 
     Ok(())
+}
+impl EditorWindow for Properties {
+    fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+        let filtered_types = [TypeId::of::<EditorInfo>(), TypeId::of::<EditorOnly>()];
+
+        let result = ui
+            .window("Properties")
+            .size([300.0, 400.0], imgui::Condition::FirstUseEver)
+            .resizable(true)
+            .build(|| -> anyhow::Result<()> {
+                let components = state.get::<EditorComponents>().unwrap();
+                let outliner = &editor.outliner;
+
+                if let Some(entity) = outliner.selected {
+                    let mut world = state.get_mut::<World>().unwrap();
+
+                    {
+                        hikari::dev::profile_scope!("Draw Components");
+                        let _id = ui.push_id_int(entity.id() as i32);
+                        let entity_ref = world.entity(entity).unwrap();
+
+                        let entity_ty_ids = entity_ref
+                            .component_types()
+                            .filter(|type_id| !filtered_types.contains(type_id));
+
+                        let mut entity_components = Vec::new();
+
+                        for ty_id in entity_ty_ids {
+                            if let Some(component) = components.get(ty_id) {
+                                entity_components.push(component);
+                            }
+                        }
+                        entity_components.sort_by_key(|component| component.sort_key());
+
+                        for component in entity_components {
+                            draw_component(ui, entity, component, &mut world, editor, state)?;
+                        }
+                    }
+                    component_selection(ui, entity, &mut world, &components, &filtered_types);
+                }
+                Ok(())
+            });
+
+        if let Some(result) = result {
+            result?;
+        }
+
+        Ok(())
+    }
 }

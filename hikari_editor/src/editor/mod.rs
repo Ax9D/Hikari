@@ -1,23 +1,27 @@
 use self::{
+    about::About,
+    asset_editors::MaterialEditor,
     content_browser::ContentBrowser,
     debugger::Debugger,
     logging::{LogListener, Logging},
     outliner::Outliner,
     project::ProjectManager,
     properties::Properties,
+    render_settings::RenderSettings,
     viewport::Viewport,
 };
-use crate::{component_impls, components::EditorComponents, imgui};
+use crate::{component_impls, components::EditorComponents};
 use clipboard::ClipboardProvider;
 use hikari::{
     core::{serde::Registry, Game},
     input::KeyCode,
 };
 use hikari_editor::*;
-use imgui::ImguiDockingExt;
+
 pub mod logging;
 
 //mod utils;
+mod about;
 mod camera;
 mod content_browser;
 mod debugger;
@@ -27,7 +31,11 @@ mod outliner;
 mod project;
 mod properties;
 mod render_settings;
+mod style;
 mod viewport;
+mod font;
+
+mod asset_editors;
 
 struct Clipboard(clipboard::ClipboardContext);
 impl Clipboard {
@@ -37,7 +45,7 @@ impl Clipboard {
             .map(|context| Self(context))
     }
 }
-impl imgui::ClipboardBackend for Clipboard {
+impl hikari::imgui::ClipboardBackend for Clipboard {
     fn get(&mut self) -> Option<String> {
         self.0.get_contents().ok().map(|text| text.into())
     }
@@ -54,100 +62,48 @@ pub struct EditorConfig {
 #[derive(PartialEq, Eq)]
 pub enum RenameState {
     Idle,
-    Renaming(imgui::Id, String, i32),
+    Renaming(hikari::imgui::Id, String, i32),
+}
+
+pub trait EditorWindow {
+    fn draw(ui: &hikari::imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()>;
+    fn draw_if_open(ui: &hikari::imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+        if Self::is_open(editor) {
+            Self::draw(ui, editor, state)?;
+        }
+        Ok(())
+    }
+    fn open(_editor: &mut Editor) {}
+    fn is_open(_editor: &mut Editor) -> bool {
+        true
+    }
 }
 pub struct Editor {
-    outliner: Outliner,
-    #[allow(unused)]
-    properties: Properties,
-    viewport: Viewport,
-    content_browser: ContentBrowser,
-    logging: Logging,
-    debugger: Debugger,
-    show_demo: bool,
-    rename_state: RenameState,
-    project_manager: ProjectManager,
+    pub outliner: Outliner,
+    pub properties: Properties,
+    pub viewport: Viewport,
+    pub content_browser: ContentBrowser,
+    pub logging: Logging,
+    pub debugger: Debugger,
+    pub rename_state: RenameState,
+    pub project_manager: ProjectManager,
+    pub about: About,
+    pub material_editor: MaterialEditor,
+    pub show_demo: bool,
 }
 
 impl Editor {
-    fn set_dark_theme(ctx: &mut imgui::Context) {
-        ctx.style_mut().use_dark_colors();
-        let style = ctx.style_mut();
-        style.colors[imgui::StyleColor::Text as usize] = [1.00, 1.00, 1.00, 1.00];
-        style.colors[imgui::StyleColor::TextDisabled as usize] = [0.50, 0.50, 0.50, 1.00];
-        style.colors[imgui::StyleColor::WindowBg as usize] = [0.13, 0.14, 0.15, 1.00];
-        style.colors[imgui::StyleColor::ChildBg as usize] = [0.13, 0.14, 0.15, 1.00];
-        style.colors[imgui::StyleColor::PopupBg as usize] = [0.13, 0.14, 0.15, 1.00];
-        style.colors[imgui::StyleColor::Border as usize] = [0.43, 0.43, 0.50, 0.50];
-        style.colors[imgui::StyleColor::BorderShadow as usize] = [0.00, 0.00, 0.00, 0.00];
-        style.colors[imgui::StyleColor::FrameBg as usize] = [0.25, 0.25, 0.25, 1.00];
-        style.colors[imgui::StyleColor::FrameBgHovered as usize] = [0.38, 0.38, 0.38, 1.00];
-        style.colors[imgui::StyleColor::FrameBgActive as usize] = [0.67, 0.67, 0.67, 0.39];
-        style.colors[imgui::StyleColor::TitleBg as usize] = [0.08, 0.08, 0.09, 1.00];
-        style.colors[imgui::StyleColor::TitleBgActive as usize] = [0.08, 0.08, 0.09, 1.00];
-        style.colors[imgui::StyleColor::TitleBgCollapsed as usize] = [0.00, 0.00, 0.00, 0.51];
-        style.colors[imgui::StyleColor::MenuBarBg as usize] = [0.14, 0.14, 0.14, 1.00];
-        style.colors[imgui::StyleColor::ScrollbarBg as usize] = [0.260, 0.260, 0.260, 0.285];
-        style.colors[imgui::StyleColor::ScrollbarGrab as usize] = [0.31, 0.31, 0.31, 1.00];
-        style.colors[imgui::StyleColor::ScrollbarGrabHovered as usize] = [0.41, 0.41, 0.41, 1.00];
-        style.colors[imgui::StyleColor::ScrollbarGrabActive as usize] = [0.51, 0.51, 0.51, 1.00];
-        style.colors[imgui::StyleColor::CheckMark as usize] = [0.11, 0.64, 0.92, 1.00];
-        style.colors[imgui::StyleColor::SliderGrab as usize] = [0.11, 0.64, 0.92, 1.00];
-        style.colors[imgui::StyleColor::SliderGrabActive as usize] = [0.08, 0.50, 0.72, 1.00];
-        style.colors[imgui::StyleColor::Button as usize] = [0.25, 0.25, 0.25, 1.00];
-        style.colors[imgui::StyleColor::ButtonHovered as usize] = [0.38, 0.38, 0.38, 1.00];
-        style.colors[imgui::StyleColor::ButtonActive as usize] = [0.67, 0.67, 0.67, 0.39];
-        style.colors[imgui::StyleColor::Header as usize] = [0.22, 0.22, 0.22, 1.00];
-        style.colors[imgui::StyleColor::HeaderHovered as usize] = [0.25, 0.25, 0.25, 1.00];
-        style.colors[imgui::StyleColor::HeaderActive as usize] = [0.67, 0.67, 0.67, 0.39];
-        style.colors[imgui::StyleColor::Separator as usize] =
-            style.colors[imgui::StyleColor::Border as usize];
-        style.colors[imgui::StyleColor::SeparatorHovered as usize] = [0.41, 0.42, 0.44, 1.00];
-        style.colors[imgui::StyleColor::SeparatorActive as usize] = [0.26, 0.59, 0.98, 0.95];
-        style.colors[imgui::StyleColor::ResizeGrip as usize] = [0.00, 0.00, 0.00, 0.00];
-        style.colors[imgui::StyleColor::ResizeGripHovered as usize] = [0.29, 0.30, 0.31, 0.67];
-        style.colors[imgui::StyleColor::ResizeGripActive as usize] = [0.26, 0.59, 0.98, 0.95];
-        style.colors[imgui::StyleColor::Tab as usize] = [0.08, 0.08, 0.09, 0.83];
-        style.colors[imgui::StyleColor::TabHovered as usize] = [0.33, 0.34, 0.36, 0.83];
-        style.colors[imgui::StyleColor::TabActive as usize] = [0.23, 0.23, 0.24, 1.00];
-        style.colors[imgui::StyleColor::TabUnfocused as usize] = [0.08, 0.08, 0.09, 1.00];
-        style.colors[imgui::StyleColor::TabUnfocusedActive as usize] = [0.13, 0.14, 0.15, 1.00];
-        style.colors[imgui::StyleColor::DockingPreview as usize] = [0.26, 0.59, 0.98, 0.70];
-        style.colors[imgui::StyleColor::DockingEmptyBg as usize] = [0.20, 0.20, 0.20, 1.00];
-        style.colors[imgui::StyleColor::PlotLines as usize] = [0.61, 0.61, 0.61, 1.00];
-        style.colors[imgui::StyleColor::PlotLinesHovered as usize] = [1.00, 0.43, 0.35, 1.00];
-        style.colors[imgui::StyleColor::PlotHistogram as usize] = [0.90, 0.70, 0.00, 1.00];
-        style.colors[imgui::StyleColor::PlotHistogramHovered as usize] = [1.00, 0.60, 0.00, 1.00];
-        style.colors[imgui::StyleColor::TextSelectedBg as usize] = [0.26, 0.59, 0.98, 0.35];
-        style.colors[imgui::StyleColor::DragDropTarget as usize] = [0.11, 0.64, 0.92, 1.00];
-        style.colors[imgui::StyleColor::NavHighlight as usize] = [0.26, 0.59, 0.98, 1.00];
-        style.colors[imgui::StyleColor::NavWindowingHighlight as usize] = [1.00, 1.00, 1.00, 0.70];
-        style.colors[imgui::StyleColor::NavWindowingDimBg as usize] = [0.80, 0.80, 0.80, 0.20];
-        style.colors[imgui::StyleColor::ModalWindowDimBg as usize] = [0.675, 0.675, 0.675, 0.350];
-        style.colors[imgui::StyleColor::CheckMark as usize] = [0.71, 0.71, 0.71, 1.00];
-        style.colors[imgui::StyleColor::SliderGrab as usize] = [0.71, 0.71, 0.71, 1.00];
-        style.colors[imgui::StyleColor::DockingPreview as usize] = [0.36, 0.37, 0.38, 0.70];
-    }
-    pub fn init(game: &mut Game, ctx: &mut imgui::Context, config: EditorConfig) {
-        ctx.style_mut().tab_rounding = 0.0;
-        ctx.style_mut().frame_rounding = 2.0;
-        ctx.io_mut().config_flags = imgui::ConfigFlags::DOCKING_ENABLE;
-
-        ctx.fonts().add_font(&[
-            imgui::FontSource::TtfData {
-                data: include_bytes!("../../../engine_assets/fonts/Roboto/Roboto-Regular.ttf"),
-                size_pixels: 13.0 * config.hidpi_factor * 1.5,
-                config: None,
-            },
-            icons::icon_ttf(config.hidpi_factor),
-        ]);
+    pub fn init(game: &mut Game, ctx: &mut hikari::imgui::Context, config: EditorConfig) {
+        ctx.io_mut().config_flags = hikari::imgui::ConfigFlags::DOCKING_ENABLE;
+        ctx.set_ini_filename(None);
+        font::load_fonts(ctx, &config);
+        style::set_dark_theme(ctx);
 
         if let Some(clipboard) = Clipboard::new() {
             ctx.set_clipboard_backend(clipboard);
         } else {
             log::error!("Failed to init clipboard");
         }
-        Self::set_dark_theme(ctx);
 
         let mut editor_components = EditorComponents::default();
         let mut registry = Registry::new();
@@ -171,12 +127,15 @@ impl Editor {
             viewport: Viewport::default(),
             rename_state: RenameState::Idle,
             project_manager: ProjectManager::default(),
+            material_editor: MaterialEditor::default(),
+            about: About::default(),
         };
 
         game.add_state(editor);
         game.add_state(editor_components);
     }
-    pub fn run(&mut self, ui: &imgui::Ui, state: EngineState) {
+    pub fn update(&mut self, ui: &hikari::imgui::Ui, state: EngineState) {
+        use hikari::imgui;
         ui.window("Main")
             .flags(
                 imgui::WindowFlags::NO_DECORATION
@@ -196,12 +155,17 @@ impl Editor {
                     ui.menu("Edit", || {
                         ui.menu_item_config("Preferences").enabled(false).build();
                     });
+                    ui.menu("Windows", || {
+                        if ui.menu_item("Material Editor") {
+                            MaterialEditor::open(self);
+                        }
+                    });
                     ui.menu("Tools", || {
                         if ui.menu_item("Debugger") {
-                            self.debugger.open();
+                            Debugger::open(self);
                         }
                         if ui.menu_item("Start Tracy") {
-                            let path = std::path::Path::new("./tools/");
+                            let path = hikari::utils::engine_dir().join("data/tools/");
 
                             #[cfg(target_os = "windows")]
                             let tracy_exe = "Tracy.exe";
@@ -217,28 +181,60 @@ impl Editor {
                     });
                     ui.menu("Help", || {
                         self.show_demo = ui.menu_item_config("Demo Window").build();
+                        if ui.menu_item("Copy Style to Clipboard as Rust") {
+                            style::copy_style_to_clipboard_as_rust(ui);
+                        }
+                        if ui.menu_item("About") {
+                            self.about.open();
+                        }
                     });
                 });
-
-                let _dock_node = ui.dockspace("Dockspace");
+                self.default_layout(ui);
             });
 
-        //Update render settings before render, so incase of a resize we don't use freed resources in the imgui pass
-        render_settings::draw(ui, self, state).unwrap();
-
-        //content_browser::draw(ui, self, state).unwrap();
-        viewport::draw(ui, self, state).unwrap();
-        outliner::draw(ui, self, state).unwrap();
-        project::draw(ui, self, state).unwrap();
-        properties::draw(ui, self, state).unwrap();
-        logging::draw(ui, self);
-        debugger::draw(ui, self, state).unwrap();
-
-        if self.show_demo {
-            ui.show_demo_window(&mut self.show_demo);
-        }
+        self.draw_windows(ui, state).unwrap();
     }
-    pub fn file_menu(&mut self, ui: &imgui::Ui, state: EngineState) -> anyhow::Result<()> {
+    fn default_layout(&self, ui: &hikari::imgui::Ui) {
+        use hikari::imgui::*;
+        if ui.get_node("Dockspace").is_some() {
+            let _root = ui.dockspace("Dockspace", [0.0, 0.0], 0);
+            return;
+        }
+
+        let root = ui.dockspace("Dockspace", [0.0, 0.0], hikari::imgui::sys::ImGuiDockNodeFlags_AutoHideTabBar as i32);
+
+        root.split(
+            hikari::imgui::Direction::Left,
+            0.8,
+            |left| {
+                left.split(
+                    hikari::imgui::Direction::Up,
+                    0.7,
+                    |up| {
+                        up.dock_window(ui, "Viewport");
+                    },
+                    |down| {
+                        down.dock_window(ui, "Engine Log");
+                    },
+                )
+            },
+            |right| {
+                right.split(
+                    hikari::imgui::Direction::Up,
+                    0.6,
+                    |up| {
+                        up.dock_window(ui, "Project");
+                        up.dock_window(ui, "Outliner");
+                        up.dock_window(ui, "Render Settings");
+                    },
+                    |down| {
+                        down.dock_window(ui, "Properties");
+                    },
+                );
+            },
+        );
+    }
+    pub fn file_menu(&mut self, ui: &hikari::imgui::Ui, state: EngineState) -> anyhow::Result<()> {
         let mut open = false;
         let mut save = false;
         let project_open = self.project_manager.current.is_some();
@@ -273,6 +269,34 @@ impl Editor {
         }
 
         Ok(())
+    }
+    pub fn draw_windows(&mut self, ui: &hikari::imgui::Ui, state: EngineState) -> anyhow::Result<()> {
+        hikari::dev::profile_function!();
+
+        //Update render settings before render, so incase of a resize we don't use freed resources in the imgui pass
+        RenderSettings::draw_if_open(ui, self, state)?;
+
+        //content_browser::draw(ui, self, state).unwrap();
+        Viewport::draw_if_open(ui, self, state)?;
+        Outliner::draw_if_open(ui, self, state)?;
+        ProjectManager::draw_if_open(ui, self, state)?;
+        Properties::draw_if_open(ui, self, state)?;
+        Logging::draw_if_open(ui, self, state)?;
+        Debugger::draw_if_open(ui, self, state)?;
+        About::draw_if_open(ui, self, state)?;
+
+        MaterialEditor::draw_if_open(ui, self, state)?;
+
+        if self.show_demo {
+            ui.show_demo_window(&mut self.show_demo);
+        }
+
+        Ok(())
+    }
+    pub fn pre_update(&mut self, _window: &winit::window::Window, _context: &mut hikari::imgui::Context) {}
+    pub fn post_update(&mut self, _window: &winit::window::Window, context: &mut hikari::imgui::Context) {
+        self.project_manager.load_imgui_settings(context);
+        self.project_manager.save_imgui_settings(context);
     }
     pub fn handle_exit(&mut self) {
         log::info!("Editor Exiting");

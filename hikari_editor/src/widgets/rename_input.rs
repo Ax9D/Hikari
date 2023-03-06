@@ -1,5 +1,5 @@
 use hikari::input::KeyCode;
-use hikari_imgui::*;
+use hikari::imgui::*;
 
 use crate::editor::RenameState;
 

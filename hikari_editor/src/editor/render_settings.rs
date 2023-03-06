@@ -5,20 +5,27 @@ use hikari::pbr::WorldRenderer;
 use hikari::render::Gfx;
 use hikari_editor::EngineState;
 
-use super::imgui;
+use super::EditorWindow;
+use hikari::imgui;
 use super::Editor;
 
-pub fn draw(ui: &imgui::Ui, _editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+pub struct RenderSettings;
+
+impl EditorWindow for RenderSettings {
+fn draw(ui: &imgui::Ui, _editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
     ui.window("Render Settings")
-        .size([300.0, 400.0], imgui::Condition::Once)
+        .size([300.0, 400.0], imgui::Condition::FirstUseEver)
         .resizable(true)
         .build(|| {
             let mut renderer = state.get_mut::<WorldRenderer>().unwrap();
             let mut gfx = state.get_mut::<Gfx>().unwrap();
             let mut shader_lib = state.get_mut::<ShaderLibrary>().unwrap();
+            let time = state.get::<hikari::core::Time>().unwrap();
 
             renderer
                 .update_settings(&mut gfx, &mut shader_lib, |settings| {
+                    let dt = time.dt();
+                    ui.text(format!("Frametime: {} ms FPS: {}", (dt * 1000.0).round(), (1.0/dt).round()));
                     ui.checkbox("VSync", &mut settings.vsync);
                     ui.checkbox("FXAA", &mut settings.fxaa);
 
@@ -52,16 +59,15 @@ pub fn draw(ui: &imgui::Ui, _editor: &mut Editor, state: EngineState) -> anyhow:
                         _ => unreachable!(),
                     };
                     ui.separator();
-
+                    
+                    ui.checkbox("Wireframe", &mut settings.debug.wireframe);
                     ui.checkbox(
                         "Show Shadow Cascades",
                         &mut settings.debug.show_shadow_cascades,
                     );
                 })
                 .expect("Failed to update settings");
-
-            ui.separator();
-
+                
             let mut generate_debug_info = shader_lib.config().generate_debug_info;
 
             if ui.checkbox("Generate Shader Debug Info", &mut generate_debug_info) {
@@ -82,4 +88,5 @@ pub fn draw(ui: &imgui::Ui, _editor: &mut Editor, state: EngineState) -> anyhow:
         });
 
     Ok(())
+}
 }

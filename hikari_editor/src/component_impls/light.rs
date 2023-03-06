@@ -33,7 +33,11 @@ impl EditorComponent for Light {
             .picker(true)
             .build();
 
-        imgui::Drag::new("Intensity").build(ui, &mut self.intensity);
+        imgui::Drag::new("Intensity")
+        .range(0.0, f32::MAX)
+        .speed(0.25)
+        .build(ui, &mut self.intensity);
+        
         ui.checkbox("Cast shadows", &mut self.shadow.enabled);
 
         ui.combo(

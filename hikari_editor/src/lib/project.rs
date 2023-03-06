@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path};
+use std::{fs::File, path::{Path, PathBuf}};
 
 use hikari::asset::{AssetManager, Handle, LazyHandle};
 use serde::{Deserialize, Serialize};
@@ -15,9 +15,9 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: impl AsRef<str>) -> Self {
         Self {
-            name,
+            name: name.as_ref().to_owned(),
             engine_version: env!("CARGO_PKG_VERSION").into(),
             scenes: vec![],
         }
@@ -27,10 +27,10 @@ impl Project {
         Ok(serialized_project.into())
     }
     pub fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
-        // let mut file_name = PathBuf::from(path);
-        // file_name.set_extension(PROJECT_EXTENSION);
+        let mut file_name = PathBuf::from(&self.name);
+        file_name.set_extension(PROJECT_EXTENSION);
 
-        // let path = path.as_ref().join(&file_name);
+        let path = path.as_ref().join(&file_name);
 
         let file = std::fs::OpenOptions::new()
             .create(true)
@@ -97,6 +97,6 @@ impl Into<Project> for SerializedProject {
 fn serialize() {
     println!(
         "{}",
-        serde_yaml::to_string(&Project::new("Test".into())).unwrap()
+        serde_yaml::to_string(&Project::new("Test")).unwrap()
     );
 }

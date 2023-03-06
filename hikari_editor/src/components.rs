@@ -1,11 +1,11 @@
 #![allow(unused)]
 use std::{
     any::TypeId,
-    collections::{hash_map::Iter, HashMap},
+    collections::{HashMap},
 };
 
 use hikari::core::{Component, ComponentError, Entity, NoSuchEntity, World};
-use hikari_imgui::Ui;
+use hikari::imgui::Ui;
 
 use crate::Editor;
 use hikari_editor::*;
@@ -22,12 +22,15 @@ impl EditorComponents {
     pub fn get(&self, type_id: TypeId) -> Option<&ComponentDispatch> {
         self.dispatchers.get(&type_id)
     }
-    pub fn iter(&self) -> Iter<'_, TypeId, ComponentDispatch> {
+    pub fn iter<'a>(&'a self) -> std::collections::hash_map::Iter<'a, TypeId, ComponentDispatch> {
         self.dispatchers.iter()
     }
 }
+
 pub struct ComponentDispatch {
     name: fn() -> &'static str,
+    type_id: TypeId,
+    sort_key: fn() -> usize,
     add_component: fn(Entity, &mut World) -> Result<(), NoSuchEntity>,
     draw_component: fn(&Ui, Entity, &mut World, &mut Editor, EngineState) -> anyhow::Result<()>,
     remove_component: fn(Entity, &mut World) -> Result<(), ComponentError>,
@@ -37,6 +40,8 @@ impl ComponentDispatch {
     pub fn new<T: EditorComponent>() -> Self {
         Self {
             name: T::name,
+            type_id: TypeId::of::<T>(),
+            sort_key: T::sort_key,
             add_component: T::add_component,
             draw_component: T::draw_component,
             remove_component: T::remove_component,
@@ -46,6 +51,10 @@ impl ComponentDispatch {
     #[inline]
     pub fn name(&self) -> &'static str {
         (self.name)()
+    }
+    #[inline]
+    pub fn sort_key(&self) -> usize {
+        (self.sort_key)()
     }
     #[inline]
     pub fn add_component(&self, entity: Entity, world: &mut World) -> Result<(), NoSuchEntity> {
@@ -85,6 +94,7 @@ impl ComponentDispatch {
         (self.draw_component)(ui, entity, world, editor, state)
     }
 }
+
 pub trait EditorComponent: Component {
     fn name() -> &'static str
     where
@@ -92,6 +102,9 @@ pub trait EditorComponent: Component {
     fn new() -> Self
     where
         Self: Sized;
+    fn sort_key() -> usize { 
+        usize::MAX
+    }
     fn draw(
         &mut self,
         ui: &Ui,

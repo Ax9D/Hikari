@@ -7,6 +7,7 @@ mod light;
 mod mesh_render;
 mod meta;
 mod transform;
+mod environment;
 
 fn register_component<C: EditorComponent + SerializeComponent>(
     components: &mut EditorComponents,
@@ -20,6 +21,7 @@ pub fn register_components(components: &mut EditorComponents, registry: &mut Reg
     register_component::<hikari::g3d::Camera>(components, registry);
     register_component::<hikari::g3d::MeshRender>(components, registry);
     register_component::<hikari::g3d::Light>(components, registry);
+    register_component::<hikari::g3d::Environment>(components, registry);
 
     register_component::<crate::editor::meta::EditorInfo>(components, registry);
     register_component::<crate::editor::meta::EditorOnly>(components, registry);

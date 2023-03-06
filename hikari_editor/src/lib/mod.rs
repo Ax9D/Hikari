@@ -1,9 +1,8 @@
 pub mod project;
 pub mod scene;
-
 use std::pin::Pin;
 
-use hikari::systems::global::UnsafeGlobalState;
+use hikari::core::global::UnsafeGlobalState;
 pub use project::*;
 pub use scene::*;
 

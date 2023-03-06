@@ -2,12 +2,13 @@ use std::collections::HashMap;
 
 use hikari::math::{EulerRot, Quat, Transform, Vec3};
 use hikari_editor::*;
-use imgui::StorageExt;
+use hikari::imgui::*;
 
 use crate::{components::EditorComponent, *};
 
 fn rotation_controls(
-    ui: &imgui::Ui,
+    ui: &Ui,
+    width: f32,
     quat: &mut Quat,
     entity: Entity,
     euler_cache: &mut HashMap<Entity, (f32, f32, f32)>,
@@ -26,17 +27,19 @@ fn rotation_controls(
         (x, y, z)
     };
 
-    let mut angles = [x.to_degrees(), y.to_degrees(), z.to_degrees()];
+    let mut angles = Vec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees());
 
-    let changed = imgui::Drag::new("rotation")
+    let changed = DragVec3::new("rotation")
         .speed(0.5)
-        .build_array(ui, &mut angles);
+        .width(width)
+        .display_format("%.3f°")
+        .build(ui, &mut angles);
 
     if changed {
         let (x, y, z) = (
-            angles[0].to_radians(),
-            angles[1].to_radians(),
-            angles[2].to_radians(),
+            angles.x.to_radians(),
+            angles.y.to_radians(),
+            angles.z.to_radians(),
         );
         *euler_cache.get_mut(&entity).unwrap() = (x, y, z);
         *quat = Quat::from_euler(EulerRot::XYZ, x, y, z);
@@ -60,31 +63,43 @@ impl EditorComponent for Transform {
 
     fn draw(
         &mut self,
-        ui: &hikari_imgui::Ui,
+        ui: &Ui,
         entity: Entity,
-        _editor: &mut Editor,
+        editor: &mut Editor,
         _state: EngineState,
     ) -> anyhow::Result<()> {
         hikari::dev::profile_scope!("Transform Component");
         let mut storage = ui.storage();
         //FIXME: Memory leak when entities get deleted
-        let euler_cache = storage.get_or_insert_with(imgui::Id::Str("euler_cache", ui), || {
+        let euler_cache = storage.get_or_insert_with(ui.new_id_str("euler_cache"), || {
             HashMap::<Entity, (f32, f32, f32)>::new()
         });
 
-        let mut position: [f32; 3] = self.position.into();
-        imgui::Drag::new("position")
-            .speed(0.1)
-            .build_array(ui, &mut position);
-        self.position = position.into();
+        // let mut position: [f32; 3] = self.position.into();
+        // imgui::Drag::new("position")
+        //     .speed(0.1)
+        //     .build_array(ui, &mut position);
+        // self.position = position.into();
 
-        rotation_controls(ui, &mut self.rotation, entity, euler_cache);
+        let width = ui.content_region_avail()[0];
+        
+        DragVec3::new("position")
+        .speed(0.1)
+        .width(width)
+        .build(ui, &mut self.position);
 
-        let mut scale: [f32; 3] = self.scale.into();
-        imgui::Drag::new("scale")
-            .speed(0.2)
-            .build_array(ui, &mut scale);
-        self.scale = Vec3::from(scale);
+        rotation_controls(ui, width, &mut self.rotation, entity, euler_cache);
+
+        DragVec3::new("scale")
+        .speed(0.03)
+        .width(width)
+        .reset(1.0)
+        .range(0.0, f32::MAX)
+        .proportional(editor.properties.scale_locked)
+        .build(ui, &mut self.scale);
+
+        ui.same_line_with_spacing(0.0, 5.0);
+        ui.checkbox("##ScaleLock", &mut editor.properties.scale_locked);
 
         Ok(())
     }
@@ -94,5 +109,8 @@ impl EditorComponent for Transform {
         Self: Sized,
     {
         *self
+    }
+    fn sort_key() -> usize {
+        0
     }
 }

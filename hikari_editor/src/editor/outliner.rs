@@ -1,13 +1,12 @@
 use hikari::core::*;
-use hikari::input::KeyCode;
 use hikari::math::*;
 
-use crate::imgui;
+use hikari::imgui::*;
 use crate::widgets::RenameInput;
 use hikari_editor::*;
 
 use super::meta::{EditorInfo, EditorOnly};
-use super::Editor;
+use super::{Editor, EditorWindow};
 
 #[derive(Default)]
 pub struct Outliner {
@@ -36,59 +35,61 @@ impl Outliner {
         self.selected = None;
     }
 }
-pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
-    let mut world = state.get_mut::<World>().unwrap();
+impl EditorWindow for Outliner {
+    fn draw(ui: &Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+        let mut world = state.get_mut::<World>().unwrap();
 
-    ui.window("Outliner")
-        .size([300.0, 400.0], imgui::Condition::Once)
-        .resizable(true)
-        .build(|| {
-            let outliner = &mut editor.outliner;
-            let rename_state = &mut editor.rename_state;
-
-            if ui.button("+") {
-                outliner.add_entity(&mut world, "untitled");
-            }
-
-            if ui.is_window_focused() && ui.io().keys_down[KeyCode::Delete as usize] {
-                if let Some(entity) = outliner.selected {
-                    outliner.remove_entity(&mut world, entity).unwrap();
-                    outliner.selected = None;
+        ui.window("Outliner")
+            .size([300.0, 400.0], Condition::FirstUseEver)
+            .resizable(true)
+            .build(|| {
+                let outliner = &mut editor.outliner;
+                let rename_state = &mut editor.rename_state;
+    
+                if ui.button("+") {
+                    outliner.add_entity(&mut world, "untitled");
                 }
-            }
-
-            let mut ordered_entities;
-            {
-                hikari::dev::profile_scope!("Outliner Entity sorting");
-                ordered_entities = Vec::with_capacity(world.len());
-                for (entity, info) in world.query_mut::<Without<&EditorInfo, &EditorOnly>>() {
-                    ordered_entities.push((entity, info.index));
+    
+                if ui.is_window_focused() && ui.is_key_down(Key::Delete) {
+                    if let Some(entity) = outliner.selected {
+                        outliner.remove_entity(&mut world, entity).unwrap();
+                        outliner.selected = None;
+                    }
                 }
-
-                ordered_entities.sort_by(|(_, a), (_, b)| a.cmp(b));
-            }
-
-            for (entity, _) in ordered_entities {
-                let mut editor_info = world.get_component::<&mut EditorInfo>(entity).unwrap();
-                let entity_id = imgui::Id::Int(entity.id() as i32, ui);
-                let _id = ui.push_id_int(entity.id() as i32);
-
-                RenameInput::new(entity_id, &mut editor_info.name).build(
-                    ui,
-                    rename_state,
-                    |current| {
-                        let clicked = ui
-                            .selectable_config(&current)
-                            .selected(outliner.selected == Some(entity))
-                            .build();
-
-                        if clicked {
-                            outliner.selected = Some(entity);
-                        }
-                    },
-                );
-            }
-        });
-
-    Ok(())
+    
+                let mut ordered_entities;
+                {
+                    hikari::dev::profile_scope!("Outliner Entity sorting");
+                    ordered_entities = Vec::with_capacity(world.len());
+                    for (entity, info) in world.query_mut::<Without<&EditorInfo, &EditorOnly>>() {
+                        ordered_entities.push((entity, info.index));
+                    }
+    
+                    ordered_entities.sort_by(|(_, a), (_, b)| a.cmp(b));
+                }
+    
+                for (entity, _) in ordered_entities {
+                    let mut editor_info = world.get_component::<&mut EditorInfo>(entity).unwrap();
+                    let entity_id = ui.new_id_int(entity.id() as i32);
+                    let _id = ui.push_id_int(entity.id() as i32);
+    
+                    RenameInput::new(entity_id, &mut editor_info.name).build(
+                        ui,
+                        rename_state,
+                        |current| {
+                            let clicked = ui
+                                .selectable_config(&current)
+                                .selected(outliner.selected == Some(entity))
+                                .build();
+    
+                            if clicked {
+                                outliner.selected = Some(entity);
+                            }
+                        },
+                    );
+                }
+            });
+    
+        Ok(())
+    }
 }

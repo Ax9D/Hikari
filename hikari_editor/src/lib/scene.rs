@@ -14,15 +14,6 @@ pub struct Scene {
     pub world: World,
 }
 impl Scene {
-    // #[allow(unused)]
-    // pub fn save(&self, path: impl AsRef<Path>, registry: &Registry) -> anyhow::Result<()> {
-    //     serde_yaml::to_writer(std::fs::File::open(path)?, &SerializableScene {
-    //         scene: &self,
-    //         registry
-    //     })?;
-
-    //     Ok(())
-    // }
     fn serialize<S: Serializer>(&self, ser: S, registry: &Registry) -> Result<S::Ok, S::Error> {
         SerializableScene {
             scene: &self,
@@ -130,7 +121,6 @@ impl Saver for SceneLoader {
 
         let mut ser = serde_yaml::Serializer::new(Vec::new());
         scene.serialize(&mut ser, &self.registry)?;
-        println!("{}", String::from_utf8(ser.into_inner().unwrap()).unwrap());
 
         Ok(())
     }

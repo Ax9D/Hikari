@@ -11,17 +11,9 @@ use std::path::PathBuf;
 use crate::{components::EditorComponents, imgui};
 
 use hikari_editor::*;
-use hikari_imgui::*;
+use hikari::imgui::*;
 
-use super::{meta::EditorOnly, Editor};
-
-#[derive(Default)]
-pub struct ProjectManager {
-    pub current: Option<(PathBuf, Project)>,
-    current_scene: Option<Handle<Scene>>,
-    new_scene_scratch: Option<Handle<Scene>>,
-    scene_creator: SceneCreator,
-}
+use super::{meta::EditorOnly, Editor, EditorWindow};
 
 #[derive(Default)]
 struct SceneCreator {
@@ -92,10 +84,22 @@ impl SceneCreator {
         new_scene
     }
 }
+pub enum ImguiSettingsEvent {
+    LoadSettings(String),
+    SaveSettings,
+}
+#[derive(Default)]
+pub struct ProjectManager {
+    pub current: Option<(PathBuf, Project)>,
+    current_scene: Option<Handle<Scene>>,
+    new_scene_scratch: Option<Handle<Scene>>,
+    scene_creator: SceneCreator,
+    imgui_settings_event: Option<ImguiSettingsEvent>
+}
 
 impl ProjectManager {
     pub fn open(&mut self, file: impl AsRef<Path>, state: EngineState) -> anyhow::Result<()> {
-        let file_clone = file.as_ref().to_owned();
+        let file_clone = file.as_ref();
 
         let proj_dir = file_clone.parent().unwrap();
 
@@ -104,7 +108,7 @@ impl ProjectManager {
         asset_manager.set_asset_dir(proj_dir)?;
         std::env::set_current_dir(proj_dir)?;
 
-        match Project::open(file) {
+        match Project::open(&file) {
             Ok(project) => {
                 let mut new_title = String::from("Hikari Editor - ");
                 new_title.push_str(&project.name);
@@ -113,8 +117,11 @@ impl ProjectManager {
                     .unwrap()
                     .set_title(&new_title);
 
-                self.current = Some((file_clone.clone(), project));
+                self.current = Some((proj_dir.to_owned(), project));
 
+                if let Some(settings) = std::fs::read_to_string(proj_dir.join("imgui.ini")).ok() {
+                    self.imgui_settings_event = Some(ImguiSettingsEvent::LoadSettings(settings));
+                }
                 // let folder = file_clone.parent().expect("Failed to find parent folder");
                 // std::env::set_current_dir(folder).expect("Failed to set cwd");
             }
@@ -152,7 +159,7 @@ impl ProjectManager {
 
         Ok(())
     }
-    pub fn save_all(&self, state: EngineState) -> anyhow::Result<()> {
+    pub fn save_all(&mut self, state: EngineState) -> anyhow::Result<()> {
         let manager = state.get::<AssetManager>().unwrap();
         let components = state.get::<EditorComponents>().unwrap();
 
@@ -176,8 +183,33 @@ impl ProjectManager {
         if let Some((path, project)) = &self.current {
             project.save(path)?;
             manager.save_db()?;
+            self.imgui_settings_event = Some(ImguiSettingsEvent::SaveSettings);
+            log::info!("Saved Project");
         }
         Ok(())
+    }
+    pub fn load_imgui_settings(&mut self, context: &mut imgui::Context) {
+        if let Some(ImguiSettingsEvent::LoadSettings(settings)) = &self.imgui_settings_event {
+            context.load_ini_settings(&settings);
+
+            self.imgui_settings_event.take();
+        }
+    }
+    pub fn save_imgui_settings(&mut self, context: &mut imgui::Context) {
+        if let Some(ImguiSettingsEvent::SaveSettings) = &self.imgui_settings_event {
+            let mut buffer = String::new();
+            
+            context.save_ini_settings(&mut buffer);
+            let (project_path, _) = self.current.as_ref().unwrap();
+
+            let result = std::fs::write(project_path.join("imgui.ini"), buffer);
+
+            if let Err(err) = result {
+               log::error!("Failed to save imgui settings: {}", err);
+            }
+
+            self.imgui_settings_event.take();
+        }
     }
 }
 
@@ -191,87 +223,90 @@ fn new_scene() -> Scene {
 
     Scene { world }
 }
-pub fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
-    let project_manager = &mut editor.project_manager;
 
-    let mut new_scene_sure = false;
-    {
-        let manager = state.get::<AssetManager>().unwrap();
+impl EditorWindow for ProjectManager {
+    fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
+        let project_manager = &mut editor.project_manager;
 
-        ui.window("Project")
-            .size([300.0, 400.0], imgui::Condition::Once)
-            .resizable(true)
-            .build(|| {
-                if let Some((_project_path, project)) = &mut project_manager.current {
-                    if ui.button("New Scene") {
-                        ui.open_popup("Create Scene");
-                    }
+        let mut new_scene_sure = false;
+        {
+            let manager = state.get::<AssetManager>().unwrap();
 
-                    ui.modal_popup_config("Create Scene")
-                    .collapsible(false)
-                    .always_auto_resize(true)
-                    .build(|| {
-                            if let Some(path) = project_manager.scene_creator.draw(ui) {
-                                let scene = new_scene();
-                                project_manager.new_scene_scratch = Some(
-                                    project
-                                        .create_scene(path, scene, &manager)
-                                        .expect("Failed to create project"),
-                                );
+            ui.window("Project")
+                .size([300.0, 400.0], imgui::Condition::FirstUseEver)
+                .resizable(true)
+                .build(|| {
+                    if let Some((_project_path, project)) = &mut project_manager.current {
+                        if ui.button("New Scene") {
+                            ui.open_popup("Create Scene");
+                        }
+
+                        ui.modal_popup_config("Create Scene")
+                        .collapsible(false)
+                        .always_auto_resize(true)
+                        .build(|| {
+                                if let Some(path) = project_manager.scene_creator.draw(ui) {
+                                    let scene = new_scene();
+                                    project_manager.new_scene_scratch = Some(
+                                        project
+                                            .create_scene(path, scene, &manager)
+                                            .expect("Failed to create scene"),
+                                    );
+                                }
+                            });
+
+                        for handle in project.scenes() {
+                            let erased_handle = handle.clone_erased_as_weak();
+                            let db = manager.asset_db().read();
+                            let scene_path = db.handle_to_path(&erased_handle).unwrap();
+                            let scene_name = scene_path.file_stem().unwrap().to_str().unwrap();
+
+                            if manager.status(&erased_handle) == Some(LoadStatus::Failed) {
+                                continue;
+                            }
+                            let selected = if let Some(current_handle) = &project_manager.current_scene
+                            {
+                                current_handle == handle
+                            } else {
+                                false
+                            };
+
+                            ui.selectable_config(scene_name).selected(selected).build();
+
+                            if ui.is_double_click(MouseButton::Left) {
+                                project_manager.new_scene_scratch = Some(handle.clone());
+                                ui.open_popup("Open Scene");
+                            }
+                        }
+
+                        ui.modal_popup_config("Open Scene")
+                        .resizable(false)
+                        .save_settings(false)
+                        .collapsible(false)
+                        .always_auto_resize(true)
+                        .build(|| {
+                            ui.text("You may have unsaved changes. Are you sure you want to open a new scene?");
+
+                            if ui.button("Yes") {
+                                new_scene_sure = true;
+                                ui.close_current_popup();
+                            }
+                            ui.same_line();
+                            if ui.button("No") {
+                                ui.close_current_popup();
                             }
                         });
-
-                    for handle in project.scenes() {
-                        let erased_handle = handle.clone_erased_as_weak();
-                        let db = manager.asset_db().read();
-                        let scene_path = db.handle_to_path(&erased_handle).unwrap();
-                        let scene_name = scene_path.file_stem().unwrap().to_str().unwrap();
-
-                        if manager.status(&erased_handle) == Some(LoadStatus::Failed) {
-                            continue;
-                        }
-                        let selected = if let Some(current_handle) = &project_manager.current_scene
-                        {
-                            current_handle == handle
-                        } else {
-                            false
-                        };
-
-                        ui.selectable_config(scene_name).selected(selected).build();
-
-                        if ui.is_double_click(MouseButton::Left) {
-                            project_manager.new_scene_scratch = Some(handle.clone());
-                            ui.open_popup("Open Scene");
-                        }
+                    } else {
+                        ui.text("No Project Open");
                     }
-
-                    ui.modal_popup_config("Open Scene")
-                    .resizable(false)
-                    .save_settings(false)
-                    .collapsible(false)
-                    .always_auto_resize(true)
-                    .build(|| {
-                        ui.text("You may have unsaved changes. Are you sure you want to open a new scene?");
-
-                        if ui.button("Yes") {
-                            new_scene_sure = true;
-                            ui.close_current_popup();
-                        }
-                        ui.same_line();
-                        if ui.button("No") {
-                            ui.close_current_popup();
-                        }
-                    });
-                } else {
-                    ui.text("No Project Open");
-                }
-            });
-    }
-    if new_scene_sure {
-        if let Some(new_scene) = project_manager.new_scene_scratch.take() {
-            project_manager.set_scene(new_scene, state)?;
-            editor.outliner.reset();
+                });
         }
+        if new_scene_sure {
+            if let Some(new_scene) = project_manager.new_scene_scratch.take() {
+                project_manager.set_scene(new_scene, state)?;
+                editor.outliner.reset();
+            }
+        }
+        Ok(())
     }
-    Ok(())
 }

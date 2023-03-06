@@ -1,11 +1,9 @@
 use std::sync::Arc;
 
-use hikari::asset::AssetManager;
 use hikari::g3d::Plugin3D;
 use hikari::pbr::PBRPlugin;
 use hikari::render::imgui_support::Renderer;
 use hikari::render::imgui_support::TextureExt;
-pub use hikari_imgui as imgui;
 
 use editor::Editor;
 use hikari::input::InputPlugin;
@@ -16,7 +14,7 @@ use winit::event::*;
 
 use hikari::core::*;
 use hikari::render::*;
-use hikari::systems::*;
+use hikari::imgui;
 use winit::event_loop::ControlFlow;
 
 use crate::editor::EditorConfig;
@@ -121,9 +119,14 @@ impl Plugin for EditorPlugin {
                     let window = *state.get::<&'static winit::window::Window>().unwrap();
                     let mut imgui = state.get_mut::<imgui_support::Backend>().expect("");
                     let mut editor = state.get_mut::<Editor>().unwrap();
+
+                    editor.pre_update(&window, imgui.context());
+
                     imgui.new_frame_shared(window, |ui| {
-                        editor.run(ui, state);
+                        editor.update(ui, state);
                     });
+
+                    editor.post_update(&window, imgui.context());
                 })),
             )
         };
@@ -186,17 +189,13 @@ impl Plugin for EditorPlugin {
                     }
                     WindowEvent::CloseRequested => {
                         state.get_mut::<Editor>().unwrap().handle_exit();
+
                         *control = ControlFlow::Exit;
                     }
                     _ => {}
                 },
                 Event::LoopDestroyed => {
                     state.get_mut::<EditorGraph>().unwrap().prepare_exit();
-                    state
-                        .get::<AssetManager>()
-                        .unwrap()
-                        .save_db()
-                        .expect("Failed to save Asset DB");
                 }
                 _ => {}
             }
@@ -235,11 +234,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     game.add_plugin(CorePlugin);
     game.add_plugin(InputPlugin);
 
-    let enable_validation = std::env::var("ENABLE_VALIDATION").is_ok();
+    let debug = std::env::var("HIKARI_DEBUG").is_ok();
 
     game.add_plugin(GfxPlugin {
         config: GfxConfig {
-            debug: enable_validation,
+            debug,
             features: Features::default(),
             vsync: true,
         },
