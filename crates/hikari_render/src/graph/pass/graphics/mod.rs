@@ -3,7 +3,7 @@ use vk_sync_fork::AccessType;
 
 use crate::{
     graph::{command::render::PassRecordInfo, GpuHandle},
-    texture::SampledImage,
+    image::SampledImage,
     Args, Buffer, ByRef, GraphResources, RenderpassCommands,
 };
 

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ash::{prelude::VkResult, vk};
 
-use crate::texture::SampledImage;
+use crate::image::SampledImage;
 
 use super::{resources::GraphResources, GpuHandle};
 
@@ -26,7 +26,7 @@ pub(super) fn from_allocation_data(
 
     let image_views: Vec<_> = images
         .iter()
-        .map(|image| image.image_view(1).unwrap())
+        .map(|image| image.image_view(0).unwrap())
         .collect();
 
     let width = images

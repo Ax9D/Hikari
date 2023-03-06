@@ -33,7 +33,7 @@ pub fn create_image(
     }
 }
 pub fn delete_image(
-    device: &Arc<crate::Device>,
+    device: &crate::Device,
     image: vk::Image,
     allocation: Allocation,
 ) -> Result<(), AllocationError> {
@@ -41,4 +41,12 @@ pub fn delete_image(
         device.raw().destroy_image(image, None);
     }
     device.free_memory(allocation)
+}
+pub fn delete_image_view(device: &crate::Device,
+    image_view: vk::ImageView) {
+    unsafe { device.raw().destroy_image_view(image_view, None); }
+}
+pub fn delete_sampler(device: &crate::Device,
+    sampler: vk::Sampler) {
+    unsafe { device.raw().destroy_sampler(sampler, None); }
 }

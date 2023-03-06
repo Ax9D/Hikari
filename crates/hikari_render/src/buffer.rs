@@ -1,5 +1,5 @@
 use ash::{prelude::VkResult, vk};
-use gpu_allocator::vulkan::{Allocation, AllocationCreateDesc, AllocationScheme};
+use gpu_allocator::{vulkan::{Allocation, AllocationCreateDesc, AllocationScheme}, AllocationError};
 
 use std::{marker::PhantomData, sync::Arc, mem::ManuallyDrop};
 
@@ -132,6 +132,12 @@ pub fn create_index_buffer(
 //     }
 // }
 
+pub fn delete_buffer(device: &crate::Device, buffer: vk::Buffer, allocation: Allocation) -> Result<(), AllocationError> {
+    unsafe {
+        device.raw().destroy_buffer(buffer, None);
+    };
+    device.free_memory(allocation)
+}
 pub struct CpuBuffer<T> {
     device: Arc<crate::Device>,
     inner: vk::Buffer,
@@ -223,11 +229,10 @@ impl<T: Copy> CpuBuffer<T> {
 
 impl<T> Drop for CpuBuffer<T> {
     fn drop(&mut self) {
-        unsafe {
-            self.device.raw().destroy_buffer(self.inner, None);
-            let allocation = ManuallyDrop::take(&mut self.allocation);
-            self.device.free_memory(allocation).unwrap();
-        }
+        use crate::delete::DeleteRequest;
+        let deleter = self.device.deleter();
+        let allocation = unsafe { ManuallyDrop::take(&mut self.allocation) };
+        deleter.request_delete(DeleteRequest::VkBuffer(self.inner, allocation));
     }
 }
 
@@ -354,12 +359,10 @@ impl<T: Copy> GpuBuffer<T> {
 
 impl<T> Drop for GpuBuffer<T> {
     fn drop(&mut self) {
-        unsafe {
-            self.device.raw().destroy_buffer(self.inner, None);
-            let allocation = ManuallyDrop::take(&mut self.allocation);
-
-            self.device.free_memory(allocation).unwrap();
-        }
+        use crate::delete::DeleteRequest;
+        let deleter = self.device.deleter();
+        let allocation = unsafe { ManuallyDrop::take(&mut self.allocation) };
+        deleter.request_delete(DeleteRequest::VkBuffer(self.inner, allocation));
     }
 }
 

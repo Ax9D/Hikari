@@ -7,7 +7,7 @@ use ash::{
 
 use crate::{
     renderpass::PhysicalRenderpass,
-    texture::{ImageConfig, SampledImage},
+    image::{ImageConfig, SampledImage},
 };
 
 #[derive(Clone)]
@@ -43,7 +43,7 @@ impl Swapchain {
         surface_data: SurfaceData,
         old_swapchain: Option<vk::SwapchainKHR>,
         vsync: bool,
-    ) -> Result<Swapchain, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Self> {
         let physical_device = device.physical_device();
 
         let swapchain_support_details = physical_device
@@ -243,7 +243,7 @@ impl Swapchain {
     ) -> VkResult<Vec<vk::Framebuffer>> {
         let mut framebuffers = Vec::new();
         for &color_image in color_images {
-            let attachments = [color_image, depth_stencil_image.image_view(1).unwrap()];
+            let attachments = [color_image, depth_stencil_image.image_view(0).unwrap()];
 
             let create_info = vk::FramebufferCreateInfo::builder()
                 .render_pass(pass)
@@ -383,6 +383,8 @@ impl Swapchain {
         }
     }
     pub fn present(&mut self, image_ix: u32, wait_semaphone: vk::Semaphore) -> VkResult<bool> {
+        hikari_dev::profile_function!();
+
         let swapchains = [self.inner];
         let wait_semaphones = [wait_semaphone];
         let image_ixs = [image_ix];

@@ -41,7 +41,7 @@ impl<T: 'static> Into<ErasedHandle> for GpuHandle<T> {
 
 use std::fmt::Debug;
 
-use crate::texture::SampledImage;
+use crate::image::SampledImage;
 use crate::Buffer;
 
 use super::ImageSize;

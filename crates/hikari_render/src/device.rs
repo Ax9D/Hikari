@@ -1,7 +1,7 @@
 use std::{
     ffi::{CStr, CString},
-    io::Read,
-    sync::Arc,
+    io::{Read, Write},
+    sync::{Arc},
 };
 
 use ash::{
@@ -12,7 +12,7 @@ use ash::{
 use gpu_allocator::vulkan::*;
 use parking_lot::{Mutex, MutexGuard};
 
-use crate::{descriptor::DescriptorSetLayoutCache, swapchain::SurfaceData};
+use crate::{descriptor::DescriptorSetLayoutCache, swapchain::SurfaceData, delete::Deleter};
 
 const VK_PIPELINE_CACHE_FILE: &str = "vk_pipeline_cache";
 
@@ -277,7 +277,7 @@ impl Device {
         surface_data: Option<&SurfaceData>,
         enable_features: Features,
         debug: bool,
-    ) -> Result<Arc<Self>, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Arc<Self>> {
         let mut required_extensions = vec![vk::KhrSynchronization2Fn::name()];
 
         if surface_data.is_some() {
@@ -291,7 +291,7 @@ impl Device {
             &required_extensions,
             enable_features,
         )
-        .ok_or("Failed to find suitable physical device")?;
+        .ok_or(anyhow::anyhow!("Failed to find suitable physical device"))?;
 
         let props = PhysicalDeviceProperties::from(physical_device.properties);
         log::debug!("Picked physical device");
@@ -360,7 +360,7 @@ impl Device {
 
         let shader_compiler = Mutex::new(
             shaderc::Compiler::new()
-                .ok_or_else(|| "Failed to initialize shaderc compiler".to_owned())?,
+                .ok_or_else(|| anyhow::anyhow!("Failed to initialize shaderc compiler"))?,
         );
 
         let extensions = Self::setup_extension(&entry, &instance, &ash_device, debug);
@@ -404,6 +404,7 @@ impl Device {
             extensions,
             #[cfg(feature = "aftermath")]
             aftermath,
+            deleter: Deleter::new()
         }))
     }
     fn pick_optimal(
@@ -544,7 +545,9 @@ impl Device {
     pub fn allocator(&self) -> &Arc<std::sync::Mutex<Allocator>> {
         &self.memory_allocator
     }
-
+    pub fn deleter(&self) -> &Deleter {
+        &self.deleter
+    }
     pub fn unified_queue(&self) -> MutexGuard<'_, vk::Queue> {
         self.unified_queue.lock()
     }
@@ -600,7 +603,7 @@ impl Device {
         self.graphics_queue_submit(&[*submit_info], fence)?;
 
         let fences = [fence];
-        device.wait_for_fences(&fences, true, 5_000_000_000)?;
+        device.wait_for_fences(&fences, true, 10_000_000_000)?;
         device.reset_fences(&fences)?;
         device.destroy_fence(fence, None);
 
@@ -662,6 +665,9 @@ impl Device {
             .or(linear_tiling)
             .expect("Device doesn't support any depth formats")
     }
+    pub(crate) fn new_frame(&self) -> anyhow::Result<()> {
+        self.deleter.new_frame(self)
+    }
     #[cfg(feature = "aftermath")]
     pub fn wait_for_aftermath_dump(&self) -> Result<(), anyhow::Error> {
         match &self.aftermath {
@@ -679,6 +685,7 @@ impl Drop for Device {
     fn drop(&mut self) {
         self.write_pipeline_cache_to_disk().unwrap();
         unsafe { self.raw().device_wait_idle().unwrap() };
+        self.deleter().exit(self).expect("Failed to exit deleter");
         log::debug!("Dropped Device");
     }
 }

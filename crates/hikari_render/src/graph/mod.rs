@@ -7,7 +7,7 @@ mod resources;
 mod runtime;
 mod storage;
 
-use crate::texture::SampledImage;
+use crate::image::SampledImage;
 use crate::Buffer;
 use ash::prelude::VkResult;
 use parking_lot::Mutex;
@@ -19,6 +19,7 @@ use self::runtime::GraphExecutor;
 
 pub use command::CommandBuffer;
 pub use command::RenderpassCommands;
+pub use command::PassRecordInfo;
 
 pub use resources::*;
 pub use storage::GpuHandle;
@@ -34,7 +35,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use crate::{texture::ImageConfig, Gfx};
+use crate::{image::ImageConfig, Gfx};
 
 pub use args::*;
 

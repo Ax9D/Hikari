@@ -8,7 +8,7 @@ use crate::{
     barrier,
     buffer::Buffer,
     descriptor::{DescriptorPool, DescriptorSetState, MAX_DESCRIPTOR_SETS},
-    texture::SampledImage,
+    image::SampledImage,
     util::CacheMap,
     Shader,
 };
@@ -20,6 +20,7 @@ pub mod render;
 
 pub use render::RenderpassBeginInfo;
 pub use render::RenderpassCommands;
+pub use render::PassRecordInfo;
 
 const PUSH_CONSTANT_SIZE: usize = 128;
 const PUSH_CONSTANT_SIZEU32: usize = PUSH_CONSTANT_SIZE / std::mem::size_of::<u32>();
@@ -240,7 +241,7 @@ impl<'a> CommandBuffer<'a> {
     }
     #[inline]
     pub(crate) fn set_image(&mut self, image: &SampledImage, set: u32, binding: u32) {
-        self.set_image_mip(image, 1, set, binding)
+        self.set_image_mip(image, 0, set, binding)
     }
     #[inline]
     pub(crate) fn set_image_mip(

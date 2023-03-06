@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{texture::SampledImage, Buffer};
+use crate::{image::SampledImage, Buffer};
 
 use super::{
     storage::{ErasedHandle, GenericBufferStorage, Storage},

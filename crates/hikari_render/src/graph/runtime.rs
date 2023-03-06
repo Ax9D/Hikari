@@ -145,7 +145,7 @@ impl GraphExecutor {
         unsafe {
             hikari_dev::profile_scope!("Waiting on GPU");
             let fences = &[frame_state.last_frame().render_finished_fence];
-            device.raw().wait_for_fences(fences, true, 5_000_000_000)?;
+            device.raw().wait_for_fences(fences, true, 10_000_000_000)?;
         }
 
         Ok(())

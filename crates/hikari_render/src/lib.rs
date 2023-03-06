@@ -12,6 +12,7 @@ pub mod gfx;
 pub mod graph;
 pub mod shader;
 pub mod texture;
+pub mod image;
 
 #[cfg(feature = "imgui-support")]
 pub mod imgui_support;
@@ -24,8 +25,7 @@ pub use gfx::GfxConfig;
 
 pub use shader::*;
 pub use shaderc;
-pub use texture::sampled_image::*;
-//pub use texture::Texture2D;
+pub use crate::image::sampled_image::*;
 
 pub use buffer::*;
 
@@ -56,6 +56,9 @@ impl hikari_core::Plugin for GfxPlugin {
         let gfx = Gfx::new(game.window(), self.config).expect("Failed to create render context");
         game.add_state(gfx);
 
+        game.add_task(hikari_core::FIRST, hikari_core::Task::new("Gfx New Frame", |gfx: &mut Gfx| {
+            gfx.new_frame().expect("Failed to update gfx");
+        }));
         game.add_platform_event_hook(|state, window, event, _control| match event {
             winit::event::Event::WindowEvent { window_id, event } => match event {
                 winit::event::WindowEvent::Resized(size) => {

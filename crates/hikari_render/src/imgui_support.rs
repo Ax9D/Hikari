@@ -347,15 +347,15 @@ impl TextureMap {
         })
     }
     pub fn register_texture_id(&mut self, image: &SampledImage, id: imgui::TextureId) {
-        self.image_to_id.insert(image.image_view(1).unwrap(), id);
+        self.image_to_id.insert(image.image_view(0).unwrap(), id);
     }
     pub fn get_texture_id(&self, image: &SampledImage) -> Option<imgui::TextureId> {
-        self.image_to_id.get(&image.image_view(1).unwrap()).cloned()
+        self.image_to_id.get(&image.image_view(0).unwrap()).cloned()
     }
     pub fn get_descriptor_set(&mut self, image: &SampledImage) -> vk::DescriptorSet {
         let set_allocator = &mut self.set_allocator;
         let set_state = &mut self.set_state;
-        let image_view = image.image_view(1).unwrap();
+        let image_view = image.image_view(0).unwrap();
         let sampler = image.sampler();
         let set = self.image_to_set.entry(image_view).or_insert_with(|| {
             set_state.set_image(0, 0, image_view, sampler);
