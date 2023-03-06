@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use hikari_asset::{Asset, AssetManager, AssetManagerBuilder, Loader, Saver};
 use hikari_systems::*;
 
+use rayon::{ThreadPoolBuilder};
 use winit::{
     event::Event,
     event_loop::{ControlFlow, EventLoop},
@@ -115,7 +118,7 @@ impl Game {
             .expect("Failed to create update schedule");
 
         let asset_manager = {
-            let threadpool = self.state.get::<std::sync::Arc<rayon::ThreadPool>>();
+            let threadpool = Arc::new(ThreadPoolBuilder::new().num_threads(2).build().unwrap());
             self.asset_manager_builder.thread_pool(&threadpool);
             self.asset_manager_builder
                 .build()
