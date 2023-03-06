@@ -55,6 +55,7 @@ pub fn create_hi_z_images(
         mip_levels: 1,
         mip_filtering: vk::SamplerMipmapMode::NEAREST,
         usage: vk::ImageUsageFlags::STORAGE,
+        flags: vk::ImageCreateFlags::empty(),
         image_type: vk::ImageType::TYPE_2D,
         image_view_type: vk::ImageViewType::TYPE_2D,
         initial_layout: vk::ImageLayout::GENERAL,
@@ -70,7 +71,7 @@ pub fn create_hi_z_images(
             config.host_readable = true;
         }
 
-        let hiz_image = SampledImage::with_dimensions(device, width, height, 1, config)?;
+        let hiz_image = SampledImage::with_dimensions(device, width, height, 1, 1, config)?;
         hiz_images.push(hiz_image);
     }
 
@@ -89,7 +90,7 @@ pub fn build_pass(
     let shadow_map_size = settings.directional_shadow_map_resolution.size();
 
     let atlas_size = ImageSize::absolute_xy(shadow_map_size * N_CASCADES as u32, shadow_map_size);
-    let mut config = ImageConfig::depth_only(device);
+    let mut config = ImageConfig::depth_only_attachment(device);
     config.format = vk::Format::D32_SFLOAT;
     let shadow_atlas = graph.create_image("ShadowMapAtlas", config, atlas_size)?;
 
@@ -125,13 +126,14 @@ pub fn build_pass(
                 move |cmd, graph_res, _record_info, (_world, res, shader_lib, _assets)| {
                     let hiz_images = &res.hi_z_images;
 
-                    cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
                     let depth_output = graph_res.get_image(&depth_prepass).unwrap();
 
                     cmd.set_shader(shader_lib.get("depth_reduce_initial").unwrap());
 
+                    cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
                     cmd.set_image(depth_output, 0, 1);
                     cmd.set_image(&hiz_images[0], 0, 2);
+
                     cmd.dispatch((hiz_images[0].width(), hiz_images[0].height(), 1));
 
                     cmd.set_shader(shader_lib.get("depth_reduce").unwrap());
@@ -183,11 +185,11 @@ pub fn build_pass(
                         let cascade_render_buffer =
                             graph_res.get_buffer(&cascade_render_buffer).unwrap();
 
+                        cmd.set_shader(shader_lib.get("generate_cascades").unwrap());
+
                         cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
                         cmd.set_image(reduced_depth_image, 0, 1);
                         cmd.set_buffer(cascade_render_buffer, 0..cascade_render_buffer.len(), 0, 2);
-
-                        cmd.set_shader(shader_lib.get("generate_cascades").unwrap());
 
                         //FIXME: Do this automatically; Implement graph external resources
                         cmd.apply_image_barrier(
@@ -277,47 +279,32 @@ pub fn build_pass(
                             &mut world.query::<(&Transform, &MeshRender)>()
                         {
                             let mut transform = transform.get_matrix();
-                            match &mesh_comp.source {
-                                MeshSource::Scene(handle, mesh_ix) => {
-                                    if let Some(scene) = scenes.get(handle) {
-                                        let mesh = &scene.meshes[*mesh_ix];
+                            if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
+                                if let Some(scene) = scenes.get(handle) {
+                                    let mesh = &scene.meshes[*mesh_ix];
 
-                                        transform *= mesh.transform.get_matrix();
+                                    transform *= mesh.transform.get_matrix();
 
-                                        cmd.push_constants(
-                                            &PushConstants {
-                                                transform,
-                                                cascade_ix: cascade_ix as u32,
-                                            },
-                                            0,
-                                        );
+                                    cmd.push_constants(
+                                        &PushConstants {
+                                            transform,
+                                            cascade_ix: cascade_ix as u32,
+                                        },
+                                        0,
+                                    );
 
-                                        for submesh in &mesh.sub_meshes {
-                                            {
-                                                hikari_dev::profile_scope!(
-                                                    "Set vertex and index buffers"
-                                                );
-                                                cmd.set_vertex_buffer(&submesh.position, 0);
-                                                cmd.set_index_buffer(&submesh.indices);
-                                            }
-
-                                            // println!(
-                                            //     "{:?} {:?} {:?} {:?}",
-                                            //     albedo.raw().image(),
-                                            //     roughness.raw().image(),
-                                            //     metallic.raw().image(),
-                                            //     normal.raw().image()
-                                            // );
-
-                                            cmd.draw_indexed(
-                                                0..submesh.indices.capacity(),
-                                                0,
-                                                0..1,
+                                    for submesh in &mesh.sub_meshes {
+                                        {
+                                            hikari_dev::profile_scope!(
+                                                "Set vertex and index buffers"
                                             );
+                                            cmd.set_vertex_buffer(&submesh.position, 0);
+                                            cmd.set_index_buffer(&submesh.indices);
                                         }
+
+                                        cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
                                     }
                                 }
-                                MeshSource::None => {}
                             }
                         }
                     }

@@ -39,10 +39,12 @@ lru = "0.7"
 fxhash = {version = "0.2"}
 arrayvec = "0.7"
 once_cell = "1"
+nohash-hasher = "0.2"
+flume = "0.10"
 
 [dev-dependencies]
 simple_logger = "2"
-hikari_asset = { path = "../hikari_asset"} 
+hikari_asset = { path = "../hikari_asset"}
 hikari_3d = {path = "../hikari_3d"}
 hikari_math = {path = "../hikari_math"}
 itertools = "0.10"

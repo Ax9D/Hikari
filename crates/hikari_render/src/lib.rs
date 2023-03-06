@@ -11,8 +11,8 @@ pub mod error;
 pub mod gfx;
 pub mod graph;
 pub mod shader;
-pub mod texture;
 pub mod image;
+pub mod bindless;
 
 #[cfg(feature = "imgui-support")]
 pub mod imgui_support;
@@ -35,13 +35,13 @@ pub use buffer::*;
 pub use graph::*;
 
 mod swapchain;
-use swapchain::Swapchain;
-
 mod barrier;
 mod descriptor;
 mod renderpass;
 mod util;
+mod delete;
 
+use swapchain::Swapchain;
 use renderpass::PhysicalRenderpass;
 
 pub use ash::vk;

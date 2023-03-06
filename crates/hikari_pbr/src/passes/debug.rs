@@ -14,12 +14,12 @@ pub fn build_pass(
 ) -> anyhow::Result<Vec<GpuHandle<SampledImage>>> {
     let depth_debug = graph.create_image(
         "PrepassDepthDebug",
-        ImageConfig::color2d(),
+        ImageConfig::color2d_attachment(),
         ImageSize::default_xy(),
     )?;
     let shadow_atlas_debug = graph.create_image(
         "ShadowMapAtlasDebug",
-        ImageConfig::color2d(),
+        ImageConfig::color2d_attachment(),
         ImageSize::default_xy(),
     )?;
 
@@ -44,7 +44,7 @@ pub fn build_pass(
         )
         .draw_image(&depth_debug, AttachmentConfig::color_default(0))
         .draw_image(&shadow_atlas_debug, AttachmentConfig::color_default(1))
-        .cmd(move |cmd, graph_res, record_info, (_, _, shader_lib, _)| {
+        .cmd(move |cmd, graph_res, record_info, (_, _, shader_lib, ..)| {
             cmd.set_image(graph_res.get_image(&depth_map).unwrap(), 0, 0);
             cmd.set_image(graph_res.get_image(&shadow_atlas).unwrap(), 0, 1);
 

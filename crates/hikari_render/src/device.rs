@@ -266,6 +266,8 @@ pub struct Device {
     #[cfg(feature = "aftermath")]
     aftermath: Option<Aftermath>,
 
+    deleter: Deleter,
+
     raw_device: RawDevice,
     entry: ash::Entry,
 }
@@ -327,7 +329,6 @@ impl Device {
             .enabled_features(&enabled_features)
             //VK_KHR_synchronization2
             .push_next(&mut sync2);
-
         if debug {
             device_create_info = device_create_info.push_next(&mut diag_config_nv);
         }
@@ -417,23 +418,23 @@ impl Device {
         let physical_devices = PhysicalDevice::enumerate(instance).ok()?;
         for device in physical_devices {
             let unified_queue = device.get_unified_queue().is_some();
+            let features = device.features.contains(required_features);
 
-            if unified_queue && device.features.contains(required_features) {
-                if let Some(surface_data) = surface_data {
-                    let present_support = device
-                        .get_present_queue(
-                            instance,
-                            &surface_data.surface,
-                            &surface_data.surface_loader,
-                        )
-                        .is_some();
+            if let Some(surface_data) = surface_data {
+                let present_support = device
+                    .get_present_queue(
+                        instance,
+                        &surface_data.surface,
+                        &surface_data.surface_loader,
+                    )
+                    .is_some();
 
-                    if present_support {
-                        return Some(device);
-                    }
-
-                    return None;
+                if unified_queue && features && present_support {
+                    return Some(device);
                 }
+            }
+
+            if unified_queue && features  {
                 return Some(device);
             }
         }
@@ -506,8 +507,15 @@ impl Device {
             VK_PIPELINE_CACHE_FILE
         );
 
-        std::fs::write(VK_PIPELINE_CACHE_FILE, data)
-            .expect("Couldn't write to pipeline cache file");
+        std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(VK_PIPELINE_CACHE_FILE)
+        .expect("Couldn't create pipeline cache file")
+        .write_all(&data)
+        .expect("Couldn't write to pipeline cache file");
+
+        //std::fs::write(VK_PIPELINE_CACHE_FILE, &data).expect("Couldn't write to pipeline cache file");
 
         Ok(())
     }
@@ -755,8 +763,8 @@ bitflags::bitflags! {
 
 impl Default for Features {
     fn default() -> Self {
-        Features::SAMPLER_ANISOTROPY | 
-        Features::FILL_MODE_NON_SOLID | 
+        Features::SAMPLER_ANISOTROPY |
+        Features::FILL_MODE_NON_SOLID |
         Features::DEPTH_CLAMP |
         Features::WIDE_LINES
     }

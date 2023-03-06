@@ -23,7 +23,7 @@ pub fn build_pass(
     let output = graph
         .create_image(
             "FXAAOutput",
-            ImageConfig::color2d(),
+            ImageConfig::color2d_attachment(),
             ImageSize::default_xy(),
         )
         .expect("Failed to create fxaa output");
@@ -37,8 +37,8 @@ pub fn build_pass(
                 AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer,
             )
             .cmd(
-                move |cmd, graph_res, record_info, (_, res, shader_lib, _)| {
-                    
+                move |cmd, graph_res, record_info, (_, res, shader_lib, ..)| {
+
                     cmd.set_viewport(
                         0.0,
                         0.0,
@@ -53,7 +53,7 @@ pub fn build_pass(
                     );
                     cmd.set_shader(shader_lib.get("fxaa").unwrap());
                     cmd.set_image(graph_res.get_image(&pbr_output).unwrap(), 0, 0);
-                    
+
                     cmd.set_rasterizer_state(RasterizerState {
                         cull_mode: CullMode::Back,
                         ..Default::default()
