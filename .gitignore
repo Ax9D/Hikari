@@ -7,3 +7,5 @@ vk_pipeline_cache
 hikari.log
 
 assets.db
+assets.db.*
+*.hmat
