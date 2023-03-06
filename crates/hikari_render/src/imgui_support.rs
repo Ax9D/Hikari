@@ -1,6 +1,7 @@
 use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 
+use std::sync::Weak;
 use std::time::Instant;
 use std::{ptr::NonNull, sync::Arc};
 
@@ -299,17 +300,19 @@ pub trait TextureExt {
     fn initialize_texture_support(renderer: Arc<Mutex<Renderer>>);
     fn get_texture_id(&self, image: &SampledImage) -> imgui::TextureId;
 }
-static IMGUI_RENDERER: OnceCell<Arc<Mutex<Renderer>>> = OnceCell::new();
+static IMGUI_RENDERER: OnceCell<Weak<Mutex<Renderer>>> = OnceCell::new();
 
 impl TextureExt for imgui::Ui {
     fn initialize_texture_support(renderer: Arc<Mutex<Renderer>>) {
-        let _ = IMGUI_RENDERER.set(renderer);
+        let _ = IMGUI_RENDERER.set(Arc::downgrade(&renderer));
     }
     fn get_texture_id(&self, image: &SampledImage) -> imgui::TextureId {
         hikari_dev::profile_function!();
         IMGUI_RENDERER
             .get()
             .expect("Renderer has not been initialized")
+            .upgrade()
+            .expect("Renderer has been dropped")
             .lock()
             .get_texture_id(image)
     }

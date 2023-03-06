@@ -15,7 +15,7 @@ use std::{
     ffi::OsStr,
     io::{BufWriter, Write},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -705,20 +705,23 @@ impl AssetManager {
     }
 }
 
-static ASSET_MANAGER: OnceCell<AssetManager> = OnceCell::new();
+static ASSET_MANAGER: OnceCell<Weak<AssetManagerInner>> = OnceCell::new();
 
 pub(crate) fn init_asset_manager(asset_manager: AssetManager) {
     if ASSET_MANAGER.get().is_some() {
         panic!("Asset Manager has already been initialized");
     }
 
-    ASSET_MANAGER.get_or_init(|| asset_manager);
+    ASSET_MANAGER.get_or_init(|| Arc::downgrade(&asset_manager.inner));
 }
 
-pub(crate) fn get_asset_manager() -> &'static AssetManager {
-    ASSET_MANAGER
+pub(crate) fn get_asset_manager() -> AssetManager {
+    let inner = ASSET_MANAGER
         .get()
-        .expect("AssetManager has not been initialized")
+        .expect("AssetManager has not been initialized");
+    AssetManager {
+        inner: inner.upgrade().expect("Asset Manager has been dropped")
+    }
 }
 
 #[test]

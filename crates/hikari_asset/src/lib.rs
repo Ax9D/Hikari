@@ -18,7 +18,7 @@ pub use manager::*;
 pub use pool::*;
 pub use save::*;
 
-use record::*;
+pub use record::*;
 
 #[cfg(feature = "serialize")]
 pub use serialize::*;
