@@ -28,7 +28,7 @@ fn triangle_shader(device: &Arc<rg::Device>) -> Arc<rg::Shader> {
             data: rg::ShaderData::Glsl(fragment),
         },
     )
-    .build(device)
+    .build(device, None)
     .unwrap()
 }
 fn blue_shader(device: &Arc<rg::Device>) -> Arc<rg::Shader> {
@@ -45,7 +45,7 @@ fn blue_shader(device: &Arc<rg::Device>) -> Arc<rg::Shader> {
             data: rg::ShaderData::Glsl(fragment),
         },
     )
-    .build(device)
+    .build(device, None)
     .unwrap()
 }
 
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let _blue_target = gb.create_image(
         "blue",
-        rg::ImageConfig::color2d(),
+        rg::ImageConfig::color2d_attachment(),
         rg::ImageSize::default_xy(),
     )?;
 

@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )?),
         },
     )
-    .build(gfx.device())?;
+    .build(gfx.device(), None)?;
 
     let mut gb: rg::GraphBuilder<(f32, f32)> = rg::GraphBuilder::new(&mut gfx, WIDTH, HEIGHT);
 

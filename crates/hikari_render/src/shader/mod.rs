@@ -2,6 +2,7 @@ pub mod reflect;
 use arrayvec::ArrayVec;
 use ash::{prelude::VkResult, vk};
 pub use reflect::ReflectionData;
+use shaderc::CompileOptions;
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -206,7 +207,7 @@ impl PipelineLayout {
                 }
             });
 
-        log::info!("Set mask {:b}", set_mask);
+        //log::info!("Set mask {:b}", set_mask);
 
         Ok(Self {
             device: device.clone(),
@@ -245,7 +246,7 @@ impl PipelineLayout {
                 for binding in &set.bindings {
                     let descriptor_type =
                         reflect::spirv_desc_type_to_vk_desc_type(binding.descriptor_type);
-                    println!("{} {}", binding.name, binding.count);
+                    //println!("{} {}", binding.name, binding.count);
                     //println!("{:?}", descriptor_type);
                     layout_builder.with_binding(
                         binding.binding,
@@ -395,10 +396,9 @@ impl ShaderStage {
         }
     }
 }
-pub struct ShaderProgramBuilder<'entry, 'options> {
+pub struct ShaderProgramBuilder<'entry, 'defines> {
     name: String,
-    stages: HashMap<ShaderStage, ShaderCode<'entry>>,
-    options: Option<shaderc::CompileOptions<'options>>,
+    stages: HashMap<ShaderStage, (ShaderCode<'entry>, &'defines[&'defines str])>,
 }
 
 // fn shaderc_to_vulkan_stage(kind: shaderc::ShaderKind) -> vk::ShaderStageFlags {
@@ -439,12 +439,11 @@ pub struct ShaderProgramBuilder<'entry, 'options> {
 //     }
 // }
 
-impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
+impl<'entry, 'defines> ShaderProgramBuilder<'entry, 'defines> {
     fn new(name: String) -> Self {
         Self {
             name,
             stages: HashMap::new(),
-            options: None,
         }
     }
     #[deprecated(note = "Use with_stage(...) as it is more general")]
@@ -454,16 +453,11 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
         fragment: &ShaderCode<'entry>,
     ) -> Self {
         Self::new(name.to_owned())
-            .with_stage(ShaderStage::Vertex, vertex.clone())
-            .with_stage(ShaderStage::Fragment, fragment.clone())
+            .with_stage(ShaderStage::Vertex, vertex.clone(), &[])
+            .with_stage(ShaderStage::Fragment, fragment.clone(), &[])
     }
-    pub fn with_options(mut self, compile_options: shaderc::CompileOptions<'options>) -> Self {
-        self.options = Some(compile_options);
-
-        self
-    }
-    pub fn with_stage(mut self, stage: ShaderStage, code: ShaderCode<'entry>) -> Self {
-        self.stages.insert(stage, code);
+    pub fn with_stage(mut self, stage: ShaderStage, code: ShaderCode<'entry>, defines: &'defines[&'defines str]) -> Self {
+        self.stages.insert(stage,(code, defines));
 
         self
     }
@@ -483,7 +477,7 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
                 ShaderCreateError::CompilationError(debug_name.to_string(), err.to_string())
             })?;
 
-        log::debug!("Compiled shader {}", debug_name);
+        //log::debug!("Compiled shader {}", debug_name);
 
         if artifact.get_num_warnings() > 0 {
             log::warn!(
@@ -498,7 +492,6 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
     fn create_vk_module(device: &ash::Device, code: &[u32]) -> VkResult<vk::ShaderModule> {
         let create_info = vk::ShaderModuleCreateInfo::builder().code(code).build();
 
-        log::debug!("Created shader module");
         unsafe { device.create_shader_module(&create_info, None) }
     }
 
@@ -507,7 +500,7 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
         shader: &ShaderCode<'entry>,
         debug_name: String,
         stage: ShaderStage,
-        options: Option<&shaderc::CompileOptions>,
+        options: Option<&CompileOptions>,
     ) -> Result<CompiledShaderModule, ShaderCreateError> {
         let data;
         let spirv = match &shader.data {
@@ -547,18 +540,23 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
             reflection_data,
         })
     }
-    pub fn build(mut self, device: &Arc<crate::Device>) -> Result<Arc<Shader>, ShaderCreateError> {
-        log::debug!("Compiling vertex shader");
-
+    pub fn build(mut self, device: &Arc<crate::Device>, options: Option<CompileOptions>) -> Result<Arc<Shader>, ShaderCreateError> {
         let mut modules = vec![];
 
-        for (stage, code) in self.stages.drain() {
+        let compile_options = options.unwrap_or_else(|| CompileOptions::new().unwrap());
+
+        for (stage, (code, defines)) in self.stages.drain() {
+            let mut compile_options = compile_options.clone().unwrap();
+
+            for define in defines {
+                compile_options.add_macro_definition(define, None);
+            }
             let module = Self::create_shader_module(
                 device,
                 &code,
                 format!("[{}] {}", stage.to_string(), self.name),
                 stage,
-                self.options.as_ref(),
+                Some(&compile_options),
             )?;
             modules.push(module);
         }
@@ -567,6 +565,8 @@ impl<'entry, 'options> ShaderProgramBuilder<'entry, 'options> {
             .map_err(|err| ShaderCreateError::LinkingError(self.name.clone(), err.to_string()))?;
 
         let mut hasher = crate::util::hasher();
+
+        log::debug!("Compiled {}", self.name);
 
         let hash = {
             for module in &modules {

@@ -50,19 +50,19 @@ impl ShaderLibrary {
     ) -> anyhow::Result<Arc<Shader>> {
         let mut path = shader_dir.join(name);
         let stage_exts = [
-            (ShaderStage::Vertex, "vert"),
-            (ShaderStage::Fragment, "frag"),
-            (ShaderStage::TessControl, "tesc"),
-            (ShaderStage::TessEvaluation, "tese"),
-            (ShaderStage::Geometry, "geom"),
-            (ShaderStage::Compute, "comp"),
+            (ShaderStage::Vertex, ["HK_VERTEX_SHADER"], "vert"),
+            (ShaderStage::Fragment, ["HK_FRAGMENT_SHADER"], "frag"),
+            (ShaderStage::TessControl, ["HK_TESS_CONTROL_SHADER"], "tesc"),
+            (ShaderStage::TessEvaluation, ["HK_TESS_EVAL_SHADER"], "tese"),
+            (ShaderStage::Geometry, ["HK_GEOMETRY_SHADER"], "geom"),
+            (ShaderStage::Compute, ["HK_COMPUTE_SHADER"], "comp"),
         ];
 
         let filename = path.file_name().unwrap().to_owned();
 
         let mut compile_options = shaderc::CompileOptions::new().unwrap();
 
-        if !config.generate_debug_info {
+        if config.generate_debug_info {
             compile_options.set_generate_debug_info();
         }
 
@@ -86,12 +86,13 @@ impl ShaderLibrary {
             },
         );
 
-        let mut shader_builder =
-            Shader::builder(filename.to_str().unwrap()).with_options(compile_options);
+
+        let filename = filename.to_str().unwrap();
+        let mut shader_builder = Shader::builder(&filename);
 
         let mut atleast_one_stage = false;
 
-        for (stage, ext) in stage_exts {
+        for (stage, defines, ext) in &stage_exts {
             path.set_extension(ext);
             if path.exists() {
                 let source_text = std::fs::read_to_string(&path)?;
@@ -100,7 +101,7 @@ impl ShaderLibrary {
                     data: ShaderData::Glsl(source_text),
                 };
 
-                shader_builder = shader_builder.with_stage(stage, code);
+                shader_builder = shader_builder.with_stage(*stage, code, defines);
                 atleast_one_stage = true;
             }
         }
@@ -109,7 +110,7 @@ impl ShaderLibrary {
             return Err(anyhow::anyhow!("No shader stages found at path, make sure to put suitable extensions for each stage"));
         }
 
-        Ok(shader_builder.build(device)?)
+        Ok(shader_builder.build(device, Some(compile_options))?)
     }
     pub fn reload(&mut self) -> anyhow::Result<()> {
         for (name, shader) in self.shaders.iter_mut() {

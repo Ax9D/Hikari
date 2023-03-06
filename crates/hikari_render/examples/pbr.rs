@@ -1,4 +1,4 @@
-use hikari_3d::ShadowInfo;
+use hikari_3d::{ShadowInfo, WrapMode, Format, TextureConfig, FilterMode};
 use hikari_math::Transform;
 use itertools::izip;
 use simple_logger::SimpleLogger;
@@ -125,6 +125,7 @@ fn load_mesh(
             wrap_y: texture.wrap_y,
             aniso_level: 16.0,
             generate_mips: texture.generate_mips,
+            ..Default::default()
         };
 
         let texture = Texture2D::new(device, data, texture.width, texture.height, config)?;
@@ -249,13 +250,13 @@ fn depth_prepass(
             ),
         },
     )
-    .build(device)
+    .build(device, None)
     .expect("Failed to create shader");
 
     let depth_output = gb
         .create_image(
             "PrepassDepth",
-            rg::ImageConfig::depth_only(device),
+            rg::ImageConfig::depth_only_attachment(device),
             rg::ImageSize::default_xy(),
         )
         .expect("Failed to create depth image");
@@ -413,7 +414,7 @@ fn pbr_pass(
             ),
         },
     )
-    .build(device)
+    .build(device, None)
     .expect("Failed to create shader");
 
     let (checkerboard, width, height) =
@@ -432,6 +433,7 @@ fn pbr_pass(
             filtering: FilterMode::Linear,
             aniso_level: 9.0,
             generate_mips: true,
+            ..Default::default()
         },
     )
     .expect("Failed to create checkerboard texture");
@@ -450,6 +452,7 @@ fn pbr_pass(
             filtering: FilterMode::Linear,
             aniso_level: 0.0,
             generate_mips: false,
+            ..Default::default()
         },
     )
     .expect("Failed to create black texture");
@@ -475,7 +478,7 @@ fn pbr_pass(
     let color_output = gb
         .create_image(
             "PBRColor",
-            rg::ImageConfig::color2d(),
+            rg::ImageConfig::color2d_attachment(),
             rg::ImageSize::default_xy(),
         )
         .expect("Failed to create PBR attachments");
@@ -646,7 +649,7 @@ fn fxaa_pass(
             ),
         },
     )
-    .build(device)
+    .build(device, None)
     .expect("Failed to create shader");
 
     #[repr(C)]
@@ -658,7 +661,7 @@ fn fxaa_pass(
     let output = gb
         .create_image(
             "fxaa_output",
-            rg::ImageConfig::color2d(),
+            rg::ImageConfig::color2d_attachment(),
             rg::ImageSize::default_xy(),
         )
         .expect("Failed to create fxaa output");
@@ -718,7 +721,7 @@ fn imgui_pass(
     let imgui_image = gb
         .create_image(
             "imgui_output",
-            rg::ImageConfig::color2d(),
+            rg::ImageConfig::color2d_attachment(),
             rg::ImageSize::default_xy(),
         )
         .expect("Failed to create imgui image");
@@ -969,7 +972,7 @@ fn composite_pass(
             data: rg::ShaderData::Glsl(fragment.to_string()),
         },
     )
-    .build(device)
+    .build(device, None)
     .expect("Failed to create composite shader");
 
     gb.add_renderpass(
