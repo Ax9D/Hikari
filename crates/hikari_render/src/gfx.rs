@@ -119,8 +119,8 @@ impl Gfx {
             for extension in window_extensions {
                 extensions.push(unsafe { CStr::from_ptr(*extension) });
             }
-        } 
-        
+        }
+
         if debug {
             extensions.push(DebugUtils::name());
         }
@@ -189,7 +189,7 @@ impl Gfx {
     fn new_inner(
         window: Option<&Window>,
         config: GfxConfig,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<Self> {
         let entry = unsafe { Entry::load() }?;
 
         log::debug!("Available instance extension properties: ");
@@ -247,10 +247,10 @@ impl Gfx {
             vsync: config.vsync,
         })
     }
-    pub fn new(window: &Window, config: GfxConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(window: &Window, config: GfxConfig) -> anyhow::Result<Self> {
         Self::new_inner(Some(window), config)
     }
-    pub fn headless(config: GfxConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn headless(config: GfxConfig) -> anyhow::Result<Self> {
         Self::new_inner(None, config)
     }
     pub fn set_vsync(&mut self, vsync: bool) {
@@ -298,6 +298,10 @@ impl Gfx {
             log::debug!("Resized swapchain width: {new_width} height: {new_height}");
         }
         Ok(())
+    }
+    //Call this everytime a frame is started
+    pub fn new_frame(&mut self) -> anyhow::Result<()> {
+        self.device.new_frame()
     }
 }
 impl Drop for Gfx {
