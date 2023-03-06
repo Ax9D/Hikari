@@ -9,8 +9,7 @@ name = "hikari_editor"
 path = "src/lib/mod.rs"
 
 [dependencies]
-hikari = {path = "../", features = ["editor", "profiling_enabled", "serde"]}
-hikari_imgui = {path = "../crates/hikari_imgui"}
+hikari = {path = "../", features = ["editor", "imgui", "profiling_enabled", "serde"]}
 winit = "0.27"
 log = {version = "^0.4"}
 fern = {version = "0.6", features = ["colored"] }
@@ -23,6 +22,10 @@ rfd = "0.10"
 serde_yaml = "0.9"
 serde = "1"
 type-uuid = "0.1"
+uuid = "1"
+
+[build-dependencies]
+fs_extra = "1"
 
 [features]
 release_unsafe = ["hikari/release_unsafe"]
