@@ -16,7 +16,7 @@ def build_cli():
     return sp.run(["cargo", "build", "--profile=dist", "-p", "hikari_cli"])
 
 def copy_folder_structure():
-    folders = ["templates", "tools", "engine_assets/shaders", "engine_assets/fonts", "engine_assets/textures"]
+    folders = ["data"]
 
     for folder in folders:
         shutil.copytree(path.join(CWD, folder), path.join(DIST_TMP_PATH, folder))
@@ -30,7 +30,7 @@ def copy_binaries():
     for exe in exes:
         shutil.copy(path.join(TARGET_PATH, exe), path.join(DIST_TMP_PATH, exe))
 def copy_files():
-    files = ["HIKARI_VERSION", "imgui.ini"]
+    files = ["HIKARI_VERSION"]
 
     for f in files:
         shutil.copyfile(path.join(CWD, f), path.join(DIST_TMP_PATH, f))
