@@ -13,7 +13,7 @@ hikari_math = {path = "../hikari_math"}
 hikari_render = {path = "../hikari_render"}
 hikari_3d = {path = "../hikari_3d"}
 hikari_asset = {path = "../hikari_asset"}
-winit = "0.25"
+winit = "0.27"
 
 log = "0.4"
 anyhow = "1"
