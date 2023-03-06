@@ -1,17 +1,23 @@
+mod gltf;
+mod shader;
+mod processing;
+
 pub mod camera;
 pub mod error;
-mod gltf;
 pub mod image;
 pub mod light;
 pub mod material;
 pub mod mesh;
 pub mod scene;
-mod shader;
+pub mod cubemap;
+pub mod environment;
 pub mod texture;
-
-use std::ffi::OsStr;
+pub mod config;
+pub mod primitives;
 
 pub use camera::*;
+pub use cubemap::*;
+pub use environment::*;
 pub use error::Error;
 use hikari_core::Plugin;
 use hikari_render::Gfx;
@@ -21,21 +27,7 @@ pub use mesh::*;
 pub use scene::*;
 pub use shader::*;
 pub use texture::*;
-
-pub enum MeshFormat {
-    Gltf,
-    Fbx,
-}
-impl MeshFormat {
-    pub fn from_extension(ext: &OsStr) -> Result<MeshFormat, crate::Error> {
-        let ext_str = ext.to_str().unwrap().to_ascii_lowercase();
-        match ext_str.as_str() {
-            "fbx" => Ok(MeshFormat::Fbx),
-            "gltf" | "glb" => Ok(MeshFormat::Gltf),
-            _ => Err(crate::Error::UnsupportedModelFormat(ext.to_owned())),
-        }
-    }
-}
+pub use config::*;
 
 pub mod old;
 
@@ -46,8 +38,12 @@ impl Plugin for Plugin3D {
         game.create_asset::<Texture2D>();
         game.create_asset::<Material>();
         game.create_asset::<Scene>();
+        game.create_asset::<EnvironmentTexture>();
 
-        let device = game.get::<Gfx>().device().clone();
+        let device = {
+            let gfx = game.get::<Gfx>();
+            gfx.device().clone()
+        };
 
         #[cfg(debug_assertions)]
         let generate_debug_info = true;
@@ -58,18 +54,32 @@ impl Plugin for Plugin3D {
             generate_debug_info,
         };
 
-        let shader_lib = ShaderLibrary::new(
+        #[cfg(debug_assertions)]
+        let base_path = std::path::Path::new("./");
+        #[cfg(not(debug_assertions))]
+        let base_path = hikari_utils::engine_dir();
+
+        let mut shader_lib = ShaderLibrary::new(
             &device,
-            std::env::current_dir()
-                .unwrap()
-                .join("engine_assets/shaders"),
+                base_path.join("data/assets/shaders"),
             config,
         );
+        let mut gfx = game.get_mut::<Gfx>();
+        let primitives = primitives::Primitives::prepare(&mut gfx, &mut shader_lib);
+        let env_loader = EnvironmentTextureLoader::new(&mut gfx, &mut shader_lib).expect("Failed to create HDR Loader");
+        drop(gfx);
+
+
         game.add_state(shader_lib);
+        game.add_state(primitives);
         game.register_asset_loader::<Texture2D, TextureLoader>(TextureLoader {
             device: device.clone(),
         });
         game.register_asset_loader::<Material, MaterialLoader>(MaterialLoader);
-        game.register_asset_loader::<Scene, GLTFLoader>(GLTFLoader { device });
+        game.register_asset_saver::<Material, MaterialLoader>(MaterialLoader);
+
+        game.register_asset_loader::<Scene, GLTFLoader>(GLTFLoader { device: device.clone() });
+        game.register_asset_loader::<EnvironmentTexture, EnvironmentTextureLoader>(env_loader);
+
     }
 }
