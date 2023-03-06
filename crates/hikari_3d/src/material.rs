@@ -71,6 +71,10 @@ impl Loader for MaterialLoader {
             .normal
             .as_ref()
             .map(|texture| context.depends_on(texture));
+        material.
+            emissive
+            .as_ref()
+            .map(|texture| context.depends_on(texture));
 
         context.set_asset(material);
         Ok(())
