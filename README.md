@@ -11,49 +11,42 @@ The code is messy and a bit broken in some places.
 To write a easy to use, modular and performant Game Engine in Rust, and also learn more about writing Game Engines in the process.
 
 ### Features
-* ECS Architecture
+* Physically Based Rendering 
+* Image Based Lighting
+* Sample Distribution Shadow Mapping
+* Multithreaded Asset Loader
+* Shader Hot Reloading
 * Powerful Render Graph API powered by Vulkan
-* Physically Based Rendering (a bit barebones atm)
-* WYSIWYG Editor for loading and editing Scenes (WIP)
+* Compute Shader support
+* ECS Architecture
+* WYSIWYG Editor for loading and editing Scenes (imgui)
 
 ### Current Goals
-- [X] Add minimal CI 
-- [X] Implement an Asset Management System
-- [X] Properly integrate the renderer into the Engine (and Editor)
-- [ ] Add IBL support to the PBR Renderer
-- [ ] Shadows
-- [ ] Add scripting functionality (hikari_py)
+- [ ] Editor and QoL Improvements
+- [ ] Add scripting functionality (Lua)
 - [ ] Animation System
+- [ ] Bindless Render Resources
+- [ ] Global Illumination (DDGI)
 
 ## Build
 To build Hikari, you'll need to have Rust installed, along with the VulkanSDK.
 
 To build everything in the workspace, run:
 ```rust
-cargo build --release --all
+cargo build --all
 ```
 
 # Project Structure
 
 Hikari is divided into a number of smaller crates found inside inside the `crates` folder. All of the functionality in these crates is reexported by the main `hikari` crate.
 
-
-Low Level rendering functionality along with the render graph is provided by the `hikari_render` crate.
-
-You can try running the pbr demo from this crate's root:
-
-```rust
-cargo run --release --example pbr
-```
-
-There are also two additional crates `hikari_editor` and `hikari_cli`, which are for the editor and cli interface (which are mostly stubs atm)
+There are also two additional crates `hikari_editor` and `hikari_cli`.
 
 You can run the editor from the project root: 
 ```rust
 cargo run -p hikari_editor
 ```
-
-**The `testing` branch has an updated version the editor as seen in the screenshot above.**
+Note: By default the debug builds are compiled with optimizations
 
 ## Thanks
 Here is a list of projects that I'd like to thank which have heavily inspired the development of Hikari:
