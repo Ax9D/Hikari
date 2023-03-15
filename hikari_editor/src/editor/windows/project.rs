@@ -1,19 +1,19 @@
-use std::path::Path;
+use std::{path::Path};
 
 use hikari::{
     asset::{AssetManager, Handle, LoadStatus},
-    core::World,
+    core::{World, Registry},
     g3d::Camera,
 };
 use hikari_editor::{project::Project, Scene, SCENE_EXTENSION};
 use std::path::PathBuf;
 
-use crate::{components::EditorComponents, imgui};
+use crate::{imgui, editor::meta::{EditorOnly}};
 
 use hikari::imgui::*;
 use hikari_editor::*;
 
-use super::{meta::EditorOnly, Editor, EditorWindow};
+use super::{Editor, EditorWindow};
 
 #[derive(Default)]
 struct SceneCreator {
@@ -90,7 +90,7 @@ pub enum ImguiSettingsEvent {
 }
 #[derive(Default)]
 pub struct ProjectManager {
-    pub current: Option<(PathBuf, Project)>,
+    current: Option<(PathBuf, Project)>,
     current_scene: Option<Handle<Scene>>,
     new_scene_scratch: Option<Handle<Scene>>,
     scene_creator: SceneCreator,
@@ -133,7 +133,7 @@ impl ProjectManager {
         Ok(())
     }
     pub fn set_scene(&mut self, handle: Handle<Scene>, state: EngineState) -> anyhow::Result<()> {
-        let components = state.get::<EditorComponents>().unwrap();
+        let registry = state.get::<Registry>().unwrap();
         let mut world = state.get_mut::<World>().unwrap();
         let manager = state.get::<AssetManager>().unwrap();
 
@@ -146,13 +146,15 @@ impl ProjectManager {
 
         let mut new_world = World::new();
 
-        for entity_ref in scene.world.entities() {
-            for component in entity_ref.component_types() {
-                if let Some(dispatch) = components.get(component) {
-                    dispatch.clone_component(entity_ref.entity(), &scene.world, &mut new_world)?;
-                }
-            }
-        }
+        // for entity_ref in scene.world.entities() {
+        //     for component in entity_ref.component_types() {
+        //         if let Some(dispatch) = components.get(component) {
+        //             dispatch.clone_component(entity_ref.entity(), &scene.world, &mut new_world)?;
+        //         }
+        //     }
+        // }
+
+        scene.world.clone_into(&registry, &mut new_world);
 
         std::mem::swap::<World>(&mut world, &mut new_world);
         self.current_scene = Some(handle.clone());
@@ -161,7 +163,7 @@ impl ProjectManager {
     }
     pub fn save_all(&mut self, state: EngineState) -> anyhow::Result<()> {
         let manager = state.get::<AssetManager>().unwrap();
-        let components = state.get::<EditorComponents>().unwrap();
+        let registry = state.get::<Registry>().unwrap();
 
         let world = state.get::<World>().unwrap();
 
@@ -170,13 +172,14 @@ impl ProjectManager {
             let scene = scenes.get_mut(handle).unwrap();
             scene.world.clear();
 
-            for entity_ref in world.entities() {
-                for component in entity_ref.component_types() {
-                    if let Some(dispatch) = components.get(component) {
-                        dispatch.clone_component(entity_ref.entity(), &world, &mut scene.world)?;
-                    }
-                }
-            }
+            world.clone_into(&registry, &mut scene.world);
+            // for entity_ref in world.entities() {
+            //     for component in entity_ref.component_types() {
+            //         if let Some(dispatch) = components.get(component) {
+            //             dispatch.clone_component(entity_ref.entity(), &world, &mut scene.world)?;
+            //         }
+            //     }
+            // }
             drop(scenes);
             manager.save(handle)?;
         }
@@ -211,15 +214,20 @@ impl ProjectManager {
             self.imgui_settings_event.take();
         }
     }
+    pub fn is_project_open(&self) -> bool {
+        self.current.is_some()
+    }
+    pub fn current_project_path(&self) -> Option<&Path> {
+        self.current.as_ref().map(|(path, _)| path.as_path())
+    }
+    pub fn current_scene(&self) -> Option<&Handle<Scene>> {
+        self.current_scene.as_ref()
+    }
 }
 
 fn new_scene() -> Scene {
     let mut world = World::new();
-    let camera = world.create_entity();
-
-    world
-        .add_component(camera, (EditorOnly, Camera::default()))
-        .unwrap();
+    world.create_entity_with((EditorOnly, Camera::default()));
 
     Scene { world }
 }

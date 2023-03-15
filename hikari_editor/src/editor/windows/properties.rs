@@ -1,11 +1,11 @@
 use std::any::TypeId;
 
-use crate::{components::ComponentDispatch, editor::meta::EditorInfo, imgui};
+use crate::{components::{ComponentDispatch, EditorComponents}, imgui, editor::meta::{EditorOnly, EditorInfo}};
 use hikari::core::*;
 use hikari_editor::*;
 use imgui::{ImguiUiExt, TreeNodeFlags};
 
-use super::{meta::EditorOnly, Editor, EditorComponents, EditorWindow};
+use super::{Editor, EditorWindow};
 
 #[derive(Default)]
 pub struct Properties {
@@ -108,7 +108,7 @@ impl EditorWindow for Properties {
                 let components = state.get::<EditorComponents>().unwrap();
                 let outliner = &editor.outliner;
 
-                if let Some(entity) = outliner.selected {
+                if let Some(entity) = outliner.selected() {
                     let mut world = state.get_mut::<World>().unwrap();
 
                     {

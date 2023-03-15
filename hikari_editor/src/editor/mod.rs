@@ -1,41 +1,24 @@
-use self::{
-    about::About,
-    asset_editors::MaterialEditor,
-    content_browser::ContentBrowser,
-    debugger::Debugger,
-    logging::{LogListener, Logging},
-    outliner::Outliner,
-    project::ProjectManager,
-    properties::Properties,
-    render_settings::RenderSettings,
-    viewport::Viewport,
-};
-use crate::{component_impls, components::EditorComponents};
+use crate::{component_impls, components::EditorComponents, widgets::RenameState};
 use clipboard::ClipboardProvider;
 use hikari::{
-    core::{serde::Registry, Game},
+    core::{Registry, Game},
     input::KeyCode,
 };
 use hikari_editor::*;
 
-pub mod logging;
-
-//mod utils;
-mod about;
-mod camera;
-mod content_browser;
-mod debugger;
+mod style;
 mod font;
 mod icons;
 pub mod meta;
-mod outliner;
-mod project;
-mod properties;
-mod render_settings;
-mod style;
-mod viewport;
+mod windows;
+mod serialize;
+pub(crate) mod logging;
 
-mod asset_editors;
+
+use windows::*;
+
+pub use windows::Editor;
+pub use logging::*;
 
 struct Clipboard(clipboard::ClipboardContext);
 impl Clipboard {
@@ -59,43 +42,6 @@ pub struct EditorConfig {
     pub hidpi_factor: f32,
 }
 
-#[derive(PartialEq, Eq)]
-pub enum RenameState {
-    Idle,
-    Renaming(hikari::imgui::Id, String, i32),
-}
-
-pub trait EditorWindow {
-    fn draw(ui: &hikari::imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()>;
-    fn draw_if_open(
-        ui: &hikari::imgui::Ui,
-        editor: &mut Editor,
-        state: EngineState,
-    ) -> anyhow::Result<()> {
-        if Self::is_open(editor) {
-            Self::draw(ui, editor, state)?;
-        }
-        Ok(())
-    }
-    fn open(_editor: &mut Editor) {}
-    fn is_open(_editor: &mut Editor) -> bool {
-        true
-    }
-}
-pub struct Editor {
-    pub outliner: Outliner,
-    pub properties: Properties,
-    pub viewport: Viewport,
-    pub content_browser: ContentBrowser,
-    pub logging: Logging,
-    pub debugger: Debugger,
-    pub rename_state: RenameState,
-    pub project_manager: ProjectManager,
-    pub about: About,
-    pub material_editor: MaterialEditor,
-    pub show_demo: bool,
-}
-
 impl Editor {
     pub fn init(game: &mut Game, ctx: &mut hikari::imgui::Context, config: EditorConfig) {
         ctx.io_mut().config_flags = hikari::imgui::ConfigFlags::DOCKING_ENABLE;
@@ -110,18 +56,18 @@ impl Editor {
         }
 
         let mut editor_components = EditorComponents::default();
-        let mut registry = Registry::new();
+        let mut registry = Registry::builder();
 
         component_impls::register_components(&mut editor_components, &mut registry);
 
-        let registry = std::sync::Arc::new(registry);
-
+        let registry = registry.build();
+        game.add_state(registry.clone());
         game.create_asset::<Scene>();
         let loader = SceneLoader { registry };
         game.register_asset_loader::<Scene, SceneLoader>(loader.clone());
         game.register_asset_saver::<Scene, SceneLoader>(loader);
 
-        let editor = Self {
+        let editor = Editor {
             logging: Logging::new(config.log_listener),
             debugger: Debugger::new(),
             show_demo: false,
@@ -198,54 +144,10 @@ impl Editor {
 
         self.draw_windows(ui, state).unwrap();
     }
-    fn default_layout(&self, ui: &hikari::imgui::Ui) {
-        use hikari::imgui::*;
-        if ui.get_node("Dockspace").is_some() {
-            let _root = ui.dockspace("Dockspace", [0.0, 0.0], 0);
-            return;
-        }
-
-        let root = ui.dockspace(
-            "Dockspace",
-            [0.0, 0.0],
-            hikari::imgui::sys::ImGuiDockNodeFlags_AutoHideTabBar as i32,
-        );
-
-        root.split(
-            hikari::imgui::Direction::Left,
-            0.8,
-            |left| {
-                left.split(
-                    hikari::imgui::Direction::Up,
-                    0.7,
-                    |up| {
-                        up.dock_window(ui, "Viewport");
-                    },
-                    |down| {
-                        down.dock_window(ui, "Engine Log");
-                    },
-                )
-            },
-            |right| {
-                right.split(
-                    hikari::imgui::Direction::Up,
-                    0.6,
-                    |up| {
-                        up.dock_window(ui, "Project");
-                        up.dock_window(ui, "Outliner");
-                        up.dock_window(ui, "Render Settings");
-                    },
-                    |down| {
-                        down.dock_window(ui, "Properties");
-                    },
-                );
-            },
-        );
-    }
     pub fn file_menu(&mut self, ui: &hikari::imgui::Ui, state: EngineState) -> anyhow::Result<()> {
         let mut open = false;
         let mut save = false;
-        let project_open = self.project_manager.current.is_some();
+        let project_open = self.project_manager.is_project_open();
 
         ui.menu("File", || {
             open |= ui.menu_item_config("Open").shortcut("Ctrl + O").build();
@@ -269,11 +171,13 @@ impl Editor {
                 .pick_file()
             {
                 self.project_manager.open(project_file, state)?;
+                self.load_state()?;
             }
         }
 
         if save {
             self.project_manager.save_all(state)?;
+            self.save_state()?;
         }
 
         Ok(())
@@ -284,7 +188,6 @@ impl Editor {
         state: EngineState,
     ) -> anyhow::Result<()> {
         hikari::dev::profile_function!();
-
         //Update render settings before render, so incase of a resize we don't use freed resources in the imgui pass
         RenderSettings::draw_if_open(ui, self, state)?;
 
@@ -303,6 +206,30 @@ impl Editor {
             ui.show_demo_window(&mut self.show_demo);
         }
 
+        Ok(())
+    }
+    fn save_state(&self) -> anyhow::Result<()> {
+        if let Some(project_path) = self.project_manager.current_project_path() {
+            let path = project_path.join("editor.yaml");
+            let file = std::fs::OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
+            let mut serializer = serde_yaml::Serializer::new(file);
+            self.serialize(&mut serializer)?;
+        }
+        Ok(())
+    }
+    fn load_state(&mut self) -> anyhow::Result<()> {
+        if let Some(project_path) = self.project_manager.current_project_path() {
+            let path = project_path.join("editor.yaml");
+
+            if !path.exists() {
+                self.save_state()?;
+                return Ok(());
+            }
+
+            let file = std::fs::OpenOptions::new().read(true).open(path)?;
+            let deserializer = serde_yaml::Deserializer::from_reader(file);
+            self.deserialize(deserializer)?;
+        }
         Ok(())
     }
     pub fn pre_update(

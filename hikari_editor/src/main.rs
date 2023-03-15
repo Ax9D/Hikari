@@ -27,7 +27,7 @@ mod widgets;
 //#[global_allocator]
 //static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
 struct EditorPlugin {
-    log_listener: editor::logging::LogListener,
+    log_listener: editor::LogListener,
 }
 
 pub type EditorGraph = render::Graph<()>;

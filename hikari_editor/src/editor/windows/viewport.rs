@@ -1,3 +1,4 @@
+use crate::editor::meta::EditorOnly;
 use crate::imgui;
 use crate::imgui::gizmo::*;
 use hikari::asset::AssetManager;
@@ -14,8 +15,7 @@ use hikari::{
 use hikari_editor::*;
 
 use super::camera::ViewportCamera;
-use super::meta::EditorOnly;
-use super::{icons, Editor, EditorWindow};
+use crate::editor::{icons, Editor, EditorWindow};
 
 struct GizmoState {
     context: GizmoContext,
@@ -238,7 +238,7 @@ fn get_editor_camera(world: &mut World) -> Entity {
 
     if create_camera {
         let camera_entity =
-            world.create_entity_with((Transform::default(), EditorOnly, Camera::default()));
+            world.create_entity_with((EditorOnly, Camera::default()));
         return camera_entity;
     } else {
         unreachable!()
@@ -317,7 +317,7 @@ impl EditorWindow for Viewport {
                     );
                 }
 
-                if let Some(entity) = outliner.selected {
+                if let Some(entity) = outliner.selected() {
                     if let Ok(mut query) =
                         world.query_one::<(&Camera, &mut Transform)>(editor_camera)
                     {

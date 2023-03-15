@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use super::{Editor, EditorWindow};
 use hikari::imgui::*;
 use hikari_editor::EngineState;
+use super::Editor;
+use super::EditorWindow;
 
 pub struct ContentBrowser {
     cwd: PathBuf,

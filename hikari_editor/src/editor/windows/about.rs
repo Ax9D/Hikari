@@ -1,9 +1,10 @@
 use hikari_editor::EngineState;
 
 use crate::imgui;
-use crate::Editor;
+use super::Editor;
 
 use super::EditorWindow;
+
 #[derive(Default)]
 pub struct About {
     is_open: bool,

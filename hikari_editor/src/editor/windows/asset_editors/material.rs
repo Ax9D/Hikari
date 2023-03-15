@@ -1,4 +1,5 @@
-use crate::{editor::EditorWindow, widgets::AssetSelector, Editor};
+use crate::editor::windows::Editor;
+use crate::{editor::EditorWindow, widgets::AssetSelector};
 use hikari::imgui::*;
 use hikari::{
     asset::{AssetManager, Handle},

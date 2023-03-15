@@ -1,3 +1,4 @@
+use hikari::core::Time;
 use hikari::g3d::ShaderLibrary;
 use hikari::g3d::ShaderLibraryConfig;
 use hikari::pbr::ShadowResolution;
@@ -7,6 +8,7 @@ use hikari_editor::EngineState;
 
 use super::Editor;
 use super::EditorWindow;
+
 use hikari::imgui;
 
 pub struct RenderSettings;
@@ -20,7 +22,7 @@ impl EditorWindow for RenderSettings {
                 let mut renderer = state.get_mut::<WorldRenderer>().unwrap();
                 let mut gfx = state.get_mut::<Gfx>().unwrap();
                 let mut shader_lib = state.get_mut::<ShaderLibrary>().unwrap();
-                let time = state.get::<hikari::core::Time>().unwrap();
+                let time = state.get::<Time>().unwrap();
 
                 renderer
                     .update_settings(&mut gfx, &mut shader_lib, |settings| {

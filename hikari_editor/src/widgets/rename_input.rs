@@ -1,8 +1,11 @@
 use hikari::imgui::*;
 use hikari::input::KeyCode;
 
-use crate::editor::RenameState;
-
+#[derive(PartialEq, Eq)]
+pub enum RenameState {
+    Idle,
+    Renaming(hikari::imgui::Id, String, i32),
+}
 pub struct RenameInput<'b> {
     id: Id,
     buffer: &'b mut String,
