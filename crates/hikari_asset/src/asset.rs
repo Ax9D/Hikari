@@ -33,6 +33,7 @@ impl AssetDB {
     pub fn new() -> Self {
         Self::default()
     }
+    #[allow(unused)]
     pub(crate) fn build_query_accelerators(&mut self) {
         for (ix, record) in self.records.iter().enumerate() {
             self.uuid_to_record.insert(record.uuid.clone(), ix);
@@ -82,6 +83,7 @@ impl AssetDB {
             }
         }
     }
+    #[allow(unused)]
     pub(crate) fn fix_uuid(&mut self, current: &Uuid, fixed: Uuid) -> Option<()> {
         let record_ix = self.uuid_to_record.get(current)?;
         self.records[*record_ix].uuid = fixed;

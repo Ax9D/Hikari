@@ -7,7 +7,7 @@ use crate::{
 
 use anyhow::anyhow;
 use once_cell::sync::OnceCell;
-use parking_lot::{MappedRwLockWriteGuard, RwLock, RwLockUpgradableReadGuard, RwLockWriteGuard};
+use parking_lot::{MappedRwLockWriteGuard, RwLock, RwLockWriteGuard};
 use rayon::ThreadPool;
 use std::{
     any::{type_name, Any, TypeId},
@@ -449,6 +449,7 @@ impl AssetManagerInner {
     pub fn update<T: Asset>(&self) {
         self.queue_update::<T>()
     }
+    #[cfg(feature="serialize")]
     pub fn set_asset_dir(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
         let path = path.as_ref();
 
@@ -457,13 +458,14 @@ impl AssetManagerInner {
 
         let old_path = self.asset_dir.upgradable_read();
         if path != &*old_path {
-            *RwLockUpgradableReadGuard::upgrade(old_path) = path.to_owned();
+            *parking_lot::RwLockUpgradableReadGuard::upgrade(old_path) = path.to_owned();
 
             self.load_db()
         } else {
             Ok(())
         }
     }
+    #[cfg(feature="serialize")]
     pub fn get_asset_dir(&self) -> PathBuf {
         self.asset_dir.read().clone()
     }
@@ -687,9 +689,11 @@ impl AssetManager {
     pub fn update<T: Asset>(&self) {
         self.inner.update::<T>()
     }
+    #[cfg(feature="serialize")]
     pub fn set_asset_dir(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
         self.inner.set_asset_dir(path)
     }
+    #[cfg(feature="serialize")]
     pub fn get_asset_dir(&self) -> PathBuf {
         self.inner.get_asset_dir()
     }
