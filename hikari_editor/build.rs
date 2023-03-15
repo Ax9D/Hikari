@@ -29,17 +29,19 @@ fn profile_target_dir() -> PathBuf {
     //Not using PROFILE because it doesn't return custom profile names
     let out_dir = env::var("OUT_DIR").unwrap();
     // This is out_dir:
-    // Whatever\\dist\\build\\hikari_editor-abcd1234\\out
+    // Whatever\\profile\\build\\hikari_editor-abcd1234\\out
     let out_dir = Path::new(&out_dir);
 
     let mut ancestors = out_dir.ancestors();
-    // Whatever\\dist\\build\\hikari_editor-abcd1234
+    // Whatever\\profile\\build\\hikari_editor-abcd1234\\out
     ancestors.next();
-    // Whatever\\dist\\build
+    // Whatever\\profile\\build\\hikari_editor-abcd1234
     ancestors.next();
-    // Whatever\\dist
-    let profile_path = ancestors.next().unwrap();
+    // Whatever\\profile\\build\\
+    ancestors.next();
+    // Whatever\\profile
 
+    let profile_path = ancestors.next().unwrap();
     profile_path.to_owned()
 }
 fn copy_engine_assets() {
@@ -47,14 +49,13 @@ fn copy_engine_assets() {
     let editor_dir = Path::new(&editor_dir);
     let target_dir = &profile_target_dir();
     let root = editor_dir.parent().unwrap();
-
     // Re-runs script if any files in res are changed
-    println!("cargo:rerun-if-changed=../data*");
+    println!("cargo:rerun-if-changed={}/data/*", root.display());
     copy_to_target("data", root, target_dir)
         .expect("Could not copy engine data. Is the current directory the root of the repo?");
 }
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("cargo:rerun-if-changed=build.rs");
+    //println!("cargo:rerun-if-changed=build.rs");
     set_git_hash()?;
     copy_engine_assets();
 
