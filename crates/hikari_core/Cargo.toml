@@ -26,4 +26,5 @@ default = []
 serde = ["hecs/row-serialize", "dep:serde", "erased-serde", "uuid", "type-uuid"]
 
 [dev-dependencies]
+hikari_core = {path = ".", features = ["serde"]}
 serde_yaml = "0.9"
