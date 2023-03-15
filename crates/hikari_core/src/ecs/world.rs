@@ -19,15 +19,54 @@ impl World {
     }
     #[inline]
     pub fn create_entity(&mut self) -> Entity {
-        self.world.spawn((Transform::default(),))
+        self.world.spawn((Transform::default(), Uuid::new_v4()))
     }
     #[inline]
+    pub fn uuid(&self, entity: Entity) -> Uuid {
+        *self.get_component::<&Uuid>(entity).unwrap()
+    }
     pub fn create_entity_with(&mut self, components: impl DynamicBundle) -> Entity {
-        self.world.spawn(components)
+        let mut has_uuid = false;
+        let mut has_transform = false;
+        components.with_ids(|ids| {
+            for ty in ids {
+                if &TypeId::of::<Transform>() == ty {
+                    has_transform = true;
+                } else if &TypeId::of::<Uuid>() == ty {
+                    has_uuid = true;
+                }
+            }
+        });
+        let entity = self.world.spawn(components);
+
+        if !has_transform {
+            self.add_component(entity, Transform::default()).unwrap();
+        }
+        if !has_uuid {
+            self.add_component(entity, Uuid::new_v4()).unwrap();
+        }
+        entity
     }
-    #[inline]
     pub fn create_entity_at(&mut self, handle: Entity, components: impl DynamicBundle) {
+        let mut has_uuid = false;
+        let mut has_transform = false;
+        components.with_ids(|ids| {
+            for ty in ids {
+                if &TypeId::of::<Transform>() == ty {
+                    has_transform = true;
+                } else if &TypeId::of::<Uuid>() == ty {
+                    has_uuid = true;
+                }
+            }
+        });
         self.world.spawn_at(handle, components);
+
+        if !has_transform {
+            self.add_component(handle, Transform::default()).unwrap();
+        }
+        if !has_uuid {
+            self.add_component(handle, Uuid::new_v4()).unwrap();
+        }
     }
     #[inline]
     pub fn remove_entity(&mut self, entity: Entity) -> Result<(), NoSuchEntity> {
