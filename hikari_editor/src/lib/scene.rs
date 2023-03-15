@@ -1,10 +1,6 @@
 use hikari::{
     asset::{Asset, Loader, Saver},
-    core::{
-        Registry,
-        serialize::{WorldDeserializer},
-        World,
-    },
+    core::{serialize::WorldDeserializer, Registry, World},
 };
 use serde::{de::Visitor, ser::SerializeMap, Deserializer, Serialize, Serializer};
 

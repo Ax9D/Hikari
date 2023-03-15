@@ -237,8 +237,7 @@ fn get_editor_camera(world: &mut World) -> Entity {
     }
 
     if create_camera {
-        let camera_entity =
-            world.create_entity_with((EditorOnly, Camera::default()));
+        let camera_entity = world.create_entity_with((EditorOnly, Camera::default()));
         return camera_entity;
     } else {
         unreachable!()

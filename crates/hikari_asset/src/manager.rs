@@ -449,7 +449,7 @@ impl AssetManagerInner {
     pub fn update<T: Asset>(&self) {
         self.queue_update::<T>()
     }
-    #[cfg(feature="serialize")]
+    #[cfg(feature = "serialize")]
     pub fn set_asset_dir(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
         let path = path.as_ref();
 
@@ -465,7 +465,7 @@ impl AssetManagerInner {
             Ok(())
         }
     }
-    #[cfg(feature="serialize")]
+    #[cfg(feature = "serialize")]
     pub fn get_asset_dir(&self) -> PathBuf {
         self.asset_dir.read().clone()
     }
@@ -689,11 +689,11 @@ impl AssetManager {
     pub fn update<T: Asset>(&self) {
         self.inner.update::<T>()
     }
-    #[cfg(feature="serialize")]
+    #[cfg(feature = "serialize")]
     pub fn set_asset_dir(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
         self.inner.set_asset_dir(path)
     }
-    #[cfg(feature="serialize")]
+    #[cfg(feature = "serialize")]
     pub fn get_asset_dir(&self) -> PathBuf {
         self.inner.get_asset_dir()
     }

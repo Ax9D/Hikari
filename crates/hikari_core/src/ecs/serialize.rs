@@ -1,6 +1,6 @@
-use std::{any::TypeId};
+use std::any::TypeId;
 
-use hecs::{EntityRef};
+use hecs::EntityRef;
 use serde::{
     de::{DeserializeSeed, MapAccess, Visitor},
     ser::SerializeMap,
@@ -9,7 +9,7 @@ use serde::{
 use type_uuid::TypeUuid;
 use uuid::Uuid;
 
-use crate::{Component, Entity, World, RegistryInner, RegistryBuilder, Registry};
+use crate::{Component, Entity, Registry, RegistryBuilder, RegistryInner, World};
 
 pub trait SerializeComponent: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid {}
 impl<T: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid> SerializeComponent for T {}
@@ -102,7 +102,8 @@ impl Registry {
         entity_ref: EntityRef,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        self.inner.serialize_component(component_id, entity_ref, serializer)
+        self.inner
+            .serialize_component(component_id, entity_ref, serializer)
     }
     fn deserialize_component<'de, D: Deserializer<'de>>(
         &self,
@@ -111,7 +112,8 @@ impl Registry {
         world: &mut World,
         deserializer: D,
     ) -> Result<(), D::Error> {
-        self.inner.deserialize_component(component_id, entity, world, deserializer)
+        self.inner
+            .deserialize_component(component_id, entity, world, deserializer)
     }
 }
 impl RegistryBuilder {
@@ -130,7 +132,9 @@ impl RegistryBuilder {
         };
 
         let uuid = Uuid::from_bytes(C::UUID);
-        self.registry.type_id_to_uuid.insert(TypeId::of::<C>(), uuid);
+        self.registry
+            .type_id_to_uuid
+            .insert(TypeId::of::<C>(), uuid);
         self.registry.serialize_fns.insert(uuid, serialize_fns);
     }
 }

@@ -1,5 +1,5 @@
 use hikari::core::*;
-use hikari::g3d::{Outline, MeshRender};
+use hikari::g3d::{MeshRender, Outline};
 use hikari::math::*;
 
 use crate::editor::meta::{EditorInfo, EditorOnly};
@@ -9,8 +9,7 @@ use hikari_editor::*;
 
 use crate::editor::{Editor, EditorWindow};
 
-#[derive(Default)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct Outliner {
     #[serde(skip)]
     selected: Option<Entity>,
@@ -47,14 +46,23 @@ impl Outliner {
             let _res = world.remove_component::<Outline>(current_entity);
         }
         if world.has_component::<MeshRender>(entity) {
-            world.add_component(entity, Outline {
-                color: Vec3::new(0.952, 0.411, 0.105),
-                ..Default::default()
-            }).unwrap();
+            world
+                .add_component(
+                    entity,
+                    Outline {
+                        color: Vec3::new(0.952, 0.411, 0.105),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
         }
 
         if let Ok(editor_info) = world.get_component::<&EditorInfo>(entity) {
-            log::debug!("Selected: {:?}, Editor Index: {}", entity, editor_info.index);
+            log::debug!(
+                "Selected: {:?}, Editor Index: {}",
+                entity,
+                editor_info.index
+            );
         }
         self.selected = Some(entity);
     }

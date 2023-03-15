@@ -17,7 +17,7 @@ impl EditorInfo {
     pub fn new(name: impl AsRef<str>, index: usize) -> Self {
         Self {
             name: name.as_ref().to_owned(),
-            index
+            index,
         }
     }
 }

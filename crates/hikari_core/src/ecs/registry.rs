@@ -1,8 +1,8 @@
-use std::{collections::HashMap, any::TypeId, sync::Arc};
 use hecs::NoSuchEntity;
+use std::{any::TypeId, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
-use crate::{EntityBuilder, Component, Entity, EntityRef, World};
+use crate::{Component, Entity, EntityBuilder, EntityRef, World};
 
 pub trait CloneComponent: Component + Clone {}
 
@@ -11,13 +11,18 @@ impl<C: Component + Clone> CloneComponent for C {}
 #[derive(Clone)]
 pub struct CloneFn {
     builder: fn(EntityRef<'_>, &mut EntityBuilder),
-    world: fn(EntityRef<'_>, Entity, &mut World) -> Result<(), NoSuchEntity>
+    world: fn(EntityRef<'_>, Entity, &mut World) -> Result<(), NoSuchEntity>,
 }
 impl CloneFn {
     pub fn into_builder(&self, entity: EntityRef<'_>, dst: &mut EntityBuilder) {
         (self.builder)(entity, dst)
     }
-    pub fn into_world(&self, src: EntityRef<'_>, dst: Entity, dst_world: &mut World) -> Result<(), NoSuchEntity> {
+    pub fn into_world(
+        &self,
+        src: EntityRef<'_>,
+        dst: Entity,
+        dst_world: &mut World,
+    ) -> Result<(), NoSuchEntity> {
         (self.world)(src, dst, dst_world)
     }
 }
@@ -39,7 +44,7 @@ impl RegistryInner {
 }
 #[derive(Clone)]
 pub struct Registry {
-    pub(crate) inner: Arc<RegistryInner>
+    pub(crate) inner: Arc<RegistryInner>,
 }
 impl Registry {
     pub fn builder() -> RegistryBuilder {
@@ -59,22 +64,35 @@ impl Registry {
 
         builder
     }
-    pub fn clone_component_untyped(&self, type_id: TypeId, src: EntityRef<'_>, dst: Entity, dst_world: &mut World) -> Result<(), NoSuchEntity>{
+    pub fn clone_component_untyped(
+        &self,
+        type_id: TypeId,
+        src: EntityRef<'_>,
+        dst: Entity,
+        dst_world: &mut World,
+    ) -> Result<(), NoSuchEntity> {
         let clone_fn = self.inner.clone_fns.get(&type_id).unwrap();
         clone_fn.into_world(src, dst, dst_world)
     }
-    pub fn clone_component<C: CloneComponent>(&self, src: EntityRef<'_>, dst: Entity, dst_world: &mut World) -> Result<(), NoSuchEntity> {
+    pub fn clone_component<C: CloneComponent>(
+        &self,
+        src: EntityRef<'_>,
+        dst: Entity,
+        dst_world: &mut World,
+    ) -> Result<(), NoSuchEntity> {
         self.clone_component_untyped(TypeId::of::<C>(), src, dst, dst_world)
     }
 }
 
 pub struct RegistryBuilder {
-    pub(crate) registry: RegistryInner
+    pub(crate) registry: RegistryInner,
 }
 
 impl Default for RegistryBuilder {
     fn default() -> Self {
-        let mut builder = Self { registry: RegistryInner::new() };
+        let mut builder = Self {
+            registry: RegistryInner::new(),
+        };
         builder.register_clone::<Uuid>();
         builder
     }
@@ -85,25 +103,28 @@ impl RegistryBuilder {
         Self::default()
     }
     pub fn register_clone<C: CloneComponent>(&mut self) {
-        self.registry.clone_fns.insert(TypeId::of::<C>(), CloneFn {
-            builder: |entity, out| {
-                if let Some(component) = entity.get::<&C>() {
-                    let cloned = (*component).clone();
-                    out.add(cloned);
-                }
+        self.registry.clone_fns.insert(
+            TypeId::of::<C>(),
+            CloneFn {
+                builder: |entity, out| {
+                    if let Some(component) = entity.get::<&C>() {
+                        let cloned = (*component).clone();
+                        out.add(cloned);
+                    }
+                },
+                world: |entity, dst, dst_world| -> Result<(), NoSuchEntity> {
+                    if let Some(component) = entity.get::<&C>() {
+                        let cloned = (*component).clone();
+                        dst_world.add_component(dst, cloned)?;
+                    }
+                    Ok(())
+                },
             },
-            world: |entity, dst, dst_world| -> Result<(), NoSuchEntity> {
-                if let Some(component) = entity.get::<&C>() {
-                    let cloned = (*component).clone();
-                    dst_world.add_component(dst, cloned)?;
-                }
-                Ok(())
-            },
-        });
+        );
     }
     pub fn build(self) -> Registry {
         Registry {
-            inner: Arc::new(self.registry)
+            inner: Arc::new(self.registry),
         }
     }
 }

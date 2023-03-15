@@ -1,6 +1,6 @@
 use crate::{
     components::EditorComponent,
-    editor::meta::{EditorOnly, EditorInfo},
+    editor::meta::{EditorInfo, EditorOnly},
     *,
 };
 use hikari_editor::*;

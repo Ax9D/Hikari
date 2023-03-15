@@ -9,14 +9,14 @@ use hikari_math::Vec3;
 )]
 pub struct Outline {
     pub color: Vec3,
-    pub thickness: f32
+    pub thickness: f32,
 }
 
 impl Default for Outline {
     fn default() -> Self {
         Self {
-             color: Vec3::ONE,
-             thickness: 2.5
-            }
+            color: Vec3::ONE,
+            thickness: 2.5,
+        }
     }
 }

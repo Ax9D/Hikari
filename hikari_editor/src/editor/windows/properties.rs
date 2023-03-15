@@ -1,6 +1,10 @@
 use std::any::TypeId;
 
-use crate::{components::{ComponentDispatch, EditorComponents}, imgui, editor::meta::{EditorOnly, EditorInfo}};
+use crate::{
+    components::{ComponentDispatch, EditorComponents},
+    editor::meta::{EditorInfo, EditorOnly},
+    imgui,
+};
 use hikari::core::*;
 use hikari_editor::*;
 use imgui::{ImguiUiExt, TreeNodeFlags};

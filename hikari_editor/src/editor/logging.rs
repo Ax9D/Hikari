@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, ops::Index};
 
 use chrono::Utc;
-use fern::colors::{ColoredLevelConfig, Color};
+use fern::colors::{Color, ColoredLevelConfig};
 use flume::{Receiver, Sender};
 
 pub struct RollingBuffer<T> {

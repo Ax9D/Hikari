@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use hikari_3d::{primitives::Primitives, *};
 use hikari_asset::{AssetManager, AssetPool, PoolRef};
-use hikari_core::{World, Without};
+use hikari_core::{Without, World};
 use hikari_math::*;
-use hikari_render::{*};
+use hikari_render::*;
 
 use crate::{light::CascadeRenderInfo, resources::RenderResources, Args};
 
@@ -86,7 +86,7 @@ impl PBRPass {
                 &depth_prepass,
                 AttachmentConfig {
                     kind: AttachmentKind::DepthStencil,
-                    access: AccessType:: StencilAttachmentWriteDepthReadOnly,
+                    access: AccessType::StencilAttachmentWriteDepthReadOnly,
                     load_op: hikari_render::vk::AttachmentLoadOp::LOAD,
                     store_op: hikari_render::vk::AttachmentStoreOp::STORE,
                     stencil_load_op: hikari_render::vk::AttachmentLoadOp::LOAD,
@@ -210,7 +210,9 @@ impl PBRPass {
             ..Default::default()
         });
 
-        for (_, (transform, mesh_comp)) in &mut world.query::<Without<(&Transform, &MeshRender), &Outline>>() {
+        for (_, (transform, mesh_comp)) in
+            &mut world.query::<Without<(&Transform, &MeshRender), &Outline>>()
+        {
             if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
                 if let Some(scene) = scenes.get(handle) {
                     let mesh = &scene.meshes[*mesh_ix];
@@ -239,7 +241,9 @@ impl PBRPass {
             ..Default::default()
         });
 
-        for (_, (transform, mesh_comp, _)) in &mut world.query::<(&Transform, &MeshRender, &Outline)>() {
+        for (_, (transform, mesh_comp, _)) in
+            &mut world.query::<(&Transform, &MeshRender, &Outline)>()
+        {
             if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
                 if let Some(scene) = scenes.get(handle) {
                     let mesh = &scene.meshes[*mesh_ix];
@@ -267,8 +271,9 @@ impl PBRPass {
             stencil_test_depth_fail_op: StencilOp::Keep,
             ..Default::default()
         });
-        for (_, (transform, mesh_comp, outline)) in &mut world.query::<(&Transform, &MeshRender, &Outline)>() {
-
+        for (_, (transform, mesh_comp, outline)) in
+            &mut world.query::<(&Transform, &MeshRender, &Outline)>()
+        {
             if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
                 if let Some(scene) = scenes.get(handle) {
                     let mesh = &scene.meshes[*mesh_ix];
@@ -282,7 +287,13 @@ impl PBRPass {
             }
         }
     }
-    fn draw_sub_mesh(&self, cmd: &mut RenderpassCommands, transform: Mat4, submesh: &SubMesh, assets: &Assets) {
+    fn draw_sub_mesh(
+        &self,
+        cmd: &mut RenderpassCommands,
+        transform: Mat4,
+        submesh: &SubMesh,
+        assets: &Assets,
+    ) {
         let primitives = &self.primitives;
         let textures = &assets.textures;
         let materials = &assets.materials;
@@ -333,16 +344,11 @@ impl PBRPass {
 
         cmd.push_constants(&pc, 0);
 
-        let albedo =
-            resolve_texture(&material.albedo, &textures, &primitives.black);
-        let roughness =
-            resolve_texture(&material.roughness, &textures, &primitives.black);
-        let metallic =
-            resolve_texture(&material.metallic, &textures, &primitives.black);
-        let emissive =
-            resolve_texture(&material.emissive, &textures, &primitives.black);
-        let normal =
-            resolve_texture(&material.normal, &textures, &primitives.black);
+        let albedo = resolve_texture(&material.albedo, &textures, &primitives.black);
+        let roughness = resolve_texture(&material.roughness, &textures, &primitives.black);
+        let metallic = resolve_texture(&material.metallic, &textures, &primitives.black);
+        let emissive = resolve_texture(&material.emissive, &textures, &primitives.black);
+        let normal = resolve_texture(&material.normal, &textures, &primitives.black);
 
         cmd.set_image(albedo.raw(), 1, 0);
         cmd.set_image(roughness.raw(), 1, 1);
@@ -352,7 +358,13 @@ impl PBRPass {
 
         cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
     }
-    fn draw_sub_mesh_outline(&self, cmd: &mut RenderpassCommands, outline: &Outline, transform: Mat4, submesh: &SubMesh) {
+    fn draw_sub_mesh_outline(
+        &self,
+        cmd: &mut RenderpassCommands,
+        outline: &Outline,
+        transform: Mat4,
+        submesh: &SubMesh,
+    ) {
         {
             hikari_dev::profile_scope!("Set vertex and index buffers");
             cmd.set_vertex_buffers(
@@ -433,7 +445,7 @@ impl PBRPass {
                 view_type: vk::ImageViewType::TYPE_2D,
                 aspect: vk::ImageAspectFlags::DEPTH,
                 mip_range: 0..1,
-                layer_range: 0..1
+                layer_range: 0..1,
             });
             cmd.set_image_view_and_sampler(depth_only_view, shadow_atlas.sampler(), 0, 1, 0);
 
@@ -476,7 +488,9 @@ impl<'a> Assets<'a> {
 
         let pbr_shader = shader_lib.get("pbr").expect("Failed to fetch PBR Shader");
         let unlit_shader = shader_lib.get("unlit").expect("Failed to get unlit shader");
-        let outline_shader = shader_lib.get("outline").expect("Failed to get outline shader");
+        let outline_shader = shader_lib
+            .get("outline")
+            .expect("Failed to get outline shader");
 
         Self {
             scenes,
@@ -485,7 +499,7 @@ impl<'a> Assets<'a> {
             environment_textures,
             pbr_shader,
             unlit_shader,
-            outline_shader
+            outline_shader,
         }
     }
 }

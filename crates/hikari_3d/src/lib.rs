@@ -5,6 +5,7 @@ mod shader;
 pub mod camera;
 pub mod config;
 pub mod cubemap;
+pub mod effects;
 pub mod environment;
 pub mod error;
 pub mod image;
@@ -14,11 +15,11 @@ pub mod mesh;
 pub mod primitives;
 pub mod scene;
 pub mod texture;
-pub mod effects;
 
 pub use camera::*;
 pub use config::*;
 pub use cubemap::*;
+pub use effects::*;
 pub use environment::*;
 pub use error::Error;
 use hikari_core::Plugin;
@@ -29,7 +30,6 @@ pub use mesh::*;
 pub use scene::*;
 pub use shader::*;
 pub use texture::*;
-pub use effects::*;
 
 pub mod old;
 

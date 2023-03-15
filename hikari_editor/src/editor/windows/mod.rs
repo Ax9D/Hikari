@@ -1,28 +1,27 @@
-mod logging;
 mod about;
+mod asset_editors;
 mod camera;
 mod content_browser;
 mod debugger;
+mod logging;
 mod outliner;
+mod project;
 mod properties;
 mod render_settings;
 mod viewport;
-mod project;
-mod asset_editors;
 
-
-use hikari_editor::EngineState;
-pub use logging::*;
 pub use about::*;
+pub use asset_editors::*;
 pub use camera::*;
 pub use content_browser::*;
 pub use debugger::*;
+use hikari_editor::EngineState;
+pub use logging::*;
 pub use outliner::*;
+pub use project::*;
 pub use properties::*;
 pub use render_settings::*;
 pub use viewport::*;
-pub use project::*;
-pub use asset_editors::*;
 
 use crate::widgets::RenameState;
 

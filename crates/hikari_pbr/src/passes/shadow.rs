@@ -131,13 +131,19 @@ pub fn build_pass(
                         view_type: vk::ImageViewType::TYPE_2D,
                         aspect: vk::ImageAspectFlags::DEPTH,
                         mip_range: 0..1,
-                        layer_range: 0..1
+                        layer_range: 0..1,
                     });
 
                     cmd.set_shader(shader_lib.get("depth_reduce_initial").unwrap());
 
                     cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
-                    cmd.set_image_view_and_sampler(depth_only_view, depth_output.sampler(), 0, 1, 0);
+                    cmd.set_image_view_and_sampler(
+                        depth_only_view,
+                        depth_output.sampler(),
+                        0,
+                        1,
+                        0,
+                    );
                     cmd.set_image(&hiz_images[0], 0, 2);
 
                     cmd.dispatch((hiz_images[0].width(), hiz_images[0].height(), 1));

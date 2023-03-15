@@ -1,6 +1,6 @@
 use std::any::TypeId;
 
-use crate::{Component, Registry, CloneComponent};
+use crate::{CloneComponent, Component, Registry};
 
 pub type Entity = hecs::Entity;
 
@@ -75,11 +75,19 @@ impl World {
     pub fn remove_entity(&mut self, entity: Entity) -> Result<(), NoSuchEntity> {
         self.world.despawn(entity)
     }
-    pub fn clone_entity(&mut self, entity: Entity, registry: &Registry) -> Result<EntityBuilder, NoSuchEntity> {
+    pub fn clone_entity(
+        &mut self,
+        entity: Entity,
+        registry: &Registry,
+    ) -> Result<EntityBuilder, NoSuchEntity> {
         let entity = self.entity(entity)?;
         Ok(registry.clone_entity(entity))
     }
-    pub fn duplicate_entity(&mut self, entity: Entity, registry: &Registry) -> Result<Entity, NoSuchEntity>{
+    pub fn duplicate_entity(
+        &mut self,
+        entity: Entity,
+        registry: &Registry,
+    ) -> Result<Entity, NoSuchEntity> {
         let mut builder = self.clone_entity(entity, registry)?;
 
         //Replace with new uuid
@@ -149,10 +157,23 @@ impl World {
     pub fn has_component<C: Component>(&self, entity: Entity) -> bool {
         self.world.get::<&C>(entity).is_ok()
     }
-    pub fn clone_component_untyped(&self, type_id: TypeId, src: Entity, dst: Entity, dst_world: &mut World, registry: &Registry) -> Result<(), NoSuchEntity> {
+    pub fn clone_component_untyped(
+        &self,
+        type_id: TypeId,
+        src: Entity,
+        dst: Entity,
+        dst_world: &mut World,
+        registry: &Registry,
+    ) -> Result<(), NoSuchEntity> {
         registry.clone_component_untyped(type_id, self.entity(src)?, dst, dst_world)
     }
-    pub fn clone_component<C: CloneComponent>(&self, src: Entity, dst: Entity, dst_world: &mut World, registry: &Registry) -> Result<(), NoSuchEntity> {
+    pub fn clone_component<C: CloneComponent>(
+        &self,
+        src: Entity,
+        dst: Entity,
+        dst_world: &mut World,
+        registry: &Registry,
+    ) -> Result<(), NoSuchEntity> {
         registry.clone_component::<C>(self.entity(src)?, dst, dst_world)
     }
     #[inline]

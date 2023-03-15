@@ -2,10 +2,9 @@ use hikari::imgui::{self, ImColor32};
 use hikari::imgui::{TableColumnSetup, TableFlags};
 use hikari_editor::EngineState;
 
-use crate::editor::logging::{*};
+use crate::editor::logging::*;
 
 use super::{Editor, EditorWindow};
-
 
 pub struct Logging {
     log_listener: LogListener,

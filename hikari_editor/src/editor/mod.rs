@@ -1,24 +1,23 @@
 use crate::{component_impls, components::EditorComponents, widgets::RenameState};
 use clipboard::ClipboardProvider;
 use hikari::{
-    core::{Registry, Game},
+    core::{Game, Registry},
     input::KeyCode,
 };
 use hikari_editor::*;
 
-mod style;
 mod font;
 mod icons;
-pub mod meta;
-mod windows;
-mod serialize;
 pub(crate) mod logging;
-
+pub mod meta;
+mod serialize;
+mod style;
+mod windows;
 
 use windows::*;
 
-pub use windows::Editor;
 pub use logging::*;
+pub use windows::Editor;
 
 struct Clipboard(clipboard::ClipboardContext);
 impl Clipboard {
@@ -211,7 +210,11 @@ impl Editor {
     fn save_state(&self) -> anyhow::Result<()> {
         if let Some(project_path) = self.project_manager.current_project_path() {
             let path = project_path.join("editor.yaml");
-            let file = std::fs::OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(path)?;
             let mut serializer = serde_yaml::Serializer::new(file);
             self.serialize(&mut serializer)?;
         }

@@ -1,8 +1,8 @@
-pub mod world;
 pub mod registry;
+pub mod world;
 
-pub use world::*;
 pub use registry::*;
+pub use world::*;
 
 #[cfg(feature = "serde")]
 pub mod serialize;

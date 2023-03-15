@@ -1,7 +1,7 @@
 use hikari_editor::EngineState;
 
-use crate::imgui;
 use super::Editor;
+use crate::imgui;
 
 use super::EditorWindow;
 

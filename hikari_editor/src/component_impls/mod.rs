@@ -1,4 +1,4 @@
-use hikari::core::{serialize::{SerializeComponent}, CloneComponent, RegistryBuilder};
+use hikari::core::{serialize::SerializeComponent, CloneComponent, RegistryBuilder};
 
 use crate::components::{EditorComponent, EditorComponents};
 

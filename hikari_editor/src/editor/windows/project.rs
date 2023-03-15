@@ -1,14 +1,14 @@
-use std::{path::Path};
+use std::path::Path;
 
 use hikari::{
     asset::{AssetManager, Handle, LoadStatus},
-    core::{World, Registry},
+    core::{Registry, World},
     g3d::Camera,
 };
 use hikari_editor::{project::Project, Scene, SCENE_EXTENSION};
 use std::path::PathBuf;
 
-use crate::{imgui, editor::meta::{EditorOnly}};
+use crate::{editor::meta::EditorOnly, imgui};
 
 use hikari::imgui::*;
 use hikari_editor::*;
