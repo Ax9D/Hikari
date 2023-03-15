@@ -13,12 +13,15 @@ layout(std140, set = 0, binding = 0) uniform WorldUBO {
 
 layout(push_constant) uniform Constants {
     mat4 transform;
-    MaterialInputs _material;
+    MaterialInputs mat;
 } pc;
 
 void main() {
-    vec4 transPos = pc.transform * vec4(position, 1.0);
-    vec3 worldPosition = vec3(transPos);
+    float thickness = pc.mat.albedo.a;
 
-    gl_Position = world.viewProj * vec4(worldPosition, 1.0);
+    vec4 posClip = world.viewProj * pc.transform * vec4(position.xyz, 1.0);
+    vec3 normalClip = mat3(world.viewProj) * mat3(pc.transform) * normal;
+
+    gl_Position = vec4(posClip.xyzw);
+    gl_Position.xy += (normalize(normalClip.xy) / world.viewportSize) * posClip.w * thickness * 2;
 }

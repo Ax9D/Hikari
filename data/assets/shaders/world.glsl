@@ -11,6 +11,7 @@ struct World {
     mat4 environmentTransform;
     float cameraNear;
     float cameraFar;
+    vec2 viewportSize;
     float exposure;
     float environmentIntensity;
     DirectionalLight dirLight;

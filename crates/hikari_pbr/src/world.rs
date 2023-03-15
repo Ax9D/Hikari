@@ -1,5 +1,5 @@
 use crate::DirLight;
-use hikari_math::{Mat4, Vec3A};
+use hikari_math::{Mat4, Vec3A, Vec2};
 
 #[repr(C)]
 #[derive(Copy, Clone, Default)]
@@ -11,6 +11,7 @@ pub struct WorldUBO {
     pub environment_transform: Mat4,
     pub camera_near: f32,
     pub camera_far: f32,
+    pub viewport_size: Vec2,
     pub exposure: f32,
     pub environment_intensity: f32,
     pub dir_light: DirLight,

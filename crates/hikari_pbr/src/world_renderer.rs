@@ -156,6 +156,7 @@ impl WorldRenderer {
             ubo_data.view_proj = camera_view_proj;
             ubo_data.camera_near = camera.near;
             ubo_data.camera_far = camera.far;
+            ubo_data.viewport_size = res.viewport.into();
             ubo_data.exposure = camera.exposure;
 
             if let Some((_, (transform, environment))) =

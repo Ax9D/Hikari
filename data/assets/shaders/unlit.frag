@@ -1,25 +1,10 @@
 #version 450
 #include <material.glsl>
-
-layout(location = 0) in vec3 worldPosition;
-layout(location = 1) in vec3 normalFs;
-layout(location = 2) in vec2 tc0Fs;
-layout(location = 3) in vec2 tc1Fs;
-layout(location = 4) in vec3 viewPosition;
-
 layout(location = 0) out vec4 outColor;
 
-layout(set = 0, binding = 1) uniform sampler2D shadowMap;
-
-layout(set = 1, binding = 0) uniform sampler2D albedoMap;
-layout(set = 1, binding = 1) uniform sampler2D roughnessMap;
-layout(set = 1, binding = 2) uniform sampler2D metallicMap;
-layout(set = 1, binding = 3) uniform sampler2D emissiveMap;
-layout(set = 1, binding = 4) uniform sampler2D normalMap;
-
 layout(push_constant) uniform Constants {
-    mat4 transform;
-    MaterialInputs material;
+    layout(offset = 0) mat4 transform;
+    MaterialInputs _material;
 } pc;
 
 // vec3 getAlbedo() {

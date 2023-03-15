@@ -14,6 +14,7 @@ pub mod mesh;
 pub mod primitives;
 pub mod scene;
 pub mod texture;
+pub mod effects;
 
 pub use camera::*;
 pub use config::*;
@@ -28,6 +29,7 @@ pub use mesh::*;
 pub use scene::*;
 pub use shader::*;
 pub use texture::*;
+pub use effects::*;
 
 pub mod old;
 
