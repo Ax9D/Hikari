@@ -168,6 +168,7 @@ impl ImageConfig {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ImageViewDesc {
     pub view_type: vk::ImageViewType,
+    pub aspect: vk::ImageAspectFlags,
     pub mip_range: Range<u32>,
     pub layer_range: Range<u32>,
 }
@@ -745,7 +746,7 @@ impl SampledImage {
                 .view_type(view_desc.view_type)
                 .subresource_range(
                     *vk::ImageSubresourceRange::builder()
-                        .aspect_mask(format_to_aspect_flags(self.config.format))
+                        .aspect_mask(view_desc.aspect)
                         .base_mip_level(base_mip_level)
                         .level_count(level_count)
                         .base_array_layer(base_array_layer)

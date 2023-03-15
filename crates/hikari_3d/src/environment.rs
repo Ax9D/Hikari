@@ -285,6 +285,7 @@ impl HDRLoader {
 
                 let view_desc = ImageViewDesc {
                     view_type: vk::ImageViewType::CUBE,
+                    aspect: vk::ImageAspectFlags::COLOR,
                     mip_range: 0..1,
                     layer_range: 0..6,
                 };
@@ -325,6 +326,7 @@ impl HDRLoader {
                 for i in 0..mip_count {
                     let view_desc = ImageViewDesc {
                         view_type: vk::ImageViewType::CUBE,
+                        aspect: vk::ImageAspectFlags::COLOR,
                         mip_range: i..i + 1,
                         layer_range: 0..6,
                     };

@@ -121,7 +121,7 @@ pub struct DepthStencilState {
     pub stencil_test_depth_fail_op: StencilOp,
     pub stencil_test_pass_op: StencilOp,
     pub stencil_test_compare_mask: u32,
-    pub stencil_test_write_mark: u32,
+    pub stencil_test_write_mask: u32,
     pub stencil_test_reference: u32,
 
     pub min_depth_bounds: f32,
@@ -139,7 +139,7 @@ impl std::hash::Hash for DepthStencilState {
         self.stencil_test_depth_fail_op.hash(state);
         self.stencil_test_pass_op.hash(state);
         self.stencil_test_compare_mask.hash(state);
-        self.stencil_test_write_mark.hash(state);
+        self.stencil_test_write_mask.hash(state);
         self.stencil_test_reference.hash(state);
 
         bad_float_hash(self.min_depth_bounds, state);
@@ -156,7 +156,7 @@ impl DepthStencilState {
             .depth_fail_op(self.stencil_test_depth_fail_op.into_vk())
             .pass_op(self.stencil_test_pass_op.into_vk())
             .compare_mask(self.stencil_test_compare_mask)
-            .write_mask(self.stencil_test_write_mark)
+            .write_mask(self.stencil_test_write_mask)
             .reference(self.stencil_test_reference);
 
         *vk::PipelineDepthStencilStateCreateInfo::builder()

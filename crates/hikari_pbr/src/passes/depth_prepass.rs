@@ -25,14 +25,14 @@ pub fn build_pass(
     let depth_output = graph
         .create_image(
             "PrepassDepth",
-            ImageConfig::depth_only_attachment(device),
+            ImageConfig::depth_stencil_attachment(device),
             ImageSize::default_xy(),
         )
         .expect("Failed to create depth image");
 
     graph.add_renderpass(
         Renderpass::<Args>::new("DepthPrepass", ImageSize::default_xy())
-            .draw_image(&depth_output, AttachmentConfig::depth_only_default())
+            .draw_image(&depth_output, AttachmentConfig::depth_stencil_default())
             .cmd(
                 move |cmd, _, record_info, (world, res, shader_lib, assets)| {
                     cmd.set_viewport(
