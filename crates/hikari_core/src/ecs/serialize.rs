@@ -1,6 +1,6 @@
-use std::{any::TypeId, collections::HashMap};
+use std::{any::TypeId};
 
-use hecs::EntityRef;
+use hecs::{EntityRef};
 use serde::{
     de::{DeserializeSeed, MapAccess, Visitor},
     ser::SerializeMap,
@@ -9,7 +9,7 @@ use serde::{
 use type_uuid::TypeUuid;
 use uuid::Uuid;
 
-use crate::{Component, Entity, World};
+use crate::{Component, Entity, World, RegistryInner, RegistryBuilder, Registry};
 
 pub trait SerializeComponent: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid {}
 impl<T: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid> SerializeComponent for T {}
@@ -26,7 +26,9 @@ impl<'r, 'e> Serialize for ComponentsSerialize<'r, 'e> {
             if let Some(uuid) = self.0.type_id_to_uuid(type_id) {
                 map.serialize_entry(uuid, &ComponentSerialize(self.0, self.1, *uuid))?;
             } else {
-                log::warn!("Skipping serializing typeid: {:#?}", type_id);
+                if type_id != TypeId::of::<Uuid>() {
+                    log::warn!("Skipping serializing typeid: {:#?}", type_id);
+                }
             }
         }
 
@@ -44,9 +46,8 @@ impl<'r, 'e> Serialize for ComponentSerialize<'r, 'e> {
         self.0.serialize_component(&self.2, self.1, serializer)
     }
 }
-
 #[derive(Clone)]
-struct SerializeFns {
+pub struct SerializeFns {
     serialize_fn: fn(EntityRef<'_>, &mut dyn FnMut(&dyn erased_serde::Serialize)),
     deserialize_fn: fn(
         Entity,
@@ -54,38 +55,9 @@ struct SerializeFns {
         &mut dyn erased_serde::Deserializer,
     ) -> Result<(), erased_serde::Error>,
 }
-#[derive(Default, Clone)]
-pub struct Registry {
-    type_id_to_uuid: HashMap<TypeId, Uuid>,
-    serialize_fns: HashMap<Uuid, SerializeFns>,
-}
 
-impl Registry {
-    pub fn new() -> Self {
-        Default::default()
-    }
-    pub fn register_component<C: SerializeComponent>(&mut self) {
-        let serialize_fns = SerializeFns {
-            serialize_fn: |entity_ref, serialize_fn| {
-                let component = entity_ref.get::<&C>().unwrap();
-                (serialize_fn)(&*component)
-            },
-            deserialize_fn: |entity, world, deserializer| -> Result<(), erased_serde::Error> {
-                let component = erased_serde::deserialize::<C>(deserializer)?;
-                world.add_component(entity, component).unwrap();
-
-                Ok(())
-            },
-        };
-
-        let uuid = Uuid::from_bytes(C::UUID);
-        self.type_id_to_uuid.insert(TypeId::of::<C>(), uuid);
-        self.serialize_fns.insert(uuid, serialize_fns);
-    }
-    fn type_id_to_uuid(&self, type_id: TypeId) -> Option<&Uuid> {
-        self.type_id_to_uuid.get(&type_id)
-    }
-    pub fn serialize_component<S: Serializer>(
+impl RegistryInner {
+    fn serialize_component<S: Serializer>(
         &self,
         component_id: &Uuid,
         entity_ref: EntityRef,
@@ -106,7 +78,7 @@ impl Registry {
 
         result.unwrap()
     }
-    pub fn deserialize_component<'de, D: Deserializer<'de>>(
+    fn deserialize_component<'de, D: Deserializer<'de>>(
         &self,
         component_id: &Uuid,
         entity: Entity,
@@ -121,6 +93,45 @@ impl Registry {
             log::warn!("Skipping deserializing uuid: {}", component_id);
         }
         Ok(())
+    }
+}
+impl Registry {
+    fn serialize_component<S: Serializer>(
+        &self,
+        component_id: &Uuid,
+        entity_ref: EntityRef,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        self.inner.serialize_component(component_id, entity_ref, serializer)
+    }
+    fn deserialize_component<'de, D: Deserializer<'de>>(
+        &self,
+        component_id: &Uuid,
+        entity: Entity,
+        world: &mut World,
+        deserializer: D,
+    ) -> Result<(), D::Error> {
+        self.inner.deserialize_component(component_id, entity, world, deserializer)
+    }
+}
+impl RegistryBuilder {
+    pub fn register_serde<C: SerializeComponent>(&mut self) {
+        let serialize_fns = SerializeFns {
+            serialize_fn: |entity_ref, serialize_fn| {
+                let component = entity_ref.get::<&C>().unwrap();
+                (serialize_fn)(&*component)
+            },
+            deserialize_fn: |entity, world, deserializer| -> Result<(), erased_serde::Error> {
+                let component = erased_serde::deserialize::<C>(deserializer)?;
+                world.add_component(entity, component).unwrap();
+
+                Ok(())
+            },
+        };
+
+        let uuid = Uuid::from_bytes(C::UUID);
+        self.registry.type_id_to_uuid.insert(TypeId::of::<C>(), uuid);
+        self.registry.serialize_fns.insert(uuid, serialize_fns);
     }
 }
 
@@ -148,8 +159,10 @@ impl<'w, 'r> Serialize for SerializableWorld<'w, 'r> {
     {
         let mut map = serializer.serialize_map(Some(self.world.len()))?;
         for entity_ref in self.world.entities() {
+            let entity = entity_ref.entity();
+            let serializable_entity = SerializableEntity(entity, self.world.uuid(entity));
             map.serialize_entry(
-                &entity_ref.entity(),
+                &serializable_entity,
                 &ComponentsSerialize(&self.registry, entity_ref),
             )?;
         }
@@ -157,6 +170,9 @@ impl<'w, 'r> Serialize for SerializableWorld<'w, 'r> {
         map.end()
     }
 }
+
+#[derive(Serialize, Deserialize)]
+struct SerializableEntity(Entity, uuid::Uuid);
 
 impl World {
     pub fn deserialize<'de, D: Deserializer<'de>>(
@@ -206,8 +222,14 @@ impl<'w, 'r, 'de> Visitor<'de> for WorldVisitor<'w, 'r> {
     where
         A: MapAccess<'de>,
     {
-        while let Some(entity) = map.next_key::<Entity>()? {
-            self.world.create_entity_at(entity, ());
+        // while let Some(entity) = map.next_key::<Entity>()? {
+        //     log::warn!("Using old entity serialization format!");
+        //     self.world.create_entity_at(entity, ());
+
+        //     map.next_value_seed(ComponentsDeserializer(entity, self.world, self.registry))?;
+        // }
+        while let Some(SerializableEntity(entity, uuid)) = map.next_key::<SerializableEntity>()? {
+            self.world.create_entity_at(entity, (uuid,));
 
             map.next_value_seed(ComponentsDeserializer(entity, self.world, self.registry))?;
         }
@@ -291,9 +313,11 @@ fn serialize_component() {
         .add_component(entity, Id { name: "Foo".into() })
         .unwrap();
 
-    let mut registry = Registry::new();
-    registry.register_component::<Position>();
-    registry.register_component::<Id>();
+    let mut registry = Registry::builder();
+    registry.register_serde::<Position>();
+    registry.register_serde::<Id>();
+
+    let registry = registry.build();
 
     fn component_to_string(
         component: &Uuid,
@@ -322,6 +346,7 @@ fn serialize_component() {
         component_to_string(&Uuid::from_bytes(Id::UUID), entity, &world, &registry)
     );
 }
+
 #[test]
 fn round_trip() {
     #[derive(Serialize, Deserialize, TypeUuid, PartialEq, Debug)]
@@ -347,9 +372,10 @@ fn round_trip() {
         .add_component(entity, Id { name: "Foo".into() })
         .unwrap();
 
-    let mut registry = Registry::new();
-    registry.register_component::<Position>();
-    registry.register_component::<Id>();
+    let mut registry = Registry::builder();
+    registry.register_serde::<Position>();
+    registry.register_serde::<Id>();
+    let registry = registry.build();
 
     let world_string = serde_yaml::to_string(&world_in.as_serializable(&registry)).unwrap();
 
