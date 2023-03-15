@@ -1,6 +1,7 @@
 #![allow(unused)]
 use std::{any::TypeId, collections::HashMap};
 
+use hikari::core::Registry;
 use hikari::core::{Component, ComponentError, Entity, NoSuchEntity, World};
 use hikari::imgui::Ui;
 
@@ -31,7 +32,6 @@ pub struct ComponentDispatch {
     add_component: fn(Entity, &mut World) -> Result<(), NoSuchEntity>,
     draw_component: fn(&Ui, Entity, &mut World, &mut Editor, EngineState) -> anyhow::Result<()>,
     remove_component: fn(Entity, &mut World) -> Result<(), ComponentError>,
-    clone_component: fn(Entity, &World, &mut World) -> Result<(), ComponentError>,
 }
 impl ComponentDispatch {
     pub fn new<T: EditorComponent>() -> Self {
@@ -42,7 +42,6 @@ impl ComponentDispatch {
             add_component: T::add_component,
             draw_component: T::draw_component,
             remove_component: T::remove_component,
-            clone_component: T::clone_component,
         }
     }
     #[inline]
@@ -63,18 +62,6 @@ impl ComponentDispatch {
         Self: Sized,
     {
         (self.remove_component)(entity, world)
-    }
-    #[inline]
-    pub fn clone_component(
-        &self,
-        entity: Entity,
-        src: &World,
-        dst: &mut World,
-    ) -> Result<(), ComponentError>
-    where
-        Self: Sized,
-    {
-        (self.clone_component)(entity, src, dst)
     }
     #[inline]
     pub fn draw_component(
@@ -109,9 +96,6 @@ pub trait EditorComponent: Component {
         editor: &mut Editor,
         state: EngineState,
     ) -> anyhow::Result<()>;
-    fn clone(&self) -> Self
-    where
-        Self: Sized;
 
     fn add_component(entity: Entity, world: &mut World) -> Result<(), NoSuchEntity>
     where
@@ -126,18 +110,6 @@ pub trait EditorComponent: Component {
     {
         world.remove_component::<Self>(entity)?;
 
-        Ok(())
-    }
-    fn clone_component(entity: Entity, src: &World, dst: &mut World) -> Result<(), ComponentError>
-    where
-        Self: Sized,
-    {
-        let cloned_component = src.get_component::<&Self>(entity)?.clone();
-        if dst.entity(entity).is_ok() {
-            dst.add_component(entity, cloned_component)?;
-        } else {
-            dst.create_entity_at(entity, (cloned_component,));
-        }
         Ok(())
     }
     fn draw_component(

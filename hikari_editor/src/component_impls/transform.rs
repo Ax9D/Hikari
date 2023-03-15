@@ -104,12 +104,6 @@ impl EditorComponent for Transform {
         Ok(())
     }
 
-    fn clone(&self) -> Self
-    where
-        Self: Sized,
-    {
-        *self
-    }
     fn sort_key() -> usize {
         0
     }

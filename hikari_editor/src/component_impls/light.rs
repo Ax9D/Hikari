@@ -69,11 +69,4 @@ impl EditorComponent for Light {
         });
         Ok(())
     }
-
-    fn clone(&self) -> Self
-    where
-        Self: Sized,
-    {
-        Clone::clone(&self)
-    }
 }

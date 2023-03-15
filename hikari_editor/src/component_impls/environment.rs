@@ -25,7 +25,7 @@ impl EditorComponent for Environment {
         &mut self,
         ui: &Ui,
         _entity: hikari::core::Entity,
-        _editor: &mut crate::editor::Editor,
+        _editor: &mut crate::Editor,
         state: hikari_editor::EngineState,
     ) -> anyhow::Result<()> {
         let ass_man = state.get::<AssetManager>().unwrap();
@@ -64,12 +64,5 @@ impl EditorComponent for Environment {
         });
 
         Ok(())
-    }
-
-    fn clone(&self) -> Self
-    where
-        Self: Sized,
-    {
-        <Self as Clone>::clone(self)
     }
 }

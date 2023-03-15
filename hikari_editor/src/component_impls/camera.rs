@@ -44,11 +44,4 @@ impl EditorComponent for Camera {
             .build(ui, &mut self.exposure);
         Ok(())
     }
-
-    fn clone(&self) -> Self
-    where
-        Self: Sized,
-    {
-        Clone::clone(&self)
-    }
 }

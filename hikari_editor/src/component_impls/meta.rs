@@ -1,6 +1,6 @@
 use crate::{
     components::EditorComponent,
-    editor::meta::{EditorInfo, EditorOnly},
+    editor::meta::{EditorOnly, EditorInfo},
     *,
 };
 use hikari_editor::*;
@@ -29,13 +29,6 @@ impl EditorComponent for EditorInfo {
     ) -> anyhow::Result<()> {
         Ok(())
     }
-
-    fn clone(&self) -> Self
-    where
-        Self: Sized,
-    {
-        Clone::clone(&self)
-    }
 }
 
 impl EditorComponent for EditorOnly {
@@ -62,11 +55,34 @@ impl EditorComponent for EditorOnly {
     ) -> anyhow::Result<()> {
         unimplemented!()
     }
-
-    fn clone(&self) -> Self
-    where
-        Self: Sized,
-    {
-        Clone::clone(&self)
-    }
 }
+
+// impl EditorComponent for EditorEntityInfo {
+//     fn name() -> &'static str
+//     where
+//         Self: Sized {
+//         "Editor Entity Info"
+//     }
+
+//     fn new() -> Self
+//     where
+//         Self: Sized {
+//         unimplemented!("Editor Only Component, Don't call new")
+//     }
+
+//     fn draw(
+//         &mut self,
+//         ui: &imgui::Ui,
+//         entity: Entity,
+//         editor: &mut Editor,
+//         state: EngineState,
+//     ) -> anyhow::Result<()> {
+//         unimplemented!()
+//     }
+
+//     fn clone(&self) -> Self
+//     where
+//         Self: Sized {
+//         Clone::clone(&self)
+//     }
+// }

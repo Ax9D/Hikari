@@ -1,9 +1,8 @@
-use std::sync::Arc;
-
 use hikari::{
     asset::{Asset, Loader, Saver},
     core::{
-        serde::{Registry, WorldDeserializer},
+        Registry,
+        serialize::{WorldDeserializer},
         World,
     },
 };
@@ -87,7 +86,7 @@ impl Asset for Scene {
 }
 #[derive(Clone)]
 pub struct SceneLoader {
-    pub registry: Arc<Registry>,
+    pub registry: Registry,
 }
 
 impl Loader for SceneLoader {

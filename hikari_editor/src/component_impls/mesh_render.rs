@@ -56,11 +56,4 @@ impl EditorComponent for MeshRender {
 
         Ok(())
     }
-
-    fn clone(&self) -> Self
-    where
-        Self: Sized,
-    {
-        Clone::clone(&self)
-    }
 }

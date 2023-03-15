@@ -1,4 +1,6 @@
-use crate::Component;
+use std::any::TypeId;
+
+use crate::{Component, Registry, CloneComponent};
 
 pub type Entity = hecs::Entity;
 
@@ -8,6 +10,7 @@ pub use hecs::{
     QueryBorrow, QueryItem, QueryMut, QueryOne, Ref, RefMut, With, Without,
 };
 use hikari_math::Transform;
+use uuid::Uuid;
 pub struct World {
     world: hecs::World,
 }
@@ -72,6 +75,20 @@ impl World {
     pub fn remove_entity(&mut self, entity: Entity) -> Result<(), NoSuchEntity> {
         self.world.despawn(entity)
     }
+    pub fn clone_entity(&mut self, entity: Entity, registry: &Registry) -> Result<EntityBuilder, NoSuchEntity> {
+        let entity = self.entity(entity)?;
+        Ok(registry.clone_entity(entity))
+    }
+    pub fn duplicate_entity(&mut self, entity: Entity, registry: &Registry) -> Result<Entity, NoSuchEntity>{
+        let mut builder = self.clone_entity(entity, registry)?;
+
+        //Replace with new uuid
+        builder.add(Uuid::new_v4());
+
+        let dup_entity = self.world.spawn(builder.build());
+
+        Ok(dup_entity)
+    }
     #[inline]
     pub fn contains(&self, entity: Entity) -> bool {
         self.world.contains(entity)
@@ -96,6 +113,19 @@ impl World {
     pub fn clear(&mut self) {
         self.world.clear()
     }
+    pub fn clone_into(&self, registry: &Registry, dst: &mut World) {
+        for entity in self.entities() {
+            let mut builder = registry.clone_entity(entity);
+            let entity = entity.entity();
+            dst.create_entity_at(entity, builder.build());
+        }
+    }
+    pub fn clone(&self, registry: &Registry) -> World {
+        let mut dst = World::new();
+        self.clone_into(registry, &mut dst);
+
+        dst
+    }
     #[inline]
     pub fn add_component(
         &mut self,
@@ -115,13 +145,16 @@ impl World {
     ) -> Result<C::Ref, ComponentError> {
         self.world.get::<C>(entity)
     }
-    // #[inline]
-    // pub fn get_component_mut<C: ComponentRef>(
-    //     &self,
-    //     entity: Entity,
-    // ) -> Result<C::Ref, ComponentError> {
-    //     self.world.get(entity)
-    // }
+    #[inline]
+    pub fn has_component<C: Component>(&self, entity: Entity) -> bool {
+        self.world.get::<&C>(entity).is_ok()
+    }
+    pub fn clone_component_untyped(&self, type_id: TypeId, src: Entity, dst: Entity, dst_world: &mut World, registry: &Registry) -> Result<(), NoSuchEntity> {
+        registry.clone_component_untyped(type_id, self.entity(src)?, dst, dst_world)
+    }
+    pub fn clone_component<C: CloneComponent>(&self, src: Entity, dst: Entity, dst_world: &mut World, registry: &Registry) -> Result<(), NoSuchEntity> {
+        registry.clone_component::<C>(self.entity(src)?, dst, dst_world)
+    }
     #[inline]
     pub fn run_query<Q: Query>(&self, mut f: impl FnMut(Entity, QueryItem<Q>)) {
         for (entity, item) in self.query::<Q>().iter() {
@@ -151,3 +184,5 @@ impl World {
         cmd.run_on(&mut self.world);
     }
 }
+
+pub type EntityBuilder = hecs::EntityBuilder;
