@@ -1,8 +1,7 @@
 # Hikari
 [![Test and Build](https://github.com/Ax9D/Hikari/actions/workflows/ci.yml/badge.svg)](https://github.com/Ax9D/Hikari/actions/workflows/ci.yml)
 
-Hikari is my personal Game Engine that I'm writing in my free time. 
-The code is messy and a bit broken in some places.
+Hikari is my personal Game Engine that I'm writing in my free time.
 
 ![hikari_render_demo](./demo.png)
 ![editor_demo](./editor_demo.png)
