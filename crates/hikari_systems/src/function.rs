@@ -1,25 +1,27 @@
 use crate::query::Borrows;
 use crate::query::Query;
 
+pub type VoidFunction = Function<()>;
+
 #[allow(dead_code)]
-pub struct Function {
+pub struct Function<R> {
     borrows: Borrows,
-    exec: Box<dyn FnMut(Pin<&UnsafeGlobalState>) + 'static>,
+    exec: Box<dyn FnMut(Pin<&UnsafeGlobalState>) -> R + 'static>,
 }
-impl Function {
-    pub unsafe fn from_raw(exec: Box<dyn FnMut(Pin<&UnsafeGlobalState>) + 'static>) -> Self {
+impl<R> Function<R> {
+    pub unsafe fn from_raw(exec: Box<dyn FnMut(Pin<&UnsafeGlobalState>) -> R + 'static>) -> Self {
         Self {
             borrows: Borrows::default(),
             exec,
         }
     }
     #[inline]
-    pub(crate) unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) {
-        (self.exec)(g_state);
+    pub(crate) unsafe fn run(&mut self, g_state: Pin<&UnsafeGlobalState>) -> R {
+        (self.exec)(g_state)
     }
 }
-pub trait IntoFunction<Params> {
-    fn into_function(self) -> Function;
+pub trait IntoFunction<Params, R> {
+    fn into_function(self) -> Function<R>;
 }
 
 use std::pin::Pin;
@@ -30,13 +32,13 @@ use crate::query::Fetch;
 macro_rules! impl_into_function {
     ($($name: ident),*) => {
         #[allow(non_snake_case)]
-        impl<'a, Func, Return, $($name: Query),*> IntoFunction<($($name,)*)> for Func
+        impl<'a, Func, Return, $($name: Query),*> IntoFunction<($($name,)*), Return> for Func
         where
             Func:
                 FnMut($($name),*) -> Return +
                 FnMut($(<<$name as Query>::Fetch as Fetch>::Item),* ) -> Return +
                 Send + Sync + 'static {
-            fn into_function(mut self) -> Function {
+            fn into_function(mut self) -> Function<Return> {
                 #[allow(unused_mut)]
                 let mut borrows = Borrows::default();
                 ($(<<$name as Query>::Fetch as Fetch>::borrow_check(&mut borrows),)*);
@@ -46,7 +48,7 @@ macro_rules! impl_into_function {
                         unsafe {
                             let ($($name,)*) = g_state.query::<($($name,)*)>();
 
-                            self($($name,)*);
+                            self($($name,)*)
                         }
                     }),
                     borrows

@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 fxhash = "0.2"
 
+hikari_dev = {path = "../hikari_dev"}
+
 [dev-dependencies]
 rand = "0.8"
 

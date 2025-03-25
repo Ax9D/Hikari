@@ -1,4 +1,4 @@
-use std::{any::TypeId, marker::PhantomPinned, pin::Pin};
+use std::{any::{TypeId, type_name}, marker::PhantomPinned, pin::Pin};
 
 use fxhash::FxHashMap;
 
@@ -11,12 +11,14 @@ use crate::borrow::{Ref, RefMut, StateCell};
 
 pub struct StateBuilder {
     state_list: FxHashMap<TypeId, StateCell>,
+    state_add_order: Vec<TypeId>
 }
 
 impl StateBuilder {
     pub fn new() -> Self {
         Self {
             state_list: Default::default(),
+            state_add_order: Vec::new()
         }
     }
     pub fn add_state<S: State>(&mut self, state: S) -> &mut Self {
@@ -31,24 +33,35 @@ impl StateBuilder {
             );
         }
 
+
+        self.state_add_order.push(TypeId::of::<S>());
         self
     }
     pub fn get<S: State>(&self) -> Ref<S> {
-        self.state_list
+        let state = self.state_list
             .get(&TypeId::of::<S>())
-            .map(|cell| cell.borrow_cast::<S>())
-            .unwrap()
+            .map(|cell| cell.borrow_cast::<S>());
+
+        match state {
+            Some(value) => value,
+            None => panic!("Failed to get state: {}", type_name::<S>())
+        }       
     }
     pub fn get_mut<S: State>(&self) -> RefMut<S> {
-        self.state_list
+        let state = self.state_list
             .get(&TypeId::of::<S>())
-            .map(|cell| cell.borrow_cast_mut::<S>())
-            .unwrap()
+            .map(|cell| cell.borrow_cast_mut::<S>());
+        
+        match state {
+            Some(value) => value,
+            None => panic!("Failed to get state: {}", type_name::<S>())
+        } 
     }
     pub fn build(self) -> GlobalState {
         GlobalState {
             inner: Box::pin(UnsafeGlobalState {
                 state_list: self.state_list,
+                state_add_order: self.state_add_order,
                 _marker: PhantomPinned::default(),
             }),
         }
@@ -61,29 +74,34 @@ unsafe impl Sync for UnsafeGlobalState {}
 #[derive(Default)]
 pub struct UnsafeGlobalState {
     state_list: FxHashMap<TypeId, StateCell>,
+    state_add_order: Vec<TypeId>,
     _marker: PhantomPinned,
 }
 
 impl UnsafeGlobalState {
     pub fn get<S: State>(self: Pin<&Self>) -> Option<Ref<S>> {
+        hikari_dev::profile_function!();
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast())
     }
     pub fn get_mut<S: State>(self: Pin<&Self>) -> Option<RefMut<S>> {
+        hikari_dev::profile_function!();
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_mut())
     }
     pub(crate) unsafe fn get_unchecked<'a, S: State>(self: Pin<&'a Self>) -> Option<&'a S> {
+        hikari_dev::profile_function!();
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_unchecked())
     }
     pub(crate) unsafe fn get_unchecked_mut<'a, S: State>(self: Pin<&'a Self>) -> Option<&'a mut S> {
+        hikari_dev::profile_function!();
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
@@ -93,6 +111,13 @@ impl UnsafeGlobalState {
         self: Pin<&Self>,
     ) -> <<Q as Query>::Fetch as Fetch<'_>>::Item {
         Q::Fetch::get(self)
+    }
+}
+impl Drop for UnsafeGlobalState {
+    fn drop(&mut self) {
+        for state in self.state_add_order.iter().rev() {
+            self.state_list.remove(state);
+        }
     }
 }
 pub struct UniqueGlobalState {}
@@ -118,9 +143,9 @@ impl GlobalState {
     }
 
     #[inline]
-    pub fn run(&mut self, function: &mut crate::Function) {
+    pub fn run<Return>(&mut self, function: &mut crate::Function<Return>) -> Return {
         unsafe {
-            function.run(self.raw());
+            function.run(self.raw())
         }
     }
 }

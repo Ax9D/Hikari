@@ -27,7 +27,7 @@ impl StateCell {
         match BorrowRef::try_new(&self.borrow) {
             Ok(borrow) => {
                 let data_ref = unsafe { &*self.data.get() };
-                let typed_ref = data_ref.downcast_ref::<S>().unwrap();
+                let typed_ref = unsafe { data_ref.downcast_ref::<S>().unwrap_unchecked() };
 
                 Ref {
                     data: typed_ref,
@@ -41,7 +41,7 @@ impl StateCell {
         match BorrowRefMut::try_new(&self.borrow) {
             Ok(borrow) => {
                 let data_ref = unsafe { &mut *self.data.get() };
-                let typed_ref = data_ref.downcast_mut::<S>().unwrap();
+                let typed_ref = unsafe { data_ref.downcast_mut::<S>().unwrap_unchecked() };
 
                 RefMut {
                     data: typed_ref,
@@ -54,14 +54,14 @@ impl StateCell {
 
     pub(crate) unsafe fn borrow_cast_unchecked<S: State>(&self) -> &S {
         let data_ref = &*self.data.get();
-        let typed_ref = data_ref.downcast_ref::<S>().unwrap();
+        let typed_ref = unsafe { data_ref.downcast_ref::<S>().unwrap_unchecked() };
 
         typed_ref
     }
     #[allow(clippy::mut_from_ref)]
     pub(crate) unsafe fn borrow_cast_unchecked_mut<S: State>(&self) -> &mut S {
         let data_ref = &mut *self.data.get();
-        let typed_ref = data_ref.downcast_mut::<S>().unwrap();
+        let typed_ref = unsafe { data_ref.downcast_mut::<S>().unwrap_unchecked() };
 
         typed_ref
     }

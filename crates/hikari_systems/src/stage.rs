@@ -4,14 +4,14 @@ use crate::{
     function::{Function, IntoFunction},
     GlobalState,
 };
-pub struct Task {
+pub struct Task<Return> {
     name: String,
-    function: Function,
+    function: Function<Return>,
     before: HashSet<String>,
     after: HashSet<String>,
 }
-impl Task {
-    pub fn new<Params>(name: &str, function: impl IntoFunction<Params>) -> Self {
+impl<Return> Task<Return> {
+    pub fn new<Params>(name: &str, function: impl IntoFunction<Params, Return>) -> Self {
         Self {
             name: name.to_owned(),
             function: function.into_function(),
@@ -19,7 +19,7 @@ impl Task {
             after: HashSet::new(),
         }
     }
-    pub unsafe fn with_raw_function(name: &str, function: Function) -> Self {
+    pub unsafe fn with_raw_function(name: &str, function: Function<Return>) -> Self {
         Self {
             name: name.to_owned(),
             function,
@@ -52,32 +52,38 @@ impl Task {
         }
     }
 }
-pub struct Schedule {
-    functions: Vec<Function>,
+pub struct Schedule<Return> {
+    functions: Vec<(String, Function<Return>)>,
 }
 
-impl Schedule {
-    pub fn new() -> ScheduleBuilder {
+impl<Return> Schedule<Return> {
+    pub fn new() -> ScheduleBuilder<Return> {
         ScheduleBuilder { stages: Vec::new() }
     }
     #[inline]
     pub fn execute(&mut self, state: &mut GlobalState) {
-        for function in &mut self.functions {
+        for _ret in self.execute_iter(state) {}
+    }
+    #[inline]
+    pub fn execute_iter<'a>(&'a mut self, state: &'a mut GlobalState) -> impl Iterator<Item = Return> + 'a {
+        self.functions.iter_mut().map(|(_name, function)| {
+            hikari_dev::profile_scope!(_name);
+
             unsafe {
-                function.run(state.raw());
+                function.run(state.raw())
             }
-        }
+        })
     }
     pub fn execute_parallel(&mut self, _state: &mut GlobalState) {
         todo!()
     }
 }
 
-struct Stage {
+struct Stage<Return> {
     name: String,
-    tasks: Vec<Task>,
+    tasks: Vec<Task<Return>>,
 }
-impl Stage {
+impl<Return> Stage<Return> {
     pub fn validate(&self) -> Result<(), String> {
         for task in &self.tasks {
             task.validate()?;
@@ -87,11 +93,11 @@ impl Stage {
     }
 }
 
-pub struct ScheduleBuilder {
-    stages: Vec<Stage>,
+pub struct ScheduleBuilder<Return> {
+    stages: Vec<Stage<Return>>
 }
 
-impl ScheduleBuilder {
+impl<Return> ScheduleBuilder<Return> {
     pub fn new() -> Self {
         Self { stages: Vec::new() }
     }
@@ -107,7 +113,7 @@ impl ScheduleBuilder {
 
         self
     }
-    pub fn add_task(&mut self, stage: &str, task: Task) -> &mut Self {
+    pub fn add_task(&mut self, stage: &str, task: Task<Return>) -> &mut Self {
         self.stages
             .iter_mut()
             .find(|st| st.name == stage)
@@ -138,7 +144,7 @@ impl ScheduleBuilder {
 
         Ok(())
     }
-    fn build_graph(mut tasks: Vec<Task>) -> TaskGraph {
+    fn build_graph(mut tasks: Vec<Task<Return>>) -> TaskGraph<Return> {
         let mut edges: HashMap<String, HashSet<String>> = HashMap::new();
 
         for task in &tasks {
@@ -164,7 +170,7 @@ impl ScheduleBuilder {
 
         TaskGraph { nodes, edges }
     }
-    pub fn build(self) -> Result<Schedule, String> {
+    pub fn build(self) -> Result<Schedule<Return>, String> {
         self.validate()?;
 
         let mut functions = Vec::new();
@@ -175,7 +181,7 @@ impl ScheduleBuilder {
 
             tasks.drain(..).for_each(|task| {
                 print!("{} ", task.name());
-                functions.push(task.function);
+                functions.push((task.name, task.function));
             });
         }
         println!();
@@ -184,11 +190,11 @@ impl ScheduleBuilder {
     }
 }
 
-struct TaskGraph {
-    nodes: HashMap<String, Task>,
+struct TaskGraph<Return> {
+    nodes: HashMap<String, Task<Return>>,
     edges: HashMap<String, HashSet<String>>,
 }
-impl TaskGraph {
+impl<Return> TaskGraph<Return> {
     fn topo_sort_(
         node_name: &str,
         visited: &mut HashSet<String>,
@@ -207,7 +213,7 @@ impl TaskGraph {
 
         stack.push(node_name.to_string());
     }
-    fn into_topological_order(mut self) -> Vec<Task> {
+    fn into_topological_order(mut self) -> Vec<Task<Return>> {
         let mut order = Vec::new();
 
         let mut visited = HashSet::new();

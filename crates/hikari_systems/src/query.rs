@@ -82,10 +82,13 @@ unsafe impl<'a, S: State> Fetch<'a> for RefFetch<S> {
     type Item = &'a S;
 
     fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
-        unsafe {
+        let result = unsafe {
             g_state
                 .get_unchecked::<S>()
-                .expect(&format!("No state of type: {}", std::any::type_name::<S>()))
+        };
+        match result {
+            Some(state) => state,
+            None => panic!("No state of type: {}", std::any::type_name::<S>()),
         }
     }
 
@@ -104,9 +107,13 @@ unsafe impl<'a, S: State> Fetch<'a> for RefMutFetch<S> {
     type Item = &'a mut S;
 
     fn get(g_state: Pin<&'a UnsafeGlobalState>) -> Self::Item {
-        unsafe {
+        let result = unsafe {
             UnsafeGlobalState::get_unchecked_mut::<S>(g_state)
-                .expect(&format!("No state of type: {}", std::any::type_name::<S>()))
+        };
+
+        match result {
+            Some(state) => state,
+            None => panic!("No state of type: {}", std::any::type_name::<S>()),
         }
     }
 
