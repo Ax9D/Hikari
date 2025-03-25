@@ -8,10 +8,11 @@ edition = "2021"
 [dependencies]
 glam = { version = "0.22"}
 serde = {version = "1", optional = true}
+rkyv = {version = "0.7", optional = true}
 type-uuid = {version = "0.1"}
 
 [features]
 default = []
-serde = ["dep:serde", "glam/serde"]
+serde = ["dep:serde", "glam/serde", "dep:rkyv", "glam/rkyv"]
 mint = ["glam/mint"]
 fast-math = ["glam/fast-math"]

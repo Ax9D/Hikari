@@ -1,7 +1,7 @@
 use crate::*;
 #[derive(Copy, Clone, Debug, type_uuid::TypeUuid)]
 #[uuid = "d8c0dc46-38ad-430b-8eeb-790bf5ad44d3"]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
 pub struct Transform {
     pub position: Vec3,
     pub rotation: Quat,
