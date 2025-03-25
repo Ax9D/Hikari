@@ -19,6 +19,7 @@ pub fn build_pass(
     shader_lib: &mut ShaderLibrary,
     pbr_output: &GpuHandle<SampledImage>,
 ) -> anyhow::Result<GpuHandle<SampledImage>> {
+
     shader_lib.insert("fxaa")?;
     let output = graph
         .create_image(
@@ -51,12 +52,7 @@ pub fn build_pass(
                         record_info.framebuffer_height,
                     );
                     cmd.set_shader(shader_lib.get("fxaa").unwrap());
-                    cmd.set_image(graph_res.get_image(&pbr_output).unwrap(), 0, 0);
-
-                    cmd.set_rasterizer_state(RasterizerState {
-                        cull_mode: CullMode::Back,
-                        ..Default::default()
-                    });
+                    cmd.set_image(graph_res.get_image(&pbr_output).unwrap(), 2, 0);
 
                     cmd.push_constants(
                         &PushConstants {
@@ -85,7 +81,7 @@ pub fn build_pass(
     let output = graph
         .create_image(
             "FXAAOutput",
-            ImageConfig::color2d(),
+            ImageConfig::color2d_attachment(),
             ImageSize::default_xy(),
         )
         .expect("Failed to create fxaa output");
@@ -101,8 +97,6 @@ pub fn build_pass(
             .present()
             .cmd(
                 move |cmd, graph_res, record_info, (_, res, shader_lib, _)| {
-                    cmd.set_image(graph_res.get_image(&pbr_output).unwrap(), 0, 0);
-
                     cmd.set_viewport(
                         0.0,
                         0.0,
@@ -115,8 +109,8 @@ pub fn build_pass(
                         record_info.framebuffer_width,
                         record_info.framebuffer_height,
                     );
-
                     cmd.set_shader(shader_lib.get("fxaa").unwrap());
+                    cmd.set_image(graph_res.get_image(&pbr_output).unwrap(), 2, 0);
 
                     cmd.push_constants(
                         &PushConstants {

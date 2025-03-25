@@ -2,35 +2,18 @@ use std::sync::Arc;
 
 use hikari_3d::{primitives::Primitives, *};
 use hikari_asset::{AssetManager, AssetPool, PoolRef};
-use hikari_core::{Without, World};
 use hikari_math::*;
-use hikari_render::*;
+use hikari_render::{*,};
 
-use crate::{light::CascadeRenderInfo, resources::RenderResources, Args};
+use crate::{light::CascadeRenderInfo, resources::RenderResources, Args, Settings, DebugView, common::{MaterialInputs, PushConstants}, instancing::MeshInstancer};
 
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone)]
-struct MaterialPC {
-    albedo: hikari_math::Vec4,
-    emissive: Vec3,
-    roughness: f32,
-    metallic: f32,
-    uv_set: u32,
-    textures_mask: u32,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct PushConstants {
-    transform: hikari_math::Mat4,
-    material_data: MaterialPC,
-}
 struct PBRPass {
     layout: VertexInputLayout,
     skybox_layout: VertexInputLayout,
     primitives: Arc<Primitives>,
     shadow_atlas: GpuHandle<SampledImage>,
     cascade_render_buffer: GpuHandle<GpuBuffer<CascadeRenderInfo>>,
+    shader_ids: ShaderIds
 }
 impl PBRPass {
     pub fn build(
@@ -52,10 +35,17 @@ impl PBRPass {
             .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
             .build();
 
-        shader_lib.insert("pbr")?;
-        shader_lib.insert("unlit")?;
-        shader_lib.insert("skybox")?;
-        shader_lib.insert("outline")?;
+        let lit = shader_lib.insert_with_defines("pbr", &["LIGHT_MODE_LIT"])?;
+        let unlit = shader_lib.insert_with_defines("pbr", &["LIGHT_MODE_UNLIT"])?;
+        let skybox = shader_lib.insert("skybox")?;
+        let outline = shader_lib.insert("outline")?;
+
+        let shader_ids = ShaderIds {
+            lit,
+            unlit,
+            skybox,
+            outline,
+        };
 
         let primitives = primitives.clone();
         let mut config = ImageConfig::color2d_attachment();
@@ -73,6 +63,7 @@ impl PBRPass {
             primitives,
             shadow_atlas,
             cascade_render_buffer,
+            shader_ids
         };
 
         let renderpass = Renderpass::<Args>::new("PBR", ImageSize::default_xy())
@@ -94,10 +85,9 @@ impl PBRPass {
                 },
             )
             .cmd(
-                move |cmd, graph_res, record_info, (world, res, shader_lib, asset_manager)| {
+                move |cmd, graph_res, record_info, (_world, res, shader_lib, asset_manager)| {
                     renderer.render(
                         cmd,
-                        world,
                         asset_manager,
                         graph_res,
                         res,
@@ -111,97 +101,49 @@ impl PBRPass {
 
         Ok(color_output)
     }
-    fn prepare_ibl(
-        &self,
-        cmd: &mut RenderpassCommands,
-        environment: Option<(&Environment, &Transform)>,
-        assets: &Assets,
-    ) {
-        let primitives = &self.primitives;
-        let environment_textures = &assets.environment_textures;
-
-        cmd.set_image(&primitives.black_cube.raw(), 0, 3);
-        cmd.set_image(&primitives.black_cube.raw(), 0, 4);
-        cmd.set_image(&primitives.brdf_lut, 2, 0);
-
-        if let Some((environment, _transform)) = environment {
-            if let Some(handle) = &environment.texture {
-                if let Some(environment_texture) = environment_textures.get(handle) {
-                    cmd.set_image(environment_texture.diffuse_irradiance(), 0, 3);
-                    cmd.set_image(environment_texture.specular_prefiltered(), 0, 4);
-                }
-            }
-        }
-    }
     fn render_skybox(
         &self,
         cmd: &mut RenderpassCommands,
-        environment: Option<(&Environment, &Transform)>,
         assets: &Assets,
         res: &RenderResources,
-        shader_lib: &ShaderLibrary,
     ) {
+        cmd.begin_debug_region("Skybox", Vec4::new(0.46,0.69,0.96,1.0));
         let primitives = &self.primitives;
-        let environment_textures = &assets.environment_textures;
 
-        if let Some((environment, _transform)) = environment {
-            if let Some(handle) = &environment.texture {
-                if let Some(environment_texture) = environment_textures.get(handle) {
-                    cmd.set_shader(shader_lib.get("skybox").unwrap());
-                    cmd.set_rasterizer_state(RasterizerState {
-                        cull_mode: CullMode::Front,
-                        ..Default::default()
-                    });
-                    // cmd.set_depth_stencil_state(DepthStencilState {
-                    //     depth_test_enabled: true,
-                    //     depth_write_enabled: false,
-                    //     depth_compare_op: CompareOp::GreaterOrEqual,
-                    //     ..Default::default()
-                    // });
+        cmd.set_shader(assets.skybox_shader);
+        cmd.set_rasterizer_state(RasterizerState {
+            cull_mode: CullMode::Front,
+            ..Default::default()
+        });
 
-                    let skybox = environment_texture.skybox();
-                    cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
+        cmd.set_vertex_input_layout(self.skybox_layout);
+        cmd.set_vertex_buffers(&[&primitives.cube.verts], 0);
 
-                    if environment.use_proxy {
-                        cmd.set_image_mip(
-                            environment_texture.specular_prefiltered(),
-                            environment.mip_level,
-                            0,
-                            1,
-                        );
-                    } else {
-                        cmd.set_image(skybox, 0, 1);
-                    }
-                    cmd.set_vertex_input_layout(self.skybox_layout);
-                    cmd.set_vertex_buffers(&[&primitives.cube.verts], 0);
+        cmd.set_index_buffer(&primitives.cube.inds);
 
-                    cmd.set_index_buffer(&primitives.cube.inds);
+        let ubo_data = res.world_ubo.mapped_slice()[0];
 
-                    let ubo_data = res.world_ubo.mapped_slice()[0];
+        let mut view_transform = ubo_data.view;
 
-                    let mut view_transform = ubo_data.view;
-                    //let mut camera_matrix: Mat4 = Mat4::from_cols_array(&camera_matrix);
-                    *view_transform.col_mut(3) = Vec4::new(0.0, 0.0, 0.0, 1.0);
+        *view_transform.col_mut(3) = Vec4::new(0.0, 0.0, 0.0, 1.0);
 
-                    view_transform *= ubo_data.environment_transform;
+        view_transform *= ubo_data.environment_transform;
 
-                    cmd.push_constants(
-                        &PushConstants {
-                            transform: view_transform,
-                            material_data: MaterialPC::default(),
-                        },
-                        0,
-                    );
+        cmd.push_constants(
+            &PushConstants {
+                transform: view_transform,
+                mat: MaterialInputs::default(),
+            },
+            0,
+        );
 
-                    cmd.draw_indexed(0..primitives.cube.inds.capacity(), 0, 0..1);
-                }
-            }
-        }
+        cmd.draw_indexed(0..primitives.cube.inds.capacity(), 0, 0..1);
+
+        cmd.end_debug_region();
     }
-    fn render_world(&self, cmd: &mut RenderpassCommands, world: &World, assets: &Assets) {
+    fn render_world(&self, cmd: &mut RenderpassCommands, instancer: &MeshInstancer, assets: &Assets, settings: &Settings) {
         hikari_dev::profile_function!();
-
-        let scenes = &assets.scenes;
+        cmd.begin_debug_region("Draw Static Meshes", Vec4::new(0.33,0.25,0.75, 1.0));
 
         cmd.set_depth_stencil_state(DepthStencilState {
             depth_test_enabled: true,
@@ -210,89 +152,72 @@ impl PBRPass {
             ..Default::default()
         });
 
-        for (_, (transform, mesh_comp)) in
-            &mut world.query::<Without<(&Transform, &MeshRender), &Outline>>()
-        {
-            if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
-                if let Some(scene) = scenes.get(handle) {
-                    let mesh = &scene.meshes[*mesh_ix];
-
-                    let transform = transform.get_matrix() * mesh.transform.get_matrix();
-
-                    for submesh in &mesh.sub_meshes {
-                        self.draw_sub_mesh(cmd, transform, submesh, assets);
-                    }
-                }
-            }
+        for (instance_id, batch) in instancer.batches() {
+            self.draw_sub_mesh(cmd, instance_id, batch.count(), batch.submesh(), assets, settings);
         }
+        // cmd.set_depth_stencil_state(DepthStencilState {
+        //     depth_test_enabled: true,
+        //     depth_write_enabled: false,
+        //     stencil_test_enabled: true,
+        //     stencil_test_write_mask: 0xFF,
+        //     stencil_test_compare_mask: 0xFF,
+        //     stencil_test_reference: 0xFF,
+        //     stencil_test_compare_op: CompareOp::Always,
+        //     stencil_test_pass_op: StencilOp::Replace,
+        //     stencil_test_fail_op: StencilOp::Replace,
+        //     stencil_test_depth_fail_op: StencilOp::Replace,
+        //     depth_compare_op: CompareOp::Equal,
+        //     ..Default::default()
+        // });
 
-        cmd.set_depth_stencil_state(DepthStencilState {
-            depth_test_enabled: true,
-            depth_write_enabled: false,
-            stencil_test_enabled: true,
-            stencil_test_write_mask: 0xFF,
-            stencil_test_compare_mask: 0xFF,
-            stencil_test_reference: 0xFF,
-            stencil_test_compare_op: CompareOp::Always,
-            stencil_test_pass_op: StencilOp::Replace,
-            stencil_test_fail_op: StencilOp::Replace,
-            stencil_test_depth_fail_op: StencilOp::Replace,
-            depth_compare_op: CompareOp::Equal,
-            ..Default::default()
-        });
+        // for (_, (transform, mesh_comp, _)) in
+        //     &mut world.query::<(&MeshRender, &Outline)>()
+        // {
+        //     let Some(mesh) = mesh_comp.get_mesh(scenes) else {continue};
+        //     let transform = transform.get_matrix() * mesh.transform.get_matrix();
 
-        for (_, (transform, mesh_comp, _)) in
-            &mut world.query::<(&Transform, &MeshRender, &Outline)>()
-        {
-            if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
-                if let Some(scene) = scenes.get(handle) {
-                    let mesh = &scene.meshes[*mesh_ix];
+        //     for submesh in &mesh.sub_meshes {
+        //         self.draw_sub_mesh(cmd, transform, submesh, assets, settings);
+        //     }
+        // }
 
-                    let base_transform = transform.get_matrix() * mesh.transform.get_matrix();
+        // cmd.set_shader(assets.outline_shader);
 
-                    for submesh in &mesh.sub_meshes {
-                        self.draw_sub_mesh(cmd, base_transform, submesh, assets);
-                    }
-                }
-            }
-        }
+        // cmd.set_depth_stencil_state(DepthStencilState {
+        //     depth_test_enabled: false,
+        //     depth_write_enabled: false,
+        //     stencil_test_enabled: true,
+        //     stencil_test_write_mask: 0xFF,
+        //     stencil_test_compare_mask: 0xFF,
+        //     stencil_test_reference: 0xFF,
+        //     stencil_test_compare_op: CompareOp::NotEqual,
+        //     stencil_test_pass_op: StencilOp::Replace,
+        //     stencil_test_fail_op: StencilOp::Keep,
+        //     stencil_test_depth_fail_op: StencilOp::Keep,
+        //     ..Default::default()
+        // });
 
-        cmd.set_shader(assets.outline_shader);
-        cmd.set_depth_stencil_state(DepthStencilState {
-            depth_test_enabled: false,
-            depth_write_enabled: false,
-            stencil_test_enabled: true,
-            stencil_test_write_mask: 0xFF,
-            stencil_test_compare_mask: 0xFF,
-            stencil_test_reference: 0xFF,
-            stencil_test_compare_op: CompareOp::NotEqual,
-            stencil_test_pass_op: StencilOp::Replace,
-            stencil_test_fail_op: StencilOp::Keep,
-            stencil_test_depth_fail_op: StencilOp::Keep,
-            ..Default::default()
-        });
-        for (_, (transform, mesh_comp, outline)) in
-            &mut world.query::<(&Transform, &MeshRender, &Outline)>()
-        {
-            if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
-                if let Some(scene) = scenes.get(handle) {
-                    let mesh = &scene.meshes[*mesh_ix];
+        // for (_, (transform, mesh_comp, outline)) in
+        //     &mut world.query::<(&Transform, &MeshRender, &Outline)>()
+        // {
+        //     let Some(mesh) = mesh_comp.get_mesh(scenes) else {continue};
+        //     let transform = transform.get_matrix() * mesh.transform.get_matrix();
 
-                    let transform = transform.get_matrix() * mesh.transform.get_matrix();
+        //     for submesh in &mesh.sub_meshes {
+        //         self.draw_sub_mesh_outline(cmd, outline, transform, submesh);
+        //     }
+        // }
 
-                    for submesh in &mesh.sub_meshes {
-                        self.draw_sub_mesh_outline(cmd, outline, transform, submesh);
-                    }
-                }
-            }
-        }
+        cmd.end_debug_region();
     }
     fn draw_sub_mesh(
         &self,
         cmd: &mut RenderpassCommands,
-        transform: Mat4,
+        instance_id: usize,
+        instance_count: usize,
         submesh: &SubMesh,
         assets: &Assets,
+        settings: &Settings,
     ) {
         let primitives = &self.primitives;
         let textures = &assets.textures;
@@ -315,54 +240,66 @@ impl PBRPass {
             .get(&submesh.material)
             .unwrap_or_else(|| &primitives.default_mat);
 
-        let mut textures_mask = 0;
-        textures_mask |= (material.albedo.is_some() as u32) << 0;
-        textures_mask |= (material.roughness.is_some() as u32) << 1;
-        textures_mask |= (material.metallic.is_some() as u32) << 2;
-        textures_mask |= (material.normal.is_some() as u32) << 3;
-        textures_mask |= (material.emissive.is_some() as u32) << 4;
+        // let mut textures_mask = 0;
+        // textures_mask |= (material.albedo.is_some() as u32) << 0;
+        // textures_mask |= (material.roughness.is_some() as u32) << 1;
+        // textures_mask |= (material.metallic.is_some() as u32) << 2;
+        // textures_mask |= (material.normal.is_some() as u32) << 3;
+        // textures_mask |= (material.emissive.is_some() as u32) << 4;
         //let has_albedo_tex = material.albedo.is_some() as u32;
         //let has_roughness_tex = material.roughness.is_some() as u32;
         //let has_metallic_tex = material.metallic.is_some() as u32;
         //let has_normal_tex = material.normal.is_some() as u32;
         //let has_emissive_tex = material.emissive.is_some() as u32;
 
-        let material_data = MaterialPC {
-            albedo: material.albedo_factor,
+        let mut albedo_ix = resolve_texture_bindless(&material.albedo, &textures, &primitives.checkerboard);
+        let roughness_ix = resolve_texture_bindless(&material.roughness, &textures, &primitives.black);
+        let metallic_ix = resolve_texture_bindless(&material.metallic, &textures, &primitives.black);
+        let emissive_ix = resolve_texture_bindless(&material.emissive, &textures, &primitives.black);
+        let normal_ix = resolve_texture_bindless(&material.normal, &textures, &primitives.black);
+
+        let albedo;
+        if settings.debug.view == DebugView::Wireframe {
+            albedo_ix = -1;
+            albedo = Vec4::new(0.0, 0.5, 0.6, 1.0); // Blue
+        } else {
+            albedo = material.albedo_factor;
+        }
+
+        let mat = MaterialInputs {
+            albedo,
             roughness: material.roughness_factor,
             metallic: material.metallic_factor,
             emissive: material.emissive_factor * material.emissive_strength,
             uv_set: material.uv_set,
-            textures_mask,
+            albedo_ix,
+            roughness_ix,
+            metallic_ix,
+            emissive_ix,
+            normal_ix,
             ..Default::default()
         };
 
-        let pc = PushConstants {
-            transform,
-            material_data,
-        };
+        // let pc = PushConstants {
+        //     mat,
+        //     ..Default::default()
+        // };
 
-        cmd.push_constants(&pc, 0);
+        cmd.push_constants(&mat, std::mem::size_of::<Mat4>());
+        
+        // cmd.set_image(albedo.raw(), 3, 0);
+        // cmd.set_image(roughness.raw(), 3, 1);
+        // cmd.set_image(metallic.raw(), 3, 2);
+        // cmd.set_image(emissive.raw(), 3, 3);
+        // cmd.set_image(normal.raw(), 3, 4);
 
-        let albedo = resolve_texture(&material.albedo, &textures, &primitives.black);
-        let roughness = resolve_texture(&material.roughness, &textures, &primitives.black);
-        let metallic = resolve_texture(&material.metallic, &textures, &primitives.black);
-        let emissive = resolve_texture(&material.emissive, &textures, &primitives.black);
-        let normal = resolve_texture(&material.normal, &textures, &primitives.black);
-
-        cmd.set_image(albedo.raw(), 1, 0);
-        cmd.set_image(roughness.raw(), 1, 1);
-        cmd.set_image(metallic.raw(), 1, 2);
-        cmd.set_image(emissive.raw(), 1, 3);
-        cmd.set_image(normal.raw(), 1, 4);
-
-        cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
+        cmd.draw_indexed(0..submesh.indices.capacity(), 0, instance_id..instance_id + instance_count);
     }
     fn draw_sub_mesh_outline(
         &self,
         cmd: &mut RenderpassCommands,
         outline: &Outline,
-        transform: Mat4,
+        instance_id: usize,
         submesh: &SubMesh,
     ) {
         {
@@ -379,24 +316,23 @@ impl PBRPass {
 
             cmd.set_index_buffer(&submesh.indices);
         }
-        let material_data = MaterialPC {
+        let mat = MaterialInputs {
             albedo: Vec4::from((outline.color, outline.thickness)),
             ..Default::default()
         };
 
         let pc = PushConstants {
-            transform,
-            material_data,
+            mat,
+            ..Default::default()    
         };
 
         cmd.push_constants(&pc, 0);
 
-        cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
+        cmd.draw_indexed(0..submesh.indices.capacity(), 0, instance_id..instance_id + 1);
     }
     pub fn render(
         &mut self,
         cmd: &mut RenderpassCommands,
-        world: &World,
         asset_manager: &AssetManager,
         graph_res: &GraphResources,
         res: &RenderResources,
@@ -407,11 +343,8 @@ impl PBRPass {
         let camera = res.camera;
 
         if camera.is_some() {
-            let assets = Assets::fetch(asset_manager, shader_lib);
-
-            let mut environment_comp = world.query::<(&Environment, &Transform)>();
-            let environment = environment_comp.iter().next().map(|(_, env)| env);
-
+            let assets = Assets::fetch(asset_manager, shader_lib, &self.shader_ids);
+            
             cmd.set_viewport(
                 0.0,
                 0.0,
@@ -425,94 +358,113 @@ impl PBRPass {
                 record_info.framebuffer_height,
             );
 
-            if res.settings.debug.wireframe {
-                cmd.set_shader(assets.unlit_shader);
-                cmd.set_rasterizer_state(RasterizerState {
-                    polygon_mode: PolygonMode::Line,
-                    line_width: 2.0,
-                    ..Default::default()
-                });
-            } else {
-                self.render_skybox(cmd, environment, &assets, res, shader_lib);
-                cmd.set_shader(assets.pbr_shader);
-                cmd.set_rasterizer_state(RasterizerState::default());
+            match res.settings.debug.view {
+                DebugView::Wireframe => {
+                    cmd.set_shader(assets.unlit_shader);
+                    cmd.set_rasterizer_state(RasterizerState {
+                        polygon_mode: PolygonMode::Line,
+                        line_width: 2.0,
+                        ..Default::default()
+                    });
+                },
+                DebugView::Unlit => {
+                    self.render_skybox(cmd, &assets, res);
+                    cmd.set_shader(assets.unlit_shader);
+                    cmd.set_rasterizer_state(RasterizerState::default());
+                },
+                DebugView::None => {
+                    self.render_skybox(cmd, &assets, res);
+                    cmd.set_shader(assets.pbr_shader);
+                    cmd.set_rasterizer_state(RasterizerState::default());
+                }
             }
+
             cmd.set_vertex_input_layout(self.layout);
-
-            cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
-            let shadow_atlas = graph_res.get_image(&self.shadow_atlas).unwrap();
-            let depth_only_view = shadow_atlas.custom_image_view(ImageViewDesc {
-                view_type: vk::ImageViewType::TYPE_2D,
-                aspect: vk::ImageAspectFlags::DEPTH,
-                mip_range: 0..1,
-                layer_range: 0..1,
-            });
-            cmd.set_image_view_and_sampler(depth_only_view, shadow_atlas.sampler(), 0, 1, 0);
-
+            
             let cascade_render_buffer = graph_res.get_buffer(&self.cascade_render_buffer).unwrap();
-
-            cmd.set_buffer(cascade_render_buffer, 0..cascade_render_buffer.len(), 0, 2);
-
-            self.prepare_ibl(cmd, environment, &assets);
-            self.render_world(cmd, world, &assets);
+            let shadow_atlas = graph_res.get_image(&self.shadow_atlas).unwrap();
+            
+            cmd.set_buffer(cascade_render_buffer, 0..cascade_render_buffer.len(), 2, 0);
+            cmd.set_image(shadow_atlas, 2, 1);
+            
+            self.render_world(cmd, &res.mesh_instancer, &assets, &res.settings);
         } else {
             log::warn!("No camera in the world");
         }
     }
 }
 
+struct ShaderIds {
+    lit: ShaderId,
+    unlit: ShaderId,
+    outline: ShaderId,
+    skybox: ShaderId,
+}
 struct Assets<'a> {
-    scenes: PoolRef<'a, Scene>,
     materials: PoolRef<'a, Material>,
     textures: PoolRef<'a, Texture2D>,
-    environment_textures: PoolRef<'a, EnvironmentTexture>,
 
     pbr_shader: &'a Arc<Shader>,
     unlit_shader: &'a Arc<Shader>,
     outline_shader: &'a Arc<Shader>,
+    skybox_shader: &'a Arc<Shader>,
 }
 impl<'a> Assets<'a> {
-    pub fn fetch(asset_manager: &'a AssetManager, shader_lib: &'a ShaderLibrary) -> Self {
-        let scenes = asset_manager
-            .read_assets::<Scene>()
-            .expect("Meshes pool not found");
+    pub fn fetch(asset_manager: &'a AssetManager, shader_lib: &'a ShaderLibrary, shader_ids: &ShaderIds) -> Self {
+        // let scenes = asset_manager
+        //     .read_assets::<Scene>()
+        //     .expect("Meshes pool not found");
         let materials = asset_manager
             .read_assets::<Material>()
             .expect("Materials pool not found");
         let textures = asset_manager
             .read_assets::<Texture2D>()
             .expect("Textures pool not found");
-        let environment_textures = asset_manager
-            .read_assets::<EnvironmentTexture>()
-            .expect("Environment Textures pool not found");
 
-        let pbr_shader = shader_lib.get("pbr").expect("Failed to fetch PBR Shader");
-        let unlit_shader = shader_lib.get("unlit").expect("Failed to get unlit shader");
+        let pbr_shader = shader_lib.get_by_id(shader_ids.lit).expect("Failed to fetch PBR Shader");
+        let unlit_shader = shader_lib.get_by_id(shader_ids.unlit).expect("Failed to fetch unlit Shader");
         let outline_shader = shader_lib
-            .get("outline")
+            .get_by_id(shader_ids.outline)
             .expect("Failed to get outline shader");
+        let skybox_shader = shader_lib.get_by_id(shader_ids.skybox).expect("Failed to get skybox shader");
 
         Self {
-            scenes,
             materials,
             textures,
-            environment_textures,
-            pbr_shader,
+            pbr_shader, 
             unlit_shader,
             outline_shader,
+            skybox_shader
         }
     }
 }
 
-fn resolve_texture<'a>(
+// fn resolve_texture<'a>(
+//     handle: &Option<hikari_asset::Handle<Texture2D>>,
+//     textures: &'a AssetPool<Texture2D>,
+//     default: &'a Texture2D,
+// ) -> &'a Texture2D {
+//     handle
+//         .as_ref()
+//         .map(|handle| textures.get(handle).unwrap_or(default))
+//         .unwrap_or(default)
+// }
+fn resolve_texture_bindless<'a>(
     handle: &Option<hikari_asset::Handle<Texture2D>>,
     textures: &'a AssetPool<Texture2D>,
     default: &'a Texture2D,
-) -> &'a Texture2D {
-    handle
+) -> i32 {
+    hikari_dev::profile_function!();
+    let index = handle
         .as_ref()
-        .map(|handle| textures.get(handle).unwrap_or(default))
-        .unwrap_or(default)
+        .map(|handle| {
+            let texture = textures.get(handle).unwrap_or(default);
+            let bindless_handle = texture.raw().bindless_handle(0);
+            bindless_handle.index() as i32
+        })
+        .unwrap_or(-1);
+
+    index
 }
 
 pub fn build_pass(

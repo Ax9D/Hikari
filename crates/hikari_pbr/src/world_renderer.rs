@@ -12,9 +12,12 @@ use hikari_render::{AccessType, Renderpass};
 use crate::{
     passes::{self},
     util,
-    world::WorldUBO,
+    common::WorldUBO,
     Args, RenderResources, Settings,
 };
+
+unsafe impl Send for WorldRenderer {}
+unsafe impl Sync for WorldRenderer {}
 
 pub struct WorldRenderer {
     graph: hikari_render::Graph<Args>,
@@ -30,7 +33,23 @@ impl WorldRenderer {
         shader_library: &mut ShaderLibrary,
         primitives: &Arc<hikari_3d::primitives::Primitives>,
     ) -> anyhow::Result<Self> {
-        let res = RenderResources::new(gfx.device(), width, height)?;
+        let res = RenderResources::new(gfx.device(), width, height, Settings::default())?;
+        let graph = Self::build_graph(gfx, width, height, shader_library, primitives, &res)?;
+        Ok(Self {
+            graph,
+            res,
+            primitives: primitives.clone(),
+        })
+    }
+    pub fn new_with_settings(
+        gfx: &mut Gfx,
+        width: u32,
+        height: u32,
+        settings: Settings,
+        shader_library: &mut ShaderLibrary,
+        primitives: &Arc<hikari_3d::primitives::Primitives>,
+    ) -> anyhow::Result<Self> {
+        let res = RenderResources::new(gfx.device(), width, height, settings)?;
         let graph = Self::build_graph(gfx, width, height, shader_library, primitives, &res)?;
         Ok(Self {
             graph,
@@ -47,7 +66,10 @@ impl WorldRenderer {
         res: &RenderResources,
     ) -> anyhow::Result<hikari_render::Graph<Args>> {
         let device = gfx.device().clone();
+        gfx.set_vsync(res.settings.vsync);
+        
         let mut graph = GraphBuilder::<Args>::new(gfx, width, height);
+        passes::prepare::build_pass(&device, &mut graph);
         let depth_prepass = passes::depth_prepass::build_pass(&device, &mut graph, shader_library)?;
         let (shadow_cascades, cascade_render_buffer) = passes::shadow::build_pass(
             &device,
@@ -91,6 +113,9 @@ impl WorldRenderer {
 
         Ok(graph.build()?)
     }
+    pub fn settings(&self ) -> &Settings {
+        &self.res.settings
+    }
     pub fn update_settings(
         &mut self,
         gfx: &mut Gfx,
@@ -101,11 +126,10 @@ impl WorldRenderer {
 
         (update_fn)(&mut self.res.settings);
 
+        let (width, height) = self.graph.size();
         if self.res.settings.directional_shadow_map_resolution
             != old_settings.directional_shadow_map_resolution
         {
-            let (width, height) = self.graph.size();
-
             self.graph.finish()?;
             self.graph = Self::build_graph(
                 gfx,
@@ -130,17 +154,64 @@ impl WorldRenderer {
             .get_image_by_name("FXAAOutput")
             .unwrap()
     }
-    fn prepare(&mut self, world: &World, camera: Option<Entity>) {
+    fn write_instances(&mut self, world: &World, assets: &AssetManager) {
+        let scenes = assets.read_assets::<hikari_3d::Scene>().expect("Scenes pool not found");
+        let instance_ssbo = self.res.instance_ssbo.mapped_slice_mut();
+        let instancer = &mut self.res.mesh_instancer;
+
+        for (_entity, (transform, mesh_comp)) in world.query::<(&Transform, &MeshRender)>().iter() {
+            let Some((mesh, handle)) = mesh_comp.get_mesh_and_handle(&scenes) else {continue};
+            instancer.add_mesh(handle.index(), mesh, transform);
+        }
+
+        instancer.write_instance_buffer(instance_ssbo);
+    }
+    fn prepare_ibl(&self, world: &World, assets: &AssetManager, ubo_data: &mut WorldUBO) {
+        let environment_textures = assets.read_assets::<EnvironmentTexture>().expect("Environment Textures pool not found");
+
+        let mut environment_comp = world.query::<(&Environment, &Transform)>();
+        let environment = environment_comp.iter().next().map(|(_, env)| env);
+
+        let primitives = &self.primitives;
+
+        let black_cube = primitives.black_cube.raw().bindless_handle(0).index() as u32;
+        let brdf_lut = primitives.brdf_lut.bindless_handle(0).index() as u32;
+
+        ubo_data.env_map_ix = black_cube;
+        ubo_data.env_map_irradiance_ix = black_cube;
+        ubo_data.env_map_prefiltered_ix = black_cube;
+        ubo_data.brdf_lut_ix = brdf_lut;
+
+        let Some((environment, _transform)) = environment else { return };
+        let Some(handle) = &environment.texture else { return };
+        let Some(environment_texture) = environment_textures.get(handle) else { return };
+
+        let env_map = 
+        if environment.use_proxy {
+            environment_texture.specular_prefiltered().bindless_handle(environment.mip_level)
+        } else {
+             environment_texture.skybox().bindless_handle(0)
+        };
+
+        let diffuse_irradiance = environment_texture.diffuse_irradiance().bindless_handle(0);
+        let specular_prefiltered = environment_texture.specular_prefiltered().bindless_handle(0);
+
+        ubo_data.env_map_ix = env_map.index() as u32;
+        ubo_data.env_map_irradiance_ix = diffuse_irradiance.index() as u32;
+        ubo_data.env_map_prefiltered_ix = specular_prefiltered.index() as u32;
+    }
+    fn prepare(&mut self, world: &World, assets: &AssetManager, camera: Option<Entity>) {
+        self.write_instances(world, assets);
+
+        let mut ubo_data = WorldUBO::default();
+        self.prepare_ibl(world, assets, &mut ubo_data);
+        
         let camera = camera.or(util::get_camera(world));
         let directional_light = util::get_directional_light(world);
 
         let res = &mut self.res;
         res.camera = camera;
         res.directional_light = directional_light;
-
-        let world_ubo = &mut res.world_ubo;
-
-        let mut ubo_data = WorldUBO::default();
 
         if let Some(entity) = camera {
             let mut query = world.query_one::<(&Transform, &Camera)>(entity).unwrap();
@@ -191,12 +262,15 @@ impl WorldRenderer {
             }
         }
 
+        let world_ubo = &mut res.world_ubo;
         world_ubo.mapped_slice_mut()[0] = ubo_data;
     }
     fn reset(&mut self) {
         self.res.camera = None;
         self.res.directional_light = None;
         self.res.world_ubo.new_frame();
+        self.res.instance_ssbo.new_frame();
+        self.res.mesh_instancer.new_frame();
     }
     pub fn render(
         &mut self,
@@ -206,7 +280,7 @@ impl WorldRenderer {
     ) -> anyhow::Result<()> {
         hikari_dev::profile_function!();
 
-        self.prepare(world, None);
+        self.prepare(world, asset_manager,None);
         self.graph
             .execute((world, &self.res, shader_lib, asset_manager))?;
 
@@ -223,7 +297,7 @@ impl WorldRenderer {
     ) -> anyhow::Result<&SampledImage> {
         hikari_dev::profile_function!();
 
-        self.prepare(world, camera);
+        self.prepare(world, asset_manager, camera);
         self.graph
             .execute((world, &self.res, shader_lib, asset_manager))?;
 

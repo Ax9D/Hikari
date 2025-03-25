@@ -9,8 +9,11 @@ mod packet;
 mod passes;
 mod resources;
 mod util;
-mod world;
+mod common;
 mod world_renderer;
+
+mod settings;
+mod instancing;
 
 use hikari_render::Gfx;
 use light::*;
@@ -18,59 +21,17 @@ use resources::RenderResources;
 pub use resources::*;
 #[cfg(not(feature = "editor"))]
 use winit::event::{Event, WindowEvent};
-use world::*;
+use common::*;
 pub use world_renderer::WorldRenderer;
+pub use settings::*;
 
 type Args = (World, RenderResources, ShaderLibrary, AssetManager);
 
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct DebugSettings {
-    pub show_shadow_cascades: bool,
-    pub wireframe: bool,
-}
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ShadowResolution {
-    D256 = 0,
-    D512,
-    D1024,
-    D2048,
-    D4096,
-}
-
-impl ShadowResolution {
-    pub const fn size(self) -> u32 {
-        match self {
-            ShadowResolution::D256 => 256,
-            ShadowResolution::D512 => 512,
-            ShadowResolution::D1024 => 1024,
-            ShadowResolution::D2048 => 2048,
-            ShadowResolution::D4096 => 4096,
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq)]
-pub struct Settings {
-    pub fxaa: bool,
-    pub vsync: bool,
-    pub directional_shadow_map_resolution: ShadowResolution,
-    pub debug: DebugSettings,
-}
-
-impl Settings {
-    fn new() -> Self {
-        Self {
-            fxaa: true,
-            vsync: true,
-            directional_shadow_map_resolution: ShadowResolution::D2048,
-            debug: DebugSettings::default(),
-        }
-    }
-}
 pub struct PBRPlugin {
     pub width: u32,
     pub height: u32,
+    pub settings: Settings,
 }
 
 impl Plugin for PBRPlugin {
@@ -78,10 +39,11 @@ impl Plugin for PBRPlugin {
         let mut gfx = game.get_mut::<Gfx>();
         let mut shader_lib = game.get_mut::<ShaderLibrary>();
         let primitives = game.get::<Arc<hikari_3d::primitives::Primitives>>();
-        let renderer = WorldRenderer::new(
+        let renderer = WorldRenderer::new_with_settings(
             &mut gfx,
             self.width,
             self.height,
+            self.settings,
             &mut shader_lib,
             &primitives,
         )
@@ -91,6 +53,11 @@ impl Plugin for PBRPlugin {
         drop(primitives);
 
         game.add_state(renderer);
+        game.create_exit_stage("RendererExit");
+        game.add_exit_task("RendererExit", hikari_core::Task::new("Graph Exit", |renderer: &mut WorldRenderer| {
+            renderer.prepare_exit();
+        }));
+        
         #[cfg(not(feature = "editor"))]
         {
             game.add_task(
@@ -100,10 +67,15 @@ impl Plugin for PBRPlugin {
                     move |renderer: &mut WorldRenderer,
                           world: &World,
                           shader_lib: &ShaderLibrary,
-                          assets: &AssetManager| {
+                          assets: &AssetManager,
+                          window: &winit::window::Window| {
+                        let window_size = window.inner_size();
+                        if window_size.width == 0 || window_size.height == 0 {
+                                return;
+                        }
                         renderer
-                            .render(world, shader_lib, assets)
-                            .expect("Failed to render world");
+                                .render(world, shader_lib, assets)
+                                .expect("Failed to render world");
                     },
                 ),
             );
@@ -120,9 +92,6 @@ impl Plugin for PBRPlugin {
                     }
                     _ => {}
                 },
-                Event::LoopDestroyed => {
-                    state.get_mut::<WorldRenderer>().unwrap().prepare_exit();
-                }
                 _ => {}
             });
         }

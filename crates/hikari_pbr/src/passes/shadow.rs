@@ -1,19 +1,12 @@
 use std::sync::Arc;
 
-use crate::{light::CascadeRenderInfo, world::WorldUBO, Args, Settings};
+use crate::{light::CascadeRenderInfo, common::{WorldUBO, MaterialInputs, PushConstants}, Args, Settings};
 use hikari_3d::*;
 use hikari_math::*;
 use hikari_render::*;
 
 pub const N_CASCADES: usize = 4;
 //pub const SHADOW_MAP_SIZE: u32 = 1024;
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct PushConstants {
-    transform: hikari_math::Mat4,
-    cascade_ix: u32,
-}
 
 pub fn compute_cascades(world_ubo: &mut WorldUBO, settings: &Settings) {
     let shadow_map_size = settings.directional_shadow_map_resolution.size();
@@ -59,7 +52,7 @@ pub fn create_hi_z_images(
         image_type: vk::ImageType::TYPE_2D,
         image_view_type: vk::ImageViewType::TYPE_2D,
         initial_layout: vk::ImageLayout::GENERAL,
-        host_readable: false,
+        ..Default::default()
     };
 
     while width > 1 || height > 1 {
@@ -94,24 +87,6 @@ pub fn build_pass(
     config.format = vk::Format::D32_SFLOAT;
     let shadow_atlas = graph.create_image("ShadowMapAtlas", config, atlas_size)?;
 
-    // let mandelbrot = graph.create_image("Mandelbrot", config, ImageSize::absolute_xy(1024, 1024))?;
-
-    // graph.add_computepass(ComputePass::<Args>::new("ResetLayouts")
-    // .read_image(&mandelbrot, AccessType::FragmentShaderReadSampledImageOrUniformTexelBuffer)
-    // );
-
-    // graph.add_computepass(ComputePass::<Args>::new("MandelbrotCompute")
-    // .write_image(&mandelbrot, AccessType::ComputeShaderWrite)
-    // .cmd(move|cmd, graph_res, _, (_, _, shader_lib, _)| {
-    //     cmd.set_image(graph_res.get_image(&mandelbrot).unwrap(), 0, 0);
-    //     cmd.set_shader(shader_lib.get("mandelbrot").unwrap());
-    //     cmd.dispatch((1024/8, 1024/8, 1));
-    // }));
-
-    let layout = VertexInputLayout::builder()
-        .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
-        .build();
-
     shader_lib.insert("depth_reduce_initial")?;
     shader_lib.insert("depth_reduce")?;
 
@@ -127,24 +102,17 @@ pub fn build_pass(
                     let hiz_images = &res.hi_z_images;
 
                     let depth_output = graph_res.get_image(&depth_prepass).unwrap();
-                    let depth_only_view = depth_output.custom_image_view(ImageViewDesc {
-                        view_type: vk::ImageViewType::TYPE_2D,
-                        aspect: vk::ImageAspectFlags::DEPTH,
-                        mip_range: 0..1,
-                        layer_range: 0..1,
-                    });
 
                     cmd.set_shader(shader_lib.get("depth_reduce_initial").unwrap());
 
-                    cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
                     cmd.set_image_view_and_sampler(
-                        depth_only_view,
+                        depth_output.shader_resource_view(0).unwrap(),
                         depth_output.sampler(),
-                        0,
+                        2,
                         1,
                         0,
                     );
-                    cmd.set_image(&hiz_images[0], 0, 2);
+                    cmd.set_image(&hiz_images[0], 2, 2);
 
                     cmd.dispatch((hiz_images[0].width(), hiz_images[0].height(), 1));
 
@@ -166,8 +134,8 @@ pub fn build_pass(
                             },
                         );
 
-                        cmd.set_image(&hiz_images[i - 1], 0, 1);
-                        cmd.set_image(&hiz_images[i], 0, 2);
+                        cmd.set_image(&hiz_images[i - 1], 2, 1);
+                        cmd.set_image(&hiz_images[i], 2, 2);
                         cmd.dispatch((hiz_images[i].width(), hiz_images[i].height(), 1));
                     }
                 },
@@ -199,9 +167,8 @@ pub fn build_pass(
 
                         cmd.set_shader(shader_lib.get("generate_cascades").unwrap());
 
-                        cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
-                        cmd.set_image(reduced_depth_image, 0, 1);
-                        cmd.set_buffer(cascade_render_buffer, 0..cascade_render_buffer.len(), 0, 2);
+                        cmd.set_image(reduced_depth_image, 2, 0);
+                        cmd.set_buffer(cascade_render_buffer, 0..cascade_render_buffer.len(), 2, 1);
 
                         //FIXME: Do this automatically; Implement graph external resources
                         cmd.apply_image_barrier(
@@ -226,11 +193,16 @@ pub fn build_pass(
     );
 
     shader_lib.insert("shadow")?;
+    
+    let layout = VertexInputLayout::builder()
+        .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
+        .build();
+
     graph.add_renderpass(
         Renderpass::<Args>::new("ShadowMapping", atlas_size)
             .read_buffer(&cascade_render_buffer, AccessType::VertexShaderReadOther)
             .draw_image(&shadow_atlas, AttachmentConfig::depth_only_default())
-            .cmd(move |cmd, graph_res, _, (world, res, shader_lib, assets)| {
+            .cmd(move |cmd, graph_res, _, (world, res, shader_lib, _assets)| {
                 let dir_light = res.directional_light;
 
                 if let Some(dir_light) = dir_light {
@@ -264,15 +236,10 @@ pub fn build_pass(
                         ..Default::default()
                     });
 
-                    cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
-
                     let cascade_render_buffer =
                         graph_res.get_buffer(&cascade_render_buffer).unwrap();
-                    cmd.set_buffer(cascade_render_buffer, 0..N_CASCADES, 0, 1);
+                    cmd.set_buffer(cascade_render_buffer, 0..N_CASCADES, 2, 0);
 
-                    let scenes = assets
-                        .read_assets::<Scene>()
-                        .expect("Scenes pool not found");
                     for cascade_ix in 0..N_CASCADES {
                         cmd.set_viewport(
                             (cascade_ix as u32 * shadow_map_size) as f32,
@@ -287,42 +254,129 @@ pub fn build_pass(
                             shadow_map_size,
                         );
 
-                        for (_, (transform, mesh_comp)) in
-                            &mut world.query::<(&Transform, &MeshRender)>()
-                        {
-                            let mut transform = transform.get_matrix();
-                            if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
-                                if let Some(scene) = scenes.get(handle) {
-                                    let mesh = &scene.meshes[*mesh_ix];
+                        for (instance_id, batch) in res.mesh_instancer.batches() { 
 
-                                    transform *= mesh.transform.get_matrix();
+                            cmd.push_constants(
+                                &PushConstants {
+                                    mat: MaterialInputs {
+                                        uv_set: cascade_ix as u32,
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                },
+                                0,
+                            );
+                            let submesh = batch.submesh();
 
-                                    cmd.push_constants(
-                                        &PushConstants {
-                                            transform,
-                                            cascade_ix: cascade_ix as u32,
-                                        },
-                                        0,
-                                    );
-
-                                    for submesh in &mesh.sub_meshes {
-                                        {
-                                            hikari_dev::profile_scope!(
-                                                "Set vertex and index buffers"
-                                            );
-                                            cmd.set_vertex_buffer(&submesh.position, 0);
-                                            cmd.set_index_buffer(&submesh.indices);
-                                        }
-
-                                        cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
-                                    }
-                                }
+                            {
+                                hikari_dev::profile_scope!(
+                                    "Set vertex and index buffers"
+                                );
+                                cmd.set_vertex_buffer(&submesh.position, 0);
+                                cmd.set_index_buffer(&submesh.indices);
                             }
+
+                            cmd.draw_indexed(0..submesh.indices.capacity(), 0, instance_id..instance_id + batch.count());
                         }
                     }
                 }
             }),
     );
 
+    //multipass_shadows(graph, cascade_render_buffer, shadow_atlas, shadow_map_size);
+
     Ok((shadow_atlas, cascade_render_buffer))
+}
+
+
+fn multipass_shadows(graph: &mut GraphBuilder<Args>, cascade_render_buffer: GpuHandle<GpuBuffer<CascadeRenderInfo>>, shadow_atlas: GpuHandle<SampledImage>, shadow_map_size: u32) {
+    let layout = VertexInputLayout::builder()
+        .buffer(&[ShaderDataType::Vec3f], StepMode::Vertex)
+        .build();
+
+    for cascade_ix in 0..N_CASCADES {
+        graph.add_renderpass(
+            Renderpass::<Args>::new(&format!("ShadowMappingCascade{}", cascade_ix), ImageSize::absolute_xy(shadow_map_size, shadow_map_size))
+                .read_buffer(&cascade_render_buffer, AccessType::VertexShaderReadOther)
+                .draw_image(&shadow_atlas, AttachmentConfig::depth_only_default())
+                .cmd(move |cmd, graph_res, _, (world, res, shader_lib, _assets)| {
+                    let dir_light = res.directional_light;
+
+                    if let Some(dir_light) = dir_light {
+                        cmd.set_shader(shader_lib.get("shadow").unwrap());
+
+                        let light = world.get_component::<&Light>(dir_light).unwrap();
+                        if !light.shadow.enabled {
+                            return;
+                        }
+
+                        let shadow_info = &light.shadow;
+
+                        cmd.set_vertex_input_layout(layout);
+
+                        cmd.set_depth_stencil_state(DepthStencilState {
+                            depth_test_enabled: true,
+                            depth_write_enabled: true,
+                            depth_compare_op: CompareOp::LessOrEqual,
+                            ..Default::default()
+                        });
+
+                        cmd.set_rasterizer_state(RasterizerState {
+                            cull_mode: if shadow_info.cull_front_face {
+                                CullMode::Front
+                            } else {
+                                CullMode::Back
+                            },
+                            depth_bias_enable: true,
+                            depth_bias_slope_factor: shadow_info.slope_scaled_bias,
+                            depth_clamp_enable: true,
+                            ..Default::default()
+                        });
+
+                        let cascade_render_buffer =
+                            graph_res.get_buffer(&cascade_render_buffer).unwrap();
+                        cmd.set_buffer(cascade_render_buffer, 0..N_CASCADES, 2, 0);
+
+
+                            cmd.set_viewport(
+                                (cascade_ix as u32 * shadow_map_size) as f32,
+                                0.0,
+                                shadow_map_size as f32,
+                                shadow_map_size as f32,
+                            );
+                            cmd.set_scissor(
+                                (cascade_ix as u32 * shadow_map_size) as i32,
+                                0,
+                                shadow_map_size,
+                                shadow_map_size,
+                            );
+
+                            for (instance_id, batch) in res.mesh_instancer.batches() { 
+
+                                cmd.push_constants(
+                                    &PushConstants {
+                                        mat: MaterialInputs {
+                                            uv_set: cascade_ix as u32,
+                                            ..Default::default()
+                                        },
+                                        ..Default::default()
+                                    },
+                                    0,
+                                );
+                                let submesh = batch.submesh();
+
+                                {
+                                    hikari_dev::profile_scope!(
+                                        "Set vertex and index buffers"
+                                    );
+                                    cmd.set_vertex_buffer(&submesh.position, 0);
+                                    cmd.set_index_buffer(&submesh.indices);
+                                }
+
+                                cmd.draw_indexed(0..submesh.indices.capacity(), 0, instance_id..instance_id + batch.count());
+                            }
+                        }
+                    }),
+                );
+    }
 }

@@ -13,11 +13,15 @@ hikari_math = {path = "../hikari_math"}
 hikari_render = {path = "../hikari_render"}
 hikari_3d = {path = "../hikari_3d"}
 hikari_asset = {path = "../hikari_asset"}
+
 winit = "0.27"
+serde = { version = "1", features = ["derive"], optional = true }
 
 log = "0.4"
 anyhow = "1"
 rand = "0.8"
+vec_map = "0.8"
 
 [features]
-editor = []
+serde = ["dep:serde"]
+editor = ["serde"]

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::Args;
+use crate::{Args, DebugView};
 use hikari_3d::*;
 use hikari_math::*;
 use hikari_render::*;
@@ -34,7 +34,7 @@ pub fn build_pass(
         Renderpass::<Args>::new("DepthPrepass", ImageSize::default_xy())
             .draw_image(&depth_output, AttachmentConfig::depth_stencil_default())
             .cmd(
-                move |cmd, _, record_info, (world, res, shader_lib, assets)| {
+                move |cmd, _, record_info, (_world, res, shader_lib, _assets)| {
                     cmd.set_viewport(
                         0.0,
                         0.0,
@@ -51,7 +51,7 @@ pub fn build_pass(
                     cmd.set_shader(shader_lib.get("depth_only").unwrap());
                     cmd.set_vertex_input_layout(layout);
 
-                    if res.settings.debug.wireframe {
+                    if res.settings.debug.view == DebugView::Wireframe {
                         cmd.set_rasterizer_state(RasterizerState {
                             polygon_mode: PolygonMode::Line,
                             line_width: 2.0,
@@ -62,50 +62,22 @@ pub fn build_pass(
                     cmd.set_depth_stencil_state(DepthStencilState {
                         depth_test_enabled: true,
                         depth_write_enabled: true,
-                        depth_compare_op: CompareOp::Less,
+                        depth_compare_op: CompareOp::LessOrEqual,
                         ..Default::default()
                     });
                     let camera = res.camera;
 
                     if camera.is_some() {
-                        cmd.set_buffer(&res.world_ubo, 0..1, 0, 0);
-
-                        let scenes = assets
-                            .read_assets::<Scene>()
-                            .expect("Scenes pool not found");
-                        for (_, (transform, mesh_comp)) in
-                            &mut world.query::<(&Transform, &MeshRender)>()
-                        {
-                            if let MeshSource::Scene(handle, mesh_ix) = &mesh_comp.source {
-                                if let Some(scene) = scenes.get(handle) {
-                                    let mesh = &scene.meshes[*mesh_ix];
-
-                                    let transform =
-                                        transform.get_matrix() * mesh.transform.get_matrix();
-
-                                    cmd.push_constants(&PushConstants { transform }, 0);
-
-                                    for submesh in &mesh.sub_meshes {
-                                        {
-                                            hikari_dev::profile_scope!(
-                                                "Set vertex and index buffers"
-                                            );
-                                            cmd.set_vertex_buffer(&submesh.position, 0);
-                                            cmd.set_index_buffer(&submesh.indices);
-                                        }
-
-                                        // println!(
-                                        //     "{:?} {:?} {:?} {:?}",
-                                        //     albedo.raw().image(),
-                                        //     roughness.raw().image(),
-                                        //     metallic.raw().image(),
-                                        //     normal.raw().image()
-                                        // );
-
-                                        cmd.draw_indexed(0..submesh.indices.capacity(), 0, 0..1);
-                                    }
-                                }
+                        let instancer = &res.mesh_instancer;
+                        for (instance_id, batch) in instancer.batches() {
+                            let submesh = batch.submesh();
+                            {
+                                hikari_dev::profile_scope!("Set vertex and index buffers");
+                                cmd.set_vertex_buffer(&submesh.position, 0);
+                                cmd.set_index_buffer(&submesh.indices);
                             }
+
+                            cmd.draw_indexed(0..submesh.indices.capacity(), 0, instance_id..instance_id+batch.count());
                         }
                     }
                 },
