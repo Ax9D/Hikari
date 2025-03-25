@@ -1,8 +1,8 @@
 use hecs::NoSuchEntity;
-use std::{any::TypeId, collections::HashMap, sync::Arc};
+use std::{any::{TypeId}, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
-use crate::{Component, Entity, EntityBuilder, EntityRef, World};
+use crate::{Component, Entity, EntityBuilder, EntityRef, World, EntityId};
 
 pub trait CloneComponent: Component + Clone {}
 
@@ -38,6 +38,7 @@ impl RegistryInner {
         Self {
             type_id_to_uuid: Default::default(),
             clone_fns: Default::default(),
+            #[cfg(feature = "serde")]
             serialize_fns: Default::default(),
         }
     }
@@ -93,7 +94,7 @@ impl Default for RegistryBuilder {
         let mut builder = Self {
             registry: RegistryInner::new(),
         };
-        builder.register_clone::<Uuid>();
+        builder.register_clone::<EntityId>();
         builder
     }
 }

@@ -4,7 +4,7 @@ mod plugin;
 mod time;
 mod window;
 
-use std::sync::Arc;
+use std::{sync::Arc};
 
 pub use ecs::*;
 pub use game::*;
@@ -13,6 +13,8 @@ pub use time::*;
 pub use hikari_systems::*;
 pub use plugin::*;
 use rayon::ThreadPoolBuilder;
+
+pub use winit;
 
 pub const FIRST: &'static str = "First";
 pub const UPDATE: &'static str = "Update";

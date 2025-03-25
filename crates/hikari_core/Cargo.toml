@@ -14,7 +14,9 @@ rayon = "1"
 serde = {version = "1", features = ["derive"], optional = true}
 erased-serde = {version = "0.3", optional = true}
 type-uuid = {version = "0.1", optional = true}
-uuid = {version = "1", optional = true}
+anyhow = {version = "1", optional = true}
+serde_yaml = {version = "0.9", optional = true}
+uuid = {version = "1"}
 
 hikari_systems = {path = "../hikari_systems"}
 hikari_dev = {path = "../hikari_dev"}
@@ -23,7 +25,7 @@ hikari_asset = {path = "../hikari_asset"}
 
 [features]
 default = []
-serde = ["hecs/row-serialize", "dep:serde", "erased-serde", "uuid", "type-uuid"]
+serde = ["hecs/row-serialize", "dep:serde", "erased-serde", "type-uuid", "anyhow", "serde_yaml"]
 
 [dev-dependencies]
 hikari_core = {path = ".", features = ["serde"]}

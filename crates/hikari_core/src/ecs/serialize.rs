@@ -9,7 +9,7 @@ use serde::{
 use type_uuid::TypeUuid;
 use uuid::Uuid;
 
-use crate::{Component, Entity, Registry, RegistryBuilder, RegistryInner, World};
+use crate::{Component, Entity, Registry, RegistryBuilder, RegistryInner, World, EntityId};
 
 pub trait SerializeComponent: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid {}
 impl<T: Component + Serialize + for<'de> Deserialize<'de> + TypeUuid> SerializeComponent for T {}
@@ -26,7 +26,7 @@ impl<'r, 'e> Serialize for ComponentsSerialize<'r, 'e> {
             if let Some(uuid) = self.0.type_id_to_uuid(type_id) {
                 map.serialize_entry(uuid, &ComponentSerialize(self.0, self.1, *uuid))?;
             } else {
-                if type_id != TypeId::of::<Uuid>() {
+                if type_id != TypeId::of::<EntityId>() {
                     log::warn!("Skipping serializing typeid: {:#?}", type_id);
                 }
             }
@@ -47,7 +47,7 @@ impl<'r, 'e> Serialize for ComponentSerialize<'r, 'e> {
     }
 }
 #[derive(Clone)]
-pub struct SerializeFns {
+pub(crate) struct SerializeFns {
     serialize_fn: fn(EntityRef<'_>, &mut dyn FnMut(&dyn erased_serde::Serialize)),
     deserialize_fn: fn(
         Entity,
@@ -89,13 +89,15 @@ impl RegistryInner {
             let mut deserializer = <dyn erased_serde::Deserializer>::erase(deserializer);
             (serialize_fns.deserialize_fn)(entity, world, &mut deserializer)
                 .map_err(serde::de::Error::custom)?;
-        } else {
-            log::warn!("Skipping deserializing uuid: {}", component_id);
-        }
-        Ok(())
+            return Ok(());
+        } 
+        Err(serde::de::Error::custom("Type not registered for deserialization"))
     }
 }
 impl Registry {
+    fn has_serde(&self, component_id: &Uuid) -> bool{
+        self.inner.serialize_fns.contains_key(component_id)
+    }
     fn serialize_component<S: Serializer>(
         &self,
         component_id: &Uuid,
@@ -135,6 +137,7 @@ impl RegistryBuilder {
         self.registry
             .type_id_to_uuid
             .insert(TypeId::of::<C>(), uuid);
+
         self.registry.serialize_fns.insert(uuid, serialize_fns);
     }
 }
@@ -164,7 +167,9 @@ impl<'w, 'r> Serialize for SerializableWorld<'w, 'r> {
         let mut map = serializer.serialize_map(Some(self.world.len()))?;
         for entity_ref in self.world.entities() {
             let entity = entity_ref.entity();
-            let serializable_entity = SerializableEntity(entity, self.world.uuid(entity));
+            let id = self.world.entity_id(entity).unwrap();
+
+            let serializable_entity = SerializableEntity(entity, &id);
             map.serialize_entry(
                 &serializable_entity,
                 &ComponentsSerialize(&self.registry, entity_ref),
@@ -175,8 +180,11 @@ impl<'w, 'r> Serialize for SerializableWorld<'w, 'r> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct SerializableEntity(Entity, uuid::Uuid);
+#[derive(Serialize)]
+struct SerializableEntity<'id>(Entity, &'id EntityId);
+
+#[derive(Deserialize)]
+struct DeserializableEntity(Entity, EntityId);
 
 impl World {
     pub fn deserialize<'de, D: Deserializer<'de>>(
@@ -184,6 +192,7 @@ impl World {
         registry: &Registry,
     ) -> Result<Self, D::Error> {
         let mut world = Self::new();
+
         WorldDeserializer {
             world: &mut world,
             registry,
@@ -232,8 +241,20 @@ impl<'w, 'r, 'de> Visitor<'de> for WorldVisitor<'w, 'r> {
 
         //     map.next_value_seed(ComponentsDeserializer(entity, self.world, self.registry))?;
         // }
-        while let Some(SerializableEntity(entity, uuid)) = map.next_key::<SerializableEntity>()? {
-            self.world.create_entity_at(entity, (uuid,));
+        // #[derive(Deserialize)]
+        // struct OldDeserializableEntity(Entity, Uuid);
+
+        // while let Some(OldDeserializableEntity(entity, uuid)) = map.next_key::<OldDeserializableEntity>()? {
+        //     let id = EntityId {
+        //         name: "untitled".into(),
+        //         uuid,
+        //     };
+        //     self.world.create_entity_at(entity, (id,));
+
+        //     map.next_value_seed(ComponentsDeserializer(entity, self.world, self.registry))?;
+        // }
+        while let Some(DeserializableEntity(entity, id)) = map.next_key::<DeserializableEntity>()? {
+            self.world.create_entity_at(entity, (id,));
 
             map.next_value_seed(ComponentsDeserializer(entity, self.world, self.registry))?;
         }
@@ -268,9 +289,14 @@ impl<'w, 'r, 'de> Visitor<'de> for ComponentsVisitor<'w, 'r> {
         A: MapAccess<'de>,
     {
         while let Some(uuid) = map.next_key::<uuid::Uuid>()? {
-            map.next_value_seed::<ComponentDeserializer>(ComponentDeserializer(
-                uuid, self.0, self.1, self.2,
-            ))?;
+            if self.2.has_serde(&uuid) {                
+                map.next_value_seed::<ComponentDeserializer>(ComponentDeserializer(
+                    uuid, self.0, self.1, self.2,
+                ))?;
+            } else {
+                map.next_value::<serde_yaml::Value>()?;
+                log::warn!("Skipping deserializing uuid: {}", uuid);
+            }
         }
 
         Ok(())

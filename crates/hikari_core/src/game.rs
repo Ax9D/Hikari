@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{sync::Arc, path::Path};
 
-use hikari_asset::{Asset, AssetManager, AssetManagerBuilder, Loader, Saver};
+use hikari_asset::{Asset, AssetManager, Loader, Saver, AssetManagerBuilder};
 use hikari_systems::*;
 
 use rayon::ThreadPoolBuilder;
@@ -12,12 +12,13 @@ use winit::{
 
 use crate::Plugin;
 
+pub type InitResult = anyhow::Result<()>;
 pub struct Game {
-    window: Window,
     event_loop: EventLoop<()>,
     state: StateBuilder,
-    init_schedule: ScheduleBuilder,
-    run_schedule: ScheduleBuilder,
+    init_schedule: ScheduleBuilder<InitResult>,
+    run_schedule: ScheduleBuilder<()>,
+    exit_schedule: ScheduleBuilder<()>,
     asset_manager_builder: AssetManagerBuilder,
     event_hooks:
         Vec<Box<dyn FnMut(&GlobalState, &mut Window, &Event<()>, &mut ControlFlow) + 'static>>,
@@ -27,12 +28,15 @@ impl Game {
         hikari_dev::profiling_init();
         let event_loop = EventLoop::new();
         let window = window_builder.build(&event_loop)?;
+        let mut state = StateBuilder::new();
+        state.add_state(window);
+
         Ok(Self {
-            window,
+            state,
             event_loop,
-            state: StateBuilder::new(),
             init_schedule: ScheduleBuilder::new(),
             run_schedule: ScheduleBuilder::new(),
+            exit_schedule: ScheduleBuilder::new(),
             asset_manager_builder: AssetManager::builder(),
             event_hooks: Vec::new(),
         })
@@ -58,12 +62,21 @@ impl Game {
 
         self
     }
-    pub fn add_task(&mut self, stage: &str, task: Task) -> &mut Self {
+    pub fn create_exit_stage(&mut self, name: &str) -> &mut Self {
+        self.exit_schedule.create_stage(name);
+
+        self
+    }
+    pub fn add_task(&mut self, stage: &str, task: Task<()>) -> &mut Self {
         self.run_schedule.add_task(stage, task);
         self
     }
-    pub fn add_init_task(&mut self, stage: &str, task: Task) -> &mut Self {
+    pub fn add_init_task(&mut self, stage: &str, task: Task<InitResult>) -> &mut Self {
         self.init_schedule.add_task(stage, task);
+        self
+    }
+    pub fn add_exit_task(&mut self, stage: &str, task: Task<()>) -> &mut Self {
+        self.exit_schedule.add_task(stage, task);
         self
     }
     pub fn add_platform_event_hook(
@@ -102,11 +115,14 @@ impl Game {
 
         self
     }
+    pub fn set_asset_dir(&mut self, path: impl AsRef<Path>) -> &mut Self {
+        self.asset_manager_builder.set_asset_dir(path);
 
-    pub fn window(&mut self) -> &mut Window {
-        &mut self.window
+        self
     }
-
+    pub fn window(&mut self) -> RefMut<Window> {
+        self.state.get_mut::<Window>()
+    }
     pub fn run(mut self) -> ! {
         let mut init = self
             .init_schedule
@@ -116,6 +132,9 @@ impl Game {
             .run_schedule
             .build()
             .expect("Failed to create update schedule");
+        let mut exit = self.exit_schedule
+        .build()
+        .expect("Failed to create exit schedule");
 
         let asset_manager = {
             let threadpool = Arc::new(ThreadPoolBuilder::new().num_threads(2).build().unwrap());
@@ -131,14 +150,18 @@ impl Game {
         let mut hooks = self.event_hooks;
 
         let event_loop = self.event_loop;
-        let mut window = self.window;
 
-        init.execute(&mut state);
+        for result in init.execute_iter(&mut state) {
+            result.expect("Failed to Initialize Game");
+        }
+
         event_loop.run(move |event, _, control_flow| {
-            for hook in &mut hooks {
-                (hook)(&state, &mut window, &event, control_flow);
+            {
+                let mut window = state.get_mut::<Window>().unwrap();
+                for hook in &mut hooks {
+                    (hook)(&state, &mut window, &event, control_flow);
+                }
             }
-
             match &event {
                 Event::RedrawRequested(_) => {
                     hikari_dev::profile_scope!("Gameloop");
@@ -146,9 +169,12 @@ impl Game {
                     hikari_dev::finish_frame!();
                 }
                 Event::MainEventsCleared => {
+                    let window = state.get_mut::<Window>().unwrap();
                     window.request_redraw();
                 }
-                Event::LoopDestroyed => {}
+                Event::LoopDestroyed => {
+                    exit.execute(&mut state);
+                }
                 _ => {}
             }
         })
