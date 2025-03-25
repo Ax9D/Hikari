@@ -2,6 +2,9 @@ mod gltf;
 mod processing;
 mod shader;
 
+#[cfg(feature = "serde")]
+mod serialize;
+
 pub mod camera;
 pub mod config;
 pub mod cubemap;
@@ -74,8 +77,11 @@ impl Plugin for Plugin3D {
         game.register_asset_loader::<Texture2D, TextureLoader>(TextureLoader {
             device: device.clone(),
         });
+        
+        #[cfg(feature = "serde")] {
         game.register_asset_loader::<Material, MaterialLoader>(MaterialLoader);
         game.register_asset_saver::<Material, MaterialLoader>(MaterialLoader);
+        }
 
         game.register_asset_loader::<Scene, GLTFLoader>(GLTFLoader {
             device: device.clone(),

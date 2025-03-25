@@ -5,6 +5,8 @@ use hikari_render::SampledImage;
 
 use crate::config::*;
 
+#[derive(type_uuid::TypeUuid)]
+#[uuid = "80ced31a-1eaf-424c-9e78-0bcd3742ba43"]
 pub struct TextureCube {
     image: SampledImage,
     config: TextureConfig,

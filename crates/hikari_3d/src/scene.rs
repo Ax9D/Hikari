@@ -1,9 +1,11 @@
-use std::{io::Read, sync::Arc};
+use std::sync::Arc;
 
 use hikari_asset::{Asset, LoadContext, Loader};
 
 use crate::{Camera, Mesh};
 
+#[derive(type_uuid::TypeUuid)]
+#[uuid = "90eff7a8-4a6b-444f-bc09-dbc441bda057"]
 pub struct Scene {
     pub meshes: Vec<Mesh>,
     pub camera: Camera,
@@ -13,10 +15,10 @@ pub struct GLTFLoader {
 }
 impl Loader for GLTFLoader {
     fn load(&self, context: &mut LoadContext) -> anyhow::Result<()> {
-        let mut data = vec![];
-        context.reader().read_to_end(&mut data)?;
+        // let mut data = vec![];
+        // context.reader().read_to_end(&mut data)?;
         let path = context.path().to_owned();
-        let scene = crate::gltf::load_scene(&self.device, &path, &data, context)?;
+        let scene = crate::gltf::load_scene(&self.device, &path, context)?;
 
         context.set_asset(scene);
 

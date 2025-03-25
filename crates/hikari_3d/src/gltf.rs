@@ -17,7 +17,7 @@ struct ImportData {
     buffers: Vec<gltf::buffer::Data>,
 }
 impl ImportData {
-    pub fn new(path: &Path, _data: &[u8]) -> Result<Self, gltf::Error> {
+    pub fn new(path: &Path) -> Result<Self, gltf::Error> {
         assert!(path.is_relative());
 
         let (document, buffers, _images) = gltf::import(path)?;
@@ -179,8 +179,7 @@ fn parse_texture_data(
                 )
             } else {
                 let path = gltf.parent_path().join(uri);
-
-                asset_manager.load(&path, Some(config), false)
+                asset_manager.load(path, Some(config), false)
             }
         }
     }
@@ -205,7 +204,7 @@ fn create_and_load_image_with_data(
     let mut new_texture_path = base_path.to_owned();
     new_texture_path.push(texture_name);
 
-    if new_texture_path.extension().is_none() {
+    if new_texture_path.extension().is_none() || load_context.is_reload() {
         new_texture_path.set_extension(ext);
     }
 
@@ -222,7 +221,7 @@ fn create_and_load_image_with_data(
     let texture =
         load_context
             .asset_manager()
-            .load::<Texture2D>(new_texture_path, Some(config), false)?;
+            .load::<Texture2D>(new_texture_path, Some(config), load_context.is_reload())?;
 
     Ok(texture)
 }
@@ -253,7 +252,7 @@ fn load_material(
     file_name.push_str(".hmat");
 
     let material_path = import_data.parent_path().join(file_name);
-    if !material_path.exists() {
+    if !material_path.exists() || load_context.is_reload() {
         let pbr = material.pbr_metallic_roughness();
 
         let uv_set = pbr
@@ -342,20 +341,20 @@ fn load_material(
         let handle = load_context
             .asset_manager()
             .create(&material_path, material, None)?;
-
-        load_context.asset_manager().save(&handle)?;
-
         // let material_text = serde_yaml::to_string(&material)?;
 
         // let mut file = load_context.io().write_file(&material_path, &Mode::create_and_write())?;
         // file.write_all(material_text.as_bytes())?;
 
         //println!("Creating material {ix} {:#?}", material_path);
-    }
 
-    load_context
-        .asset_manager()
-        .load::<crate::Material>(&material_path, None, false)
+        Ok(handle)
+    }
+    else {
+        load_context
+            .asset_manager()
+            .load::<crate::Material>(material_path, None, false)
+    }
 }
 
 fn load_mesh(
@@ -469,10 +468,9 @@ fn load_mesh(
 pub fn load_scene(
     device: &Arc<hikari_render::Device>,
     path: &Path,
-    data: &[u8],
     load_context: &mut LoadContext,
 ) -> Result<crate::Scene, anyhow::Error> {
-    let import_data = ImportData::new(path, data)
+    let import_data = ImportData::new(path)
         .map_err(|err| crate::Error::FailedToParse(path.into(), err.to_string()))?;
 
     //let textures = load_textures(&import_data, load_context)?;

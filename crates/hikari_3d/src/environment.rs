@@ -23,6 +23,9 @@ use crate::Texture2D;
 type GraphParams = (SampledImage, SampledImage, SampledImage, SampledImage);
 
 pub struct EnvironmentTextureConfig {}
+
+#[derive(type_uuid::TypeUuid)]
+#[uuid = "1928ab7d-2dfc-438e-ae23-bf1af8e9866e"]
 pub struct EnvironmentTexture {
     skybox: SampledImage,
     diffuse_irradiance: SampledImage,
@@ -96,7 +99,6 @@ pub struct Environment {
     pub use_proxy: bool,
     pub mip_level: u32,
 }
-
 impl Default for Environment {
     fn default() -> Self {
         Self {
@@ -209,7 +211,7 @@ impl HDRLoader {
             )| {
                 cmd.set_shader(&shader);
 
-                cmd.set_image(hdr_map, 0, 0);
+                cmd.set_image(hdr_map, 1, 0);
 
                 // let view_desc = ImageViewDesc {
                 //     view_type: vk::ImageViewType::CUBE,
@@ -219,7 +221,7 @@ impl HDRLoader {
 
                 //let image_view = diffuse_irr.raw().custom_image_view(view_desc);
 
-                cmd.set_image(env_map, 0, 1);
+                cmd.set_image(env_map, 1, 1);
 
                 let work_groups = n_workgroups(CUBEMAP_DIM, 16);
                 cmd.dispatch((work_groups, work_groups, 1));
@@ -281,7 +283,7 @@ impl HDRLoader {
             )| {
                 cmd.set_shader(&shader_diffuse);
 
-                cmd.set_image(env_map, 0, 0);
+                cmd.set_image(env_map, 1, 0);
 
                 let view_desc = ImageViewDesc {
                     view_type: vk::ImageViewType::CUBE,
@@ -289,9 +291,9 @@ impl HDRLoader {
                     mip_range: 0..1,
                     layer_range: 0..6,
                 };
-                let image_view = diffuse_irr.custom_image_view(view_desc);
+                let image_view = diffuse_irr.custom_image_view(&view_desc);
 
-                cmd.set_image_view_and_sampler(image_view, vk::Sampler::null(), 0, 1, 0);
+                cmd.set_image_view_and_sampler(image_view, vk::Sampler::null(), 1, 1, 0);
 
                 cmd.push_constants(
                     &PushConstants {
@@ -321,7 +323,7 @@ impl HDRLoader {
             )| {
                 cmd.set_shader(&shader_specular);
 
-                cmd.set_image(env_map, 0, 0);
+                cmd.set_image(env_map, 1, 0);
 
                 for i in 0..mip_count {
                     let view_desc = ImageViewDesc {
@@ -330,9 +332,9 @@ impl HDRLoader {
                         mip_range: i..i + 1,
                         layer_range: 0..6,
                     };
-                    let image_view = spec.custom_image_view(view_desc);
+                    let image_view = spec.custom_image_view(&view_desc);
 
-                    cmd.set_image_view_and_sampler(image_view, vk::Sampler::null(), 0, 1, 0);
+                    cmd.set_image_view_and_sampler(image_view, vk::Sampler::null(), 1, 1, 0);
 
                     let roughness = i as f32 / ((mip_count - 1) as f32);
                     cmd.push_constants(

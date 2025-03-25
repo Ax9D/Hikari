@@ -134,7 +134,7 @@ fn generate_brdf_lut(
     gfx: &mut Gfx,
     shader_lib: &mut ShaderLibrary,
 ) -> anyhow::Result<SampledImage> {
-    const LUT_SIZE: u32 = 512;
+    const LUT_SIZE: u32 = 256;
     const LOCAL_GROUP_SIZE: u32 = 16;
 
     let config = ImageConfig {
@@ -158,7 +158,7 @@ fn generate_brdf_lut(
         ComputePass::new("BRDFLUTGen").cmd(move |cmd, _, _, (img,)| {
             cmd.set_shader(&shader);
 
-            cmd.set_image(img, 0, 0);
+            cmd.set_image(img, 1, 0);
 
             let workgroups = n_workgroups(LUT_SIZE, LOCAL_GROUP_SIZE);
 

@@ -5,6 +5,9 @@ use std::sync::Arc;
 
 use hikari_asset::{Asset, LoadContext, Loader};
 use hikari_render::*;
+
+#[derive(type_uuid::TypeUuid)]
+#[uuid = "70ff2d10-3fc1-4851-9fb7-521d8cd49ad5"]
 pub struct Texture2D {
     image: SampledImage,
     config: TextureConfig,

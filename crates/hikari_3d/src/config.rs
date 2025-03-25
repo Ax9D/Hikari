@@ -145,6 +145,7 @@ impl TextureConfig {
             image_view_type: vk::ImageViewType::TYPE_2D,
             initial_layout: vk::ImageLayout::UNDEFINED,
             host_readable: false,
+            ..Default::default()
         })
     }
     pub fn into_image_config_cube(&self, width: u32, height: u32) -> anyhow::Result<ImageConfig> {
@@ -200,6 +201,7 @@ impl TextureConfig {
             image_view_type: vk::ImageViewType::CUBE,
             initial_layout: vk::ImageLayout::UNDEFINED,
             host_readable: false,
+            ..Default::default()
         })
     }
 }
