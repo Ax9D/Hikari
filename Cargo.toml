@@ -23,8 +23,9 @@ members = [
     "crates/hikari_utils",
     
     "hikari_editor",
-    "hikari_cli"
-]
+    "hikari_cli",
+    "hikari_runtime"
+, "crates/hikari_handle"]
 
 [profile.dev]
 opt-level = 3
@@ -46,11 +47,15 @@ hikari_imgui = {path = "crates/hikari_imgui", optional = true}
 default = []
 serde = ["hikari_core/serde", "hikari_math/serde", "hikari_3d/serde"]
 release_unsafe = ["hikari_systems/thread_unsafety"]
-profiling_enabled = ["hikari_dev/profiling_enabled"]
+profiling_tracy = ["hikari_dev/profiling_tracy"]
+profiling_optick = ["hikari_dev/profiling_optick"]
 aftermath = ["hikari_render/aftermath"]
 imgui = ["hikari_imgui"]
+imgui_serde = ["hikari_imgui/serde"]
 editor = ["hikari_pbr/editor"]
 
 [profile.dist]
 inherits = "release"
+lto = true
 strip = true
+panic = "abort"
