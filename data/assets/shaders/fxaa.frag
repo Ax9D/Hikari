@@ -2,7 +2,7 @@
 
 layout(location = 0) in vec2 texCoord;
 
-layout(binding = 0) uniform sampler2D  color;
+layout(set = 2, binding = 0) uniform sampler2D color;
 
 layout(push_constant) uniform Args {
 	vec2 resolution;

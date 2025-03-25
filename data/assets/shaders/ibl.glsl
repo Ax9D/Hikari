@@ -210,10 +210,13 @@ vec2 integrateBRDF(float NdotV, float roughness) {
 
     return vec2(A, B) / vec2(nSamples);
 }
+vec2 brdfLUTApprox(float NdotV, float perceptualRoughness) {
+    float alphaRoughness = perceptualRoughness * perceptualRoughness;
+    float bias = exp2(-7 * NdotV - 4 * alphaRoughness);
+    float scale = 1 - bias - alphaRoughness * max(bias, min(perceptualRoughness, 0.739 + 0.323 * NdotV) - 0.434);
 
-// Calculation of the lighting contribution from an optional Image Based Light source.
-// Precomputed Environment Maps are required uniform inputs and are computed as outlined in [1].
-// See our README.md on Environment Maps [3] for additional discussion.
+    return vec2(scale, bias);
+}
 vec3 IBL(const in PBRMaterialParameters material, const in Surface surface, in mat4 transform, in samplerCube diffuseIrradianceMap, in samplerCube specularPFMap, in sampler2D brdfLUT)
 {
     const vec3 v = surface.view;
@@ -238,8 +241,8 @@ vec3 IBL(const in PBRMaterialParameters material, const in Surface surface, in m
     const vec3 specularPrefiltered = textureLod(specularPFMap, transformedR, lod).rgb;
 
     const vec2 brdfUV = vec2(NdotV, material.perceptualRoughness);
-    const vec3 brdf = texture(brdfLUT, brdfUV).rgb;
-
+    const vec2 brdf = texture(brdfLUT, brdfUV).rg;
+    //const vec2 brdf = brdfLUTApprox(NdotV, material.perceptualRoughness);
     const vec3 specular = specularPrefiltered * (kS * brdf.x + brdf.y);
 
     return diffuse + specular;

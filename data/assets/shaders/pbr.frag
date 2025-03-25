@@ -10,7 +10,6 @@
 #include <tonemap.glsl>
 #include <utils.glsl>
 #include <forward_pass_global_set.glsl>
-
 layout(location = 0) in vec3 worldPosition;
 layout(location = 1) in vec3 normalFs;
 layout(location = 2) in vec2 tc0Fs;
@@ -19,17 +18,10 @@ layout(location = 4) in vec3 viewPosition;
 
 layout(location = 0) out vec4 outColor;
 
-
-layout(set = 1, binding = 0) uniform sampler2D albedoMap;
-layout(set = 1, binding = 1) uniform sampler2D roughnessMap;
-layout(set = 1, binding = 2) uniform sampler2D metallicMap;
-layout(set = 1, binding = 3) uniform sampler2D emissiveMap;
-layout(set = 1, binding = 4) uniform sampler2D normalMap;
-
-layout(push_constant) uniform Constants {
-    mat4 transform;
-    MaterialInputs material;
-} pc;
+layout(std140, set = 2, binding = 0) readonly buffer cascadeRenderInfoSSBO {
+    CascadeRenderInfo cascades[];
+};
+layout(set = 2, binding = 1) uniform sampler2D shadowMap;
 
 #define ALBEDO_OFFSET 0
 #define ROUGHNESS_OFFSET 1
@@ -39,15 +31,16 @@ layout(push_constant) uniform Constants {
 Surface getSurface() {
     vec2 uv;
 
-    if(pc.material.uvSet == 0) {
+    if(pc.mat.uvSet == 0) {
         uv = tc0Fs;
-    } else if(pc.material.uvSet == 1) {
+    } else if(pc.mat.uvSet == 1) {
         uv = tc1Fs;
     }
+    MaterialInputs mat = pc.mat;
 
     vec3 normal;
-    if(((pc.material.texturesMask >> NORMAL_OFFSET) & 1) == 1) {
-        normal = getNormalScreen(normalFs, worldPosition, uv, normalMap);
+    if(mat.normalIx > 0) {
+        normal = getNormalScreen(normalFs, worldPosition, uv, GLOBAL_TEXTURES(mat.normalIx));
     } else
      {
         normal = normalize(normalFs);
@@ -63,31 +56,30 @@ LightInfo getDirectionalLightInfo() {
 }
 
 PBRMaterial getMaterial(const in Surface surface) {
-    MaterialInputs material = pc.material;
+    MaterialInputs material = pc.mat;
     vec2 uv = surface.uv;
 
     vec4 albedo = material.albedo;
-    uint texturesMask = pc.material.texturesMask;
 
-    if(((texturesMask >> ALBEDO_OFFSET) & 1) == 1) {
-        albedo *= texture(albedoMap, uv);
+    if(material.albedoIx > 0) {
+        albedo *= texture(GLOBAL_TEXTURES(material.albedoIx), uv);
     }
-
+    
     float perceptualRoughness = clamp(material.roughness, 0.0, 1.0);
 
-    if(((texturesMask >> ROUGHNESS_OFFSET) & 1) == 1) {
-        perceptualRoughness *= texture(roughnessMap, uv).g;
+    if(material.roughnessIx > 0) {
+        perceptualRoughness *= texture(GLOBAL_TEXTURES(material.roughnessIx), uv).g;
     }
 
     float metallic = clamp(material.metallic, 0.0, 1.0);
-    if(((texturesMask >> METALLIC_OFFSET) & 1) == 1) {
-        metallic *= texture(metallicMap, uv).b;
+    if(material.metallicIx > 0) {
+        metallic *= texture(GLOBAL_TEXTURES(material.metallicIx), uv).b;
     }
 
     vec3 emissive = material.emissive;
 
-    if(((texturesMask >> EMISSIVE_OFFSET) & 1) == 1) {
-        emissive *= texture(emissiveMap, uv).rgb;
+    if(material.emissiveIx > 0) {
+        emissive *= texture(GLOBAL_TEXTURES(material.emissiveIx), uv).rgb;
     }
 
     return PBRMaterial(
@@ -141,24 +133,41 @@ void main() {
     Surface surface = getSurface();
     PBRMaterial material = getMaterial(surface);
 
-    PBRMaterialParameters materialParams = computeMaterialParameters(material);
+    vec3 color;
 
+#ifdef LIGHT_MODE_LIT
+
+    PBRMaterialParameters materialParams = computeMaterialParameters(material);
     LightInfo dirLightInfo = getDirectionalLightInfo();
 
-    vec3 direct = BRDF(surface, dirLightInfo, materialParams, diffuseIrradianceMap);
+    vec3 direct = BRDF(surface, dirLightInfo, materialParams, GLOBAL_TEXTURES_CUBE(world.envMapIrradianceIx));
 
     uint cascadeIndex;
     float shadow = dirLightInfo.castShadows == 1 ? getDirectionalShadow(surface, dirLightInfo, cascadeIndex) : 1.0;
 
-    vec3 color = direct * shadow;
+    color = direct * shadow;
+    
+    vec3 indirect = IBL(
+                    materialParams, 
+                    surface, 
+                    world.environmentTransform, 
+                    GLOBAL_TEXTURES_CUBE(world.envMapIrradianceIx), 
+                    GLOBAL_TEXTURES_CUBE(world.envMapPrefilteredIx), 
+                    GLOBAL_TEXTURES(world.BRDFLutIx));
 
-    color+= world.environmentIntensity * IBL(materialParams, surface, world.environmentTransform, diffuseIrradianceMap, specularPFMap, brdfLut);
+    color+= world.environmentIntensity * indirect;
     color+= material.emissive;
-
+    
     if(world.showCascades == 1) {
         color = length(color) * shadowCascadeDebug(cascadeIndex);
     }
     color*= world.exposure;
+
+#endif
+
+#ifdef LIGHT_MODE_UNLIT
+    color = material.albedo.rgb;
+#endif
     //color = tonemapUnreal(color * world.exposure);
     //color = color * (1.0f / tonemapACES(vec3(11.2f)));
     color = tonemapFilmic(color);

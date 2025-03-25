@@ -1,20 +1,17 @@
 #version 450
 #extension GL_EXT_control_flow_attributes: enable
 #include <world.glsl>
+#include <forward_pass_global_set.glsl>
 
 #define N_CASCADES 4
 
 layout(local_size_x = N_CASCADES, local_size_y = 1, local_size_z = 1) in;
 
-layout(set = 0, binding = 0) uniform WorldUBO {
-    World world;
+layout(set = 2, binding = 0, rg32f) uniform readonly image2D reducedDepthImage;
+layout(std140, set = 2, binding = 1) writeonly buffer cascadeRenderInfoSSBO {
+    CascadeRenderInfo cascades[];
 };
 
-layout(set = 0, binding = 1, rg32f) uniform readonly image2D reducedDepthImage;
-
-layout(set = 0, binding = 2, std140) writeonly buffer cascadeData {
-    CascadeRenderInfo[] cascadeRenderInfo;
-};
 
 mat4 orthographic_rh(
     float left,
@@ -160,7 +157,7 @@ void main() {
     float range = maxZ - minZ;
     float ratio = maxZ / minZ;
 
-    float splits[N_CASCADES] = {0.0, 0.0, 0.0, 0.0};
+    float splits[N_CASCADES];
 
     for(uint i = 0; i < N_CASCADES; i++) {
         float p = (i + 1) / float(N_CASCADES);
@@ -238,9 +235,9 @@ void main() {
     mat4 lightOrtho = orthographic_lh(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, near, far);
     mat4 lightView = lookAt_lh(frustumCenter - lightDir * maxExtents.z, frustumCenter, upDir);
 
-    cascadeRenderInfo[cascadeIndex].split = (nearClip + currentSplitDistance * clipRange);
-    cascadeRenderInfo[cascadeIndex].view = lightView;
-    cascadeRenderInfo[cascadeIndex].viewProj = (lightOrtho * lightView);
-    cascadeRenderInfo[cascadeIndex].near = near;
-    cascadeRenderInfo[cascadeIndex].far = far;
+    cascades[cascadeIndex].split = (nearClip + currentSplitDistance * clipRange);
+    cascades[cascadeIndex].view = lightView;
+    cascades[cascadeIndex].viewProj = (lightOrtho * lightView);
+    cascades[cascadeIndex].near = near;
+    cascades[cascadeIndex].far = far;
 }

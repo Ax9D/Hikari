@@ -7,12 +7,11 @@ struct MaterialInputs {
     float roughness;
     float metallic;
     uint uvSet;
-    uint texturesMask;
-    //uint hasAlbedoTex;
-    //uint hasRoughnessTex;
-    //uint hasMetallicTex;
-    //uint hasEmissiveTex;
-    //uint hasNormalTex;
+    int albedoIx;
+    int emissiveIx;
+    int roughnessIx;
+    int metallicIx;
+    int normalIx;
 };
 
 struct PBRMaterial {

@@ -1,17 +1,20 @@
 #ifndef FORWARD_PASS_GLOBAL_SET
 #define FORWARD_PASS_GLOBAL_SET
+
 #include <world.glsl>
-layout(std140, set = 0, binding = 0) uniform WorldUBO {
+#include <material.glsl>
+#include <global_set.glsl>
+
+layout(std140, set = 1, binding = 0) uniform WorldUBO {
     World world;
 };
-layout(set = 0, binding = 1) uniform sampler2D shadowMap;
-
-layout(std140, set = 0, binding = 2) readonly buffer cascadeRenderInfoSSBO {
-    CascadeRenderInfo cascades[];
+layout(std140, set = 1, binding = 1) readonly buffer InstanceSSBO {
+    PerInstanceData perInstanceData[];
 };
 
-layout(set = 0, binding = 3) uniform samplerCube diffuseIrradianceMap;
-layout(set = 0, binding = 4) uniform samplerCube specularPFMap;
-layout(set = 2, binding = 0) uniform sampler2D brdfLut;
+layout(push_constant) uniform Constants {
+    mat4 transform;
+    MaterialInputs mat;
+} pc;
 
 #endif

@@ -1,14 +1,15 @@
 #version 450 
 #extension GL_EXT_control_flow_attributes: enable
 #include <world.glsl>
+#include <forward_pass_global_set.glsl>
 
 #define DIM 16
 #define NUM_THREADS DIM * DIM
 
 layout(local_size_x = DIM, local_size_y = DIM, local_size_z = 1) in;
 
-layout(set = 0, binding = 1, rg32f) uniform readonly image2D srcImage;
-layout(set = 0, binding = 2, rg32f) uniform writeonly image2D dstImage;
+layout(set = 2, binding = 1, rg32f) uniform readonly image2D srcImage;
+layout(set = 2, binding = 2, rg32f) uniform writeonly image2D dstImage;
 
 shared vec2 samples[NUM_THREADS];
 

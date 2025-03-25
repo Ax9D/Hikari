@@ -14,8 +14,17 @@ struct World {
     vec2 viewportSize;
     float exposure;
     float environmentIntensity;
+    uint envMapIx;
+    uint envMapIrradianceIx;
+    uint envMapPrefilteredIx;
+    uint BRDFLutIx;
     DirectionalLight dirLight;
     uint showCascades;
+};
+
+
+struct PerInstanceData {
+    mat4 transform;
 };
 
 #endif

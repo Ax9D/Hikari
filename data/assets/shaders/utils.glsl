@@ -107,5 +107,4 @@ vec2 cubeToEquiangular(vec3 n) {
     uv.y = 1.0 - uv.y;
     return uv;
 }
-
 #endif
