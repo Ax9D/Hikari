@@ -82,7 +82,7 @@ impl<T: Asset> Handle<T> {
 impl<T> Drop for Handle<T> {
     fn drop(&mut self) {
         if !self.raw.is_weak() {
-            log::debug!("Dropping handle {}[{}] S: {} W: {} Internal: {}", std::any::type_name::<T>(), self.raw.index(), self.raw.strong_count() - 1, self.raw.weak_count(), self.raw.is_internal());
+            // log::debug!("Dropping handle {}[{}] S: {} W: {} Internal: {}", std::any::type_name::<T>(), self.raw.index(), self.raw.strong_count() - 1, self.raw.weak_count(), self.raw.is_internal());
         }
         // self.ref_send
         //     .send(RefOp::Decrement(self.index))
