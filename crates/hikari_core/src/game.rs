@@ -46,10 +46,10 @@ impl Game {
 
         self
     }
-    pub fn get<S: State>(&self) -> Ref<S> {
+    pub fn get<S: State>(&self) -> SysRef<S> {
         self.state.get()
     }
-    pub fn get_mut<S: State>(&self) -> RefMut<S> {
+    pub fn get_mut<S: State>(&self) -> SysRefMut<S> {
         self.state.get_mut()
     }
     pub fn create_init_stage(&mut self, name: &str) -> &mut Self {
@@ -120,7 +120,7 @@ impl Game {
 
         self
     }
-    pub fn window(&mut self) -> RefMut<Window> {
+    pub fn window(&mut self) -> SysRefMut<Window> {
         self.state.get_mut::<Window>()
     }
     pub fn run(mut self) -> ! {

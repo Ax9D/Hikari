@@ -1,5 +1,5 @@
 use hecs::NoSuchEntity;
-use std::{any::{TypeId}, collections::HashMap, sync::Arc};
+use std::{any::TypeId, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 use crate::{Component, Entity, EntityBuilder, EntityRef, World, EntityId};

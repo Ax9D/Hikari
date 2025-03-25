@@ -17,5 +17,5 @@ pub use function::IntoFunction;
 
 mod borrow;
 
-pub use borrow::Ref;
-pub use borrow::RefMut;
+pub use borrow::SysRef;
+pub use borrow::SysRefMut;

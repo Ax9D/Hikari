@@ -14,7 +14,7 @@ use hikari_asset::Asset;
 use hikari_math::Transform;
 use uuid::Uuid;
 
-#[cfg_attr(feature = "serde", derive(type_uuid::TypeUuid))]
+#[derive(type_uuid::TypeUuid)]
 #[uuid = "c2103fb7-13fe-4f18-84a5-f6075ce7206a"]
 pub struct World {
     inner: hecs::World,

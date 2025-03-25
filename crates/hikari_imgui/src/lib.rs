@@ -1,16 +1,16 @@
 mod docking;
-mod drag_drop;
+mod drag_and_drop;
 pub mod gizmo;
 mod id;
-mod internal;
+mod internal_;
 mod storage;
 mod ui_func;
 mod xyz_drag;
 
 pub use docking::*;
-pub use drag_drop::*;
+pub use drag_and_drop::*;
 pub use id::*;
-pub use internal::*;
+pub use internal_::*;
 pub use storage::*;
 pub use ui_func::*;
 pub use xyz_drag::*;

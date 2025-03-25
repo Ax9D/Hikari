@@ -875,7 +875,7 @@ fn memory_leak() -> Result<(), Box<dyn std::error::Error>> {
     #[derive(Debug, type_uuid::TypeUuid)]
     #[uuid = "5692c7f0-faa2-44ac-b1fd-431081e2372f"]
     struct TxtFile {
-        contents: String,
+        _contents: String,
     }
 
     impl Asset for TxtFile {
@@ -892,7 +892,7 @@ fn memory_leak() -> Result<(), Box<dyn std::error::Error>> {
             let mut contents = String::new();
             ctx.reader().read_to_string(&mut contents)?;
 
-            ctx.set_asset(TxtFile { contents });
+            ctx.set_asset(TxtFile { _contents: contents });
             Ok(())
         }
     }

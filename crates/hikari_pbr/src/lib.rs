@@ -17,7 +17,6 @@ mod instancing;
 
 use hikari_render::Gfx;
 use light::*;
-use resources::RenderResources;
 pub use resources::*;
 #[cfg(not(feature = "editor"))]
 use winit::event::{Event, WindowEvent};

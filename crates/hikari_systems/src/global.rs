@@ -7,7 +7,7 @@ use crate::{
     State,
 };
 
-use crate::borrow::{Ref, RefMut, StateCell};
+use crate::borrow::{SysRef, SysRefMut, StateCell};
 
 pub struct StateBuilder {
     state_list: FxHashMap<TypeId, StateCell>,
@@ -37,7 +37,7 @@ impl StateBuilder {
         self.state_add_order.push(TypeId::of::<S>());
         self
     }
-    pub fn get<S: State>(&self) -> Ref<S> {
+    pub fn get<S: State>(&self) -> SysRef<S> {
         let state = self.state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast::<S>());
@@ -47,7 +47,7 @@ impl StateBuilder {
             None => panic!("Failed to get state: {}", type_name::<S>())
         }       
     }
-    pub fn get_mut<S: State>(&self) -> RefMut<S> {
+    pub fn get_mut<S: State>(&self) -> SysRefMut<S> {
         let state = self.state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast_mut::<S>());
@@ -79,14 +79,14 @@ pub struct UnsafeGlobalState {
 }
 
 impl UnsafeGlobalState {
-    pub fn get<S: State>(self: Pin<&Self>) -> Option<Ref<S>> {
+    pub fn get<S: State>(self: Pin<&Self>) -> Option<SysRef<S>> {
         hikari_dev::profile_function!();
         self.get_ref()
             .state_list
             .get(&TypeId::of::<S>())
             .map(|cell| cell.borrow_cast())
     }
-    pub fn get_mut<S: State>(self: Pin<&Self>) -> Option<RefMut<S>> {
+    pub fn get_mut<S: State>(self: Pin<&Self>) -> Option<SysRefMut<S>> {
         hikari_dev::profile_function!();
         self.get_ref()
             .state_list
@@ -134,11 +134,11 @@ impl GlobalState {
         self.inner.as_mut()
     }
     #[inline]
-    pub fn get<S: State>(&self) -> Option<Ref<S>> {
+    pub fn get<S: State>(&self) -> Option<SysRef<S>> {
         self.raw().get()
     }
     #[inline]
-    pub fn get_mut<S: State>(&self) -> Option<RefMut<S>> {
+    pub fn get_mut<S: State>(&self) -> Option<SysRefMut<S>> {
         UnsafeGlobalState::get_mut(self.raw())
     }
 

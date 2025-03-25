@@ -96,11 +96,11 @@ impl FrameState {
 
     #[inline]
     pub fn current_frame(&self) -> &FrameData {
-        &self.frames[(self.frame_number % 2)]
+        &self.frames[self.frame_number % 2]
     }
     #[inline]
     pub fn last_frame(&self) -> &FrameData {
-        &self.frames[(self.frame_number.wrapping_sub(1) % 2)]
+        &self.frames[self.frame_number.wrapping_sub(1) % 2]
     }
     #[inline]
     pub fn current_frame_number(&self) -> usize {

@@ -6,7 +6,7 @@ use std::{any, any::Any, collections::HashMap};
 use crate::ImguiInternalExt;
 use crate::StorageExt;
 
-pub struct DragDropHandle(imgui::Id);
+pub struct DragDropHandle;
 
 #[derive(Default)]
 struct DragDropStorage {

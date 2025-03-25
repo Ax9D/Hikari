@@ -5,7 +5,7 @@ use crate::Asset;
 use hikari_handle::RefMessage;
 use super::typed::Handle;
 
-pub(crate) struct HandleAllocator {
+pub struct HandleAllocator {
     handle_count: AtomicUsize,
     free_list_recv: flume::Receiver<usize>,
 

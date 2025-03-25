@@ -1,6 +1,6 @@
 use serde::{
     de::{DeserializeSeed, Visitor},
-    ser::{SerializeSeq},
+    ser::SerializeSeq,
     Deserializer, Serialize,
 };
 
@@ -117,37 +117,5 @@ impl<'a, 'de> Visitor<'de> for AssetDBVisitor<'a> {
         db.build_query_accelerators();
 
         Ok(db)
-    }
-}
-struct RecordsListDeserializer<'a> {
-    any_serde: &'a AnySerde,
-}
-impl<'a, 'de> DeserializeSeed<'de> for RecordsListDeserializer<'a> {
-    type Value = Vec<Record>;
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de> {
-        deserializer.deserialize_seq(self)
-    }
-}
-impl<'a, 'de> Visitor<'de> for RecordsListDeserializer<'a> {
-    type Value = Vec<Record>;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("A Record List")
-    }
-    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-        where
-            A: serde::de::SeqAccess<'de>, {
-        let mut records = Vec::new();
-
-        while let Some(record) =
-            seq.next_element_seed::<RecordDeserializer>(RecordDeserializer { any_serde: &self.any_serde })?
-        {
-            records.push(record);
-        }
-
-        Ok(records)
     }
 }

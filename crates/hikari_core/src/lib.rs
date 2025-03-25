@@ -4,7 +4,7 @@ mod plugin;
 mod time;
 mod window;
 
-use std::{sync::Arc};
+use std::sync::Arc;
 
 pub use ecs::*;
 pub use game::*;

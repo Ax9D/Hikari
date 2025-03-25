@@ -23,13 +23,13 @@ impl StateCell {
             borrow: AtomicUsize::new(0),
         }
     }
-    pub fn borrow_cast<S: State>(&self) -> Ref<S> {
+    pub fn borrow_cast<S: State>(&self) -> SysRef<S> {
         match BorrowRef::try_new(&self.borrow) {
             Ok(borrow) => {
                 let data_ref = unsafe { &*self.data.get() };
                 let typed_ref = unsafe { data_ref.downcast_ref::<S>().unwrap_unchecked() };
 
-                Ref {
+                SysRef {
                     data: typed_ref,
                     borrow,
                 }
@@ -37,13 +37,13 @@ impl StateCell {
             Err(s) => panic!("{}", s),
         }
     }
-    pub fn borrow_cast_mut<S: State>(&self) -> RefMut<S> {
+    pub fn borrow_cast_mut<S: State>(&self) -> SysRefMut<S> {
         match BorrowRefMut::try_new(&self.borrow) {
             Ok(borrow) => {
                 let data_ref = unsafe { &mut *self.data.get() };
                 let typed_ref = unsafe { data_ref.downcast_mut::<S>().unwrap_unchecked() };
 
-                RefMut {
+                SysRefMut {
                     data: typed_ref,
                     borrow,
                 }
@@ -187,12 +187,12 @@ impl<'b> BorrowRefMut<'b> {
     }
 }
 #[allow(dead_code)]
-pub struct Ref<'a, S: 'a> {
+pub struct SysRef<'a, S: 'a> {
     data: &'a S,
     borrow: BorrowRef<'a>,
 }
 
-impl<T> Deref for Ref<'_, T> {
+impl<T> Deref for SysRef<'_, T> {
     type Target = T;
 
     #[inline]
@@ -201,26 +201,26 @@ impl<T> Deref for Ref<'_, T> {
     }
 }
 
-impl<T> AsRef<T> for Ref<'_, T> {
+impl<T> AsRef<T> for SysRef<'_, T> {
     fn as_ref(&self) -> &T {
         &*self
     }
 }
 use std::borrow::Borrow;
-impl<T> Borrow<T> for Ref<'_, T> {
+impl<T> Borrow<T> for SysRef<'_, T> {
     fn borrow(&self) -> &T {
         &*self
     }
 }
 
-impl<'a, S: fmt::Debug> fmt::Debug for Ref<'a, S> {
+impl<'a, S: fmt::Debug> fmt::Debug for SysRef<'a, S> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.data.fmt(f)
     }
 }
 
-impl<T: fmt::Display> fmt::Display for Ref<'_, T> {
+impl<T: fmt::Display> fmt::Display for SysRef<'_, T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.data.fmt(f)
@@ -228,12 +228,12 @@ impl<T: fmt::Display> fmt::Display for Ref<'_, T> {
 }
 
 #[allow(dead_code)]
-pub struct RefMut<'a, S: 'a> {
+pub struct SysRefMut<'a, S: 'a> {
     data: &'a mut S,
     borrow: BorrowRefMut<'a>,
 }
 
-impl<T> Deref for RefMut<'_, T> {
+impl<T> Deref for SysRefMut<'_, T> {
     type Target = T;
 
     #[inline]
@@ -242,43 +242,43 @@ impl<T> Deref for RefMut<'_, T> {
     }
 }
 
-impl<T> DerefMut for RefMut<'_, T> {
+impl<T> DerefMut for SysRefMut<'_, T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
         self.data
     }
 }
 
-impl<T> AsRef<T> for RefMut<'_, T> {
+impl<T> AsRef<T> for SysRefMut<'_, T> {
     fn as_ref(&self) -> &T {
         &*self
     }
 }
-impl<T> AsMut<T> for RefMut<'_, T> {
+impl<T> AsMut<T> for SysRefMut<'_, T> {
     fn as_mut(&mut self) -> &mut T {
         &mut *self
     }
 }
-impl<T> Borrow<T> for RefMut<'_, T> {
+impl<T> Borrow<T> for SysRefMut<'_, T> {
     fn borrow(&self) -> &T {
         &*self
     }
 }
 use std::borrow::BorrowMut;
-impl<T> BorrowMut<T> for RefMut<'_, T> {
+impl<T> BorrowMut<T> for SysRefMut<'_, T> {
     fn borrow_mut(&mut self) -> &mut T {
         &mut *self
     }
 }
 
-impl<'a, S: fmt::Debug> fmt::Debug for RefMut<'a, S> {
+impl<'a, S: fmt::Debug> fmt::Debug for SysRefMut<'a, S> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.data.fmt(f)
     }
 }
 
-impl<T: fmt::Display> fmt::Display for RefMut<'_, T> {
+impl<T: fmt::Display> fmt::Display for SysRefMut<'_, T> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.data.fmt(f)

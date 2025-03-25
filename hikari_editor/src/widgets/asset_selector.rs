@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use hikari::asset::{Asset, AssetManager, Handle};
 use hikari::imgui::*;
 
+#[allow(unused)]
 struct FancyPopupToken<'a>(&'a Ui);
 impl<'a> Drop for FancyPopupToken<'a> {
     fn drop(&mut self) {
