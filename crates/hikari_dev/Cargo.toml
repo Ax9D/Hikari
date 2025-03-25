@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 tracy-client = {version = "0.14", optional = true}
+optick = {version = "1.3", optional = true}
 [features]
-default = []
-profiling_enabled = ["tracy-client/ondemand"]
+profiling_optick = ["optick"]
+profiling_tracy = ["tracy-client/ondemand"]
