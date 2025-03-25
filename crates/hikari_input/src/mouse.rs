@@ -1,7 +1,7 @@
 use hikari_math::{vec2, Vec2};
-use winit::{dpi::PhysicalPosition, event::WindowEvent};
-pub type MouseButtonState = winit::event::ElementState;
-pub type MouseButton = winit::event::MouseButton;
+use hikari_core::winit::{dpi::PhysicalPosition, event::WindowEvent};
+pub type MouseButtonState = hikari_core::winit::event::ElementState;
+pub type MouseButton = hikari_core::winit::event::MouseButton;
 
 pub struct MouseState {
     position: PhysicalPosition<f64>,
@@ -33,11 +33,11 @@ impl MouseState {
                     .or_insert(MouseButtonState::Released) = *state;
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
-                winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                hikari_core::winit::event::MouseScrollDelta::LineDelta(x, y) => {
                     self.scroll_delta.x = *x;
                     self.scroll_delta.y = *y;
                 }
-                winit::event::MouseScrollDelta::PixelDelta(_) => todo!(),
+                hikari_core::winit::event::MouseScrollDelta::PixelDelta(_) => todo!(),
             },
             _ => {}
         }

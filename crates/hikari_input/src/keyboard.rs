@@ -1,7 +1,7 @@
-use winit::event::WindowEvent;
+use hikari_core::winit::event::WindowEvent;
 
-pub type KeyCode = winit::event::VirtualKeyCode;
-pub type KeyState = winit::event::ElementState;
+pub type KeyCode = hikari_core::winit::event::VirtualKeyCode;
+pub type KeyState = hikari_core::winit::event::ElementState;
 
 pub struct KeyboardState {
     last: Vec<KeyState>,
@@ -59,7 +59,7 @@ impl KeyboardState {
 
 #[test]
 pub fn was_just_pressed() {
-    use winit::event::*;
+    use hikari_core::winit::event::*;
     #[allow(deprecated)]
     fn dummy_event(code: KeyCode, state: KeyState) -> WindowEvent<'static> {
         WindowEvent::KeyboardInput {

@@ -4,7 +4,7 @@ mod mouse;
 use hikari_systems::Task;
 pub use keyboard::*;
 pub use mouse::*;
-use winit::event::WindowEvent;
+use hikari_core::winit::event::WindowEvent;
 
 pub struct Input {
     keyboard_state: KeyboardState,
@@ -48,7 +48,7 @@ impl hikari_core::Plugin for InputPlugin {
             }),
         );
         game.add_platform_event_hook(|state, _window, event, _control| match event {
-            winit::event::Event::WindowEvent { event, .. } => {
+            hikari_core::winit::event::Event::WindowEvent { event, .. } => {
                 state.get_mut::<Input>().unwrap().update(event);
             }
             _ => {}
