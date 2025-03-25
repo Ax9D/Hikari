@@ -267,6 +267,7 @@ impl GraphExecutor {
         cmd.begin()?;
 
         for (ix, pass) in passes.iter_mut().enumerate() {
+            //log::debug!("{}", pass.name());
             match pass {
                 AnyPass::Render(pass) => {
                     hikari_dev::profile_scope!(pass.name());

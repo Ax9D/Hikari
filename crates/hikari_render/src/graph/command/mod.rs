@@ -7,7 +7,7 @@ use vk_sync_fork::{AccessType, ImageBarrier};
 use crate::{
     barrier,
     buffer::Buffer,
-    descriptor::{DescriptorPool, DescriptorSetState, MAX_DESCRIPTOR_SETS},
+    descriptor::{DescriptorPool, DescriptorSetState, MAX_DESCRIPTOR_SETS, BINDLESS_SET_ID},
     image::SampledImage,
     util::CacheMap,
     Shader,
@@ -25,8 +25,29 @@ pub use render::RenderpassCommands;
 const PUSH_CONSTANT_SIZE: usize = 128;
 const PUSH_CONSTANT_SIZEU32: usize = PUSH_CONSTANT_SIZE / std::mem::size_of::<u32>();
 
+/// Updates shader according to vulkan pipeline compatibility rules
+/// Return type indicates if the pipeline is dirty
+pub fn update_shader(current: &mut Option<Arc<crate::Shader>>, new: &Arc<crate::Shader>, dirty_sets: &mut u32) -> bool {
+    if let Some(old_shader) = current.replace(new.clone()) {
+        if old_shader.hash == new.hash {
+            return false;
+        }
+        for set in 0..MAX_DESCRIPTOR_SETS {
+            let old_layout = &old_shader.pipeline_layout().set_layouts()[set];
+            let new_layout = &old_shader.pipeline_layout().set_layouts()[set];
+
+            if old_layout != new_layout {
+                *dirty_sets |= !((1 << set) - 1);
+            }
+        }
+    }
+
+    true
+}
+
 #[derive(Clone, Copy)]
 pub struct DescriptorState {
+    bindless_set: vk::DescriptorSet,
     sets: [DescriptorSetState; MAX_DESCRIPTOR_SETS],
     push_constant_data: [u8; PUSH_CONSTANT_SIZE],
     dirty_sets: u32,
@@ -36,6 +57,7 @@ pub struct DescriptorState {
 impl Default for DescriptorState {
     fn default() -> Self {
         Self {
+            bindless_set: vk::DescriptorSet::null(),
             sets: Default::default(),
             push_constant_data: [0; PUSH_CONSTANT_SIZE],
             dirty_sets: 0,
@@ -46,18 +68,7 @@ impl Default for DescriptorState {
 
 impl DescriptorState {
     pub fn new() -> Self {
-        let mut sets = [DescriptorSetState::default(); MAX_DESCRIPTOR_SETS];
-
-        for set in 0..MAX_DESCRIPTOR_SETS {
-            sets[set].set = set as u32;
-        }
-
-        Self {
-            sets,
-            dirty_sets: 0,
-            push_constant_data: [0; PUSH_CONSTANT_SIZE],
-            push_constant_update_range: None,
-        }
+        Self::default()
     }
     fn set_and_binding_exists(shader: &Arc<Shader>, mask: u32, set: u32, binding: u32) -> bool {
         let set_exists = shader.pipeline_layout().set_mask() & 1 << set == 1;
@@ -74,6 +85,7 @@ impl DescriptorState {
         binding: u32,
         ix: usize,
     ) {
+        debug_assert!(set != BINDLESS_SET_ID);
         self.dirty_sets |= 1 << set;
 
         self.sets[set as usize].set_image(binding, ix, image_view, sampler);
@@ -87,22 +99,30 @@ impl DescriptorState {
         set: u32,
         binding: u32,
     ) {
+        debug_assert!(set != BINDLESS_SET_ID);
         self.dirty_sets |= 1 << set;
 
         self.sets[set as usize].set_buffer(binding, buffer, start, range);
+    }
+    #[inline]
+    pub fn set_bindless(&mut self, set: vk::DescriptorSet) {
+        self.bindless_set = set;
+
+        self.dirty_sets |= 1 << BINDLESS_SET_ID;
     }
 
     /// Update once the whole range
     /// Data must be aligned according to GLSL std430
     /// Offset is in bytes and must be 4 byte aligned
     pub fn push_constants<T: Copy>(&mut self, data: &T, offset: usize) {
+        hikari_dev::profile_scope!("Push Constant CPU Update");
         debug_assert!(offset % 4 == 0);
         debug_assert!(std::mem::align_of::<T>() % 4 == 0);
 
         let byte_slice = unsafe {
             std::slice::from_raw_parts(data as *const T as *const u8, std::mem::size_of::<T>())
         };
-        self.push_constant_data[offset..byte_slice.len()].copy_from_slice(byte_slice);
+        self.push_constant_data[offset..offset + byte_slice.len()].copy_from_slice(byte_slice);
 
         self.push_constant_update_range = Some((offset, byte_slice.len()));
     }
@@ -110,6 +130,11 @@ impl DescriptorState {
         for set in &mut self.sets {
             set.reset();
         }
+        self.bindless_set = vk::DescriptorSet::null();
+    }
+    #[inline]
+    pub fn set_all_dirty(&mut self) {
+        self.dirty_sets = !(!0 << MAX_DESCRIPTOR_SETS);
     }
     pub fn flush(
         &mut self,
@@ -120,10 +145,30 @@ impl DescriptorState {
         descriptor_pool: &mut DescriptorPool,
     ) {
         hikari_dev::profile_function!();
-        //let mut sets = crate::util::ArrayVecCopy::<vk::DescriptorSet, MAX_DESCRIPTOR_SETS>::new();
-        let sets_to_update = self.dirty_sets & shader.pipeline_layout().set_mask();
+        let pipeline_layout = shader.pipeline_layout();
+        let set_layouts = pipeline_layout.set_layouts();
+        let pipeline_sets = shader.pipeline_layout().set_mask();
+        let mut sets_to_update = self.dirty_sets & pipeline_sets;
+
+        if (sets_to_update >> BINDLESS_SET_ID) & 1 == 1 {
+            let sets = [self.bindless_set];
+            unsafe {
+                hikari_dev::profile_scope!("Binding bindless descriptor set");
+                device.raw().cmd_bind_descriptor_sets(
+                    cmd,
+                    bind_point,
+                    shader.pipeline_layout().raw(),
+                    0,
+                    &sets,
+                    &[],
+                );
+            }
+
+            sets_to_update ^= 1 << BINDLESS_SET_ID;
+        }
+        
         crate::util::for_each_bit(sets_to_update, |set| {
-            let set_layout = &shader.pipeline_layout().set_layouts()[set as usize];
+            let set_layout = &set_layouts[set as usize];
 
             let allocator = descriptor_pool.get(set_layout);
             let state = &self.sets[set as usize];
@@ -145,6 +190,7 @@ impl DescriptorState {
                 );
             }
         });
+        
         if let Some((start, len)) = self.push_constant_update_range {
             //println!("{:?}", &self.push_constant_data[start..len]);
             hikari_dev::profile_scope!("Push Constants");
@@ -153,8 +199,8 @@ impl DescriptorState {
                     cmd,
                     shader.pipeline_layout().raw(),
                     shader.pipeline_layout().push_constant_stage_flags(),
-                    0,
-                    &self.push_constant_data[start..len],
+                    start as u32,
+                    &self.push_constant_data[start..start + len],
                 );
             }
 
@@ -171,8 +217,8 @@ pub struct CommandBufferSavedState<'a> {
 }
 pub struct CommandBuffer<'a> {
     device: &'a Arc<crate::Device>,
-    saved_state: CommandBufferSavedState<'a>,
     cmd: vk::CommandBuffer,
+    saved_state: CommandBufferSavedState<'a>,
 }
 
 impl<'a> CommandBuffer<'a> {
@@ -187,6 +233,7 @@ impl<'a> CommandBuffer<'a> {
             saved_state,
         }
     }
+    #[inline]
     pub fn raw(&self) -> vk::CommandBuffer {
         self.cmd
     }
@@ -252,7 +299,7 @@ impl<'a> CommandBuffer<'a> {
         binding: u32,
     ) {
         self.set_image_view_and_sampler(
-            image.image_view(mip_level as usize).unwrap(),
+            image.shader_resource_view(mip_level).unwrap(),
             image.sampler(),
             set,
             binding,
@@ -292,7 +339,7 @@ impl<'a> CommandBuffer<'a> {
         index: usize,
     ) {
         self.saved_state.descriptor_state.set_image(
-            image.image_view(mip_level as usize).unwrap(),
+            image.shader_resource_view(mip_level).unwrap(),
             image.sampler(),
             set,
             binding,
@@ -374,6 +421,9 @@ impl<'a> CommandBuffer<'a> {
             binding,
         )
     }
+    pub(crate) fn set_bindless(&mut self, set: vk::DescriptorSet) {
+        self.saved_state.descriptor_state.set_bindless(set)
+    }
     #[inline]
     pub(crate) fn begin_renderpass<'cmd>(
         &'cmd mut self,
@@ -386,7 +436,7 @@ impl<'a> CommandBuffer<'a> {
         name: impl AsRef<str>,
         color: hikari_math::Vec4,
     ) {
-        if let Some(debug_utils) = &self.device.extensions().debug_utils {
+        if let Some(debug_utils) = &self.device.instance_extensions().debug_utils {
             let name = name.as_ref();
             let name_cstring =
                 std::ffi::CString::new(name).expect("Debug Label is not a valid CString");
@@ -401,7 +451,7 @@ impl<'a> CommandBuffer<'a> {
         }
     }
     pub(crate) fn end_debug_region<'cmd>(&'cmd mut self) {
-        if let Some(debug_utils) = &self.device.extensions().debug_utils {
+        if let Some(debug_utils) = &self.device.instance_extensions().debug_utils {
             unsafe {
                 debug_utils.cmd_end_debug_utils_label(self.cmd);
             }
@@ -468,17 +518,23 @@ impl PipelineLookup {
         pipeline_state_vector: &PipelineStateVector,
         renderpass: vk::RenderPass,
         n_color_attachments: usize,
-    ) -> VkResult<vk::Pipeline> {
+    ) -> anyhow::Result<vk::Pipeline> {
         let device = &self.device;
         let pipeline = self
-            .graphics_pipelines
-            .get(pipeline_state_vector, |psv| unsafe {
-                Ok(psv.pipeline_state.create_pipeline(
+        .graphics_pipelines
+        .get::<anyhow::Error>(pipeline_state_vector, |psv| unsafe {
+                let Some(shader) = &psv.shader else {
+                     return Err(anyhow::anyhow!("Shader must not be None")) 
+                };
+
+                let pipeline = psv.pipeline_state.create_pipeline(
                     device,
-                    psv.shader.as_ref().expect("Shader must not be None"),
+                    &shader,
                     renderpass,
                     n_color_attachments,
-                ))
+                );
+
+                Ok(pipeline)
             })?;
 
         Ok(*pipeline)

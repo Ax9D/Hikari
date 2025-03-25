@@ -5,7 +5,7 @@ use crate::graph::graphics::pipeline::*;
 use crate::image::SampledImage;
 use crate::{IndexType, PhysicalRenderpass};
 
-use super::{CommandBuffer, PipelineLookup};
+use super::{CommandBuffer, PipelineLookup, update_shader};
 
 pub struct RenderpassBeginInfo<'a> {
     pub renderpass: &'a PhysicalRenderpass,
@@ -46,6 +46,8 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
                 .cmd_begin_render_pass(cmd.raw(), &begin_info, vk::SubpassContents::INLINE);
         }
 
+        cmd.saved_state.descriptor_state.set_all_dirty();
+
         let pipeline_ctx = PipelineContext::default();
         Self {
             cmd,
@@ -70,13 +72,7 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         self.cmd.set_scissor(offset_x, offset_y, width, height);
     }
     pub fn set_shader(&mut self, shader: &Arc<crate::Shader>) {
-        if let Some(old_shader) = self.pipeline_ctx.set_shader(shader) {
-            if old_shader.pipeline_layout() == shader.pipeline_layout() {
-                return;
-            }
-        }
-        //self.cmd.saved_state.descriptor_state.dirty_sets = shader.pipeline_layout().set_mask();
-        self.pipeline_ctx.pipeline_dirty = true;
+        self.pipeline_ctx.set_shader(shader, &mut self.cmd.saved_state.descriptor_state.dirty_sets)
     }
     pub fn set_pipeline_state(&mut self, pipeline_state: PipelineState) {
         let pctx = &mut self.pipeline_ctx;
@@ -192,6 +188,9 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
     ) {
         self.cmd.set_buffer(buffer, span, set, binding)
     }
+    pub fn set_bindless(&mut self, set: vk::DescriptorSet) {
+        self.cmd.set_bindless(set)
+    }
     pub fn set_vertex_buffer<B: Buffer>(&mut self, buffer: &B, binding: u32) {
         unsafe {
             self.cmd.device.raw().cmd_bind_vertex_buffers(
@@ -233,9 +232,6 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
     }
     pub fn draw(&mut self, vertices: Range<usize>, instances: Range<usize>) {
         hikari_dev::profile_function!();
-
-        let pipeline_lookup = &mut self.cmd.saved_state.pipeline_lookup;
-        let descriptor_pool = &mut self.cmd.saved_state.descriptor_pool;
         let cmd = self.cmd.raw();
 
         self.flush_render_state();
@@ -258,11 +254,8 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         instances: Range<usize>,
     ) {
         hikari_dev::profile_function!();
-
-        let pipeline_lookup = &mut self.cmd.saved_state.pipeline_lookup;
-        let descriptor_pool = &mut self.cmd.saved_state.descriptor_pool;
         let cmd = self.cmd.raw();
-
+        
         self.flush_render_state();
 
         unsafe {
@@ -289,7 +282,7 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
         let cmd = self.cmd.raw();
         let pipeline_lookup = &mut self.cmd.saved_state.pipeline_lookup;
         let descriptor_pool = &mut self.cmd.saved_state.descriptor_pool;
-        let renderpass = &self.renderpass;
+        let renderpass = self.renderpass;
 
         self.pipeline_ctx
             .flush(self.cmd.device, cmd, renderpass, pipeline_lookup);
@@ -318,9 +311,6 @@ impl<'cmd, 'graph> Drop for RenderpassCommands<'cmd, 'graph> {
 
 use std::ops::Range;
 use std::sync::Arc;
-
-use crate::Shader;
-
 use crate::graph::pass::graphics::pipeline::PipelineState;
 
 #[derive(Hash, PartialEq, Eq, Clone, Default)]
@@ -346,8 +336,8 @@ impl PipelineContext {
             pipeline_dirty: false,
         }
     }
-    pub fn set_shader(&mut self, shader: &Arc<Shader>) -> Option<Arc<Shader>> {
-        self.psv.shader.replace(shader.clone())
+    pub fn set_shader(&mut self, new: &Arc<crate::Shader>, dirty_sets: &mut u32) {
+        self.pipeline_dirty = update_shader(&mut self.psv.shader, new, dirty_sets);
     }
     pub fn flush(
         &mut self,
@@ -357,24 +347,22 @@ impl PipelineContext {
         pipe_lookup: &mut PipelineLookup,
     ) {
         //self.descriptor_state.flush(device, cmd, vk::PipelineBindPoint::GRAPHICS, &self.psv.shader, descriptor_pool);
-
         if self.pipeline_dirty {
-            if self.psv.shader.is_some() {
-                let vk_pipeline = pipe_lookup
-                    .get_vk_graphics_pipeline(
-                        &self.psv,
-                        renderpass.pass,
-                        renderpass.n_color_attachments,
-                    )
-                    .expect("Failed to create Pipeline");
-                unsafe {
-                    hikari_dev::profile_scope!("Bind Pipeline");
-                    device.raw().cmd_bind_pipeline(
-                        cmd,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        vk_pipeline,
-                    );
-                }
+            hikari_dev::profile_scope!("Flushing Render Pipeline");
+            let vk_pipeline = pipe_lookup
+                .get_vk_graphics_pipeline(
+                    &self.psv,
+                    renderpass.pass,
+                    renderpass.n_color_attachments,
+                )
+                .expect("Failed to create Pipeline");
+            unsafe {
+                hikari_dev::profile_scope!("Bind Pipeline");
+                device.raw().cmd_bind_pipeline(
+                    cmd,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    vk_pipeline,
+                );
             }
             self.pipeline_dirty = false;
         }

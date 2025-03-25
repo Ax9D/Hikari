@@ -1,7 +1,6 @@
 mod allocation;
 mod args;
 mod command;
-mod framebuffer;
 mod pass;
 mod resources;
 mod runtime;
@@ -281,7 +280,7 @@ impl<T: Args> Graph<T> {
     pub fn resize(&mut self, new_width: u32, new_height: u32) -> anyhow::Result<()> {
         assert!(!(new_width == 0 || new_height == 0));
 
-        self.prepare_exit();
+        //self.prepare_exit();
         self.size = (new_width, new_height);
         self.resources
             .resize_images(&self.device, new_width, new_height)?;

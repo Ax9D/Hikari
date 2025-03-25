@@ -4,7 +4,7 @@ use ash::vk;
 
 use crate::{Buffer, CommandBuffer, SampledImage};
 
-use super::PipelineLookup;
+use super::{PipelineLookup, update_shader};
 
 pub struct ComputepassCommands<'cmd, 'graph> {
     cmd: &'cmd mut CommandBuffer<'graph>,
@@ -22,8 +22,8 @@ impl PipelineContext {
             pipeline_dirty: false,
         }
     }
-    pub fn set_shader(&mut self, shader: &Arc<crate::Shader>) -> Option<Arc<crate::Shader>> {
-        self.shader.replace(shader.clone())
+    pub fn set_shader(&mut self, new: &Arc<crate::Shader>, dirty_sets: &mut u32) {
+        self.pipeline_dirty = update_shader(&mut self.shader, new, dirty_sets);
     }
     pub fn flush(
         &mut self,
@@ -31,8 +31,8 @@ impl PipelineContext {
         cmd: vk::CommandBuffer,
         pipeline_lookup: &mut PipelineLookup,
     ) {
-        hikari_dev::profile_function!();
         if self.pipeline_dirty {
+            hikari_dev::profile_scope!("Flushing Compute Pipeline");
             if let Some(shader) = &self.shader {
                 let vk_pipeline = pipeline_lookup
                     .get_vk_compute_pipeline(&shader)
@@ -52,6 +52,9 @@ impl PipelineContext {
 }
 impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
     pub fn new(cmd: &'cmd mut CommandBuffer<'graph>) -> Self {
+
+        cmd.saved_state.descriptor_state.set_all_dirty();
+
         Self {
             cmd,
             pipeline_ctx: PipelineContext::new(),
@@ -128,14 +131,12 @@ impl<'cmd, 'graph> ComputepassCommands<'cmd, 'graph> {
     ) {
         self.cmd.set_buffer(buffer, span, set, binding);
     }
+    pub fn set_bindless(&mut self, set: vk::DescriptorSet) {
+        self.cmd.set_bindless(set)
+    }
     pub fn set_shader(&mut self, shader: &Arc<crate::Shader>) {
-        if let Some(old_shader) = self.pipeline_ctx.set_shader(shader) {
-            if old_shader.pipeline_layout() == shader.pipeline_layout() {
-                return;
-            }
-        }
-        //self.cmd.saved_state.descriptor_state.dirty_sets = shader.pipeline_layout().set_mask();
-        self.pipeline_ctx.pipeline_dirty = true;
+        let dirty_sets = &mut self.cmd.saved_state.descriptor_state.dirty_sets;
+        self.pipeline_ctx.set_shader(shader, dirty_sets)
     }
     pub fn push_constants<T: Copy>(&mut self, data: &T, offset: usize) {
         self.cmd

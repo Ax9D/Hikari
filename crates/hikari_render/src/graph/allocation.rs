@@ -32,7 +32,7 @@ impl BarrierStorage {
         queue_index: u32,
     ) {
         let range = vk::ImageSubresourceRange {
-            aspect_mask: crate::image::sampled_image::format_to_aspect_flags(image.config().format),
+            aspect_mask: crate::image::format_to_aspect_flags(image.config().format),
             base_mip_level: 0,
             level_count: image.config().mip_levels,
             base_array_layer: 0,
@@ -365,12 +365,15 @@ impl AllocationData {
         }
 
         let renderpass = &self.renderpasses[ix];
+        let images: Vec<_> = image_handles
+        .iter()
+        .map(|handle| graph_resources.get_image(handle).unwrap())
+        .collect();
 
         if pass.record_fn.is_some() {
-            let framebuffer = super::framebuffer::from_allocation_data(
+            let framebuffer = crate::framebuffer::from_allocation_data(
                 device,
-                graph_resources,
-                &image_handles,
+                &images,
                 renderpass.pass,
             )?;
 
@@ -413,7 +416,7 @@ impl AllocationData {
 
             for input in pass.inputs() {
                 match input {
-                    crate::graph::pass::Input::ReadImage(handle, access) => current_image_accesses
+                    super::pass::Input::ReadImage(handle, access) => current_image_accesses
                         .entry(handle.clone())
                         .or_default()
                         .push(*access),
@@ -427,13 +430,13 @@ impl AllocationData {
             }
             for output in pass.outputs() {
                 match output {
-                    crate::graph::pass::Output::WriteImage(handle, access) => {
+                    super::pass::Output::WriteImage(handle, access) => {
                         current_image_accesses
                             .entry(handle.clone())
                             .or_default()
                             .push(*access)
                     }
-                    crate::graph::pass::Output::DrawImage(handle, config) => current_image_accesses
+                    super::pass::Output::DrawImage(handle, config) => current_image_accesses
                         .entry(handle.clone())
                         .or_default()
                         .push(config.access),
@@ -466,6 +469,7 @@ impl AllocationData {
 
                 let old_image_accesses = std::mem::replace(prev_image_accesses, current_accesses);
             }
+
             for (handle, current_accesses) in current_buffer_accesses {
                 let prev_buffer_accesses = prev_buffer_accesses.get_mut(&handle).unwrap();
 
@@ -505,14 +509,16 @@ impl AllocationData {
 
 impl Drop for AllocationData {
     fn drop(&mut self) {
-        let device = self.device.raw();
+        let deleter = self.device.deleter();
+        use crate::delete::DeleteRequest;
+
         unsafe {
             for (_, pass) in &self.renderpasses {
-                device.destroy_render_pass(pass.pass, None);
+                deleter.request_delete(DeleteRequest::Renderpass(pass.pass));
             }
 
             for (_, &fb) in &self.framebuffers {
-                device.destroy_framebuffer(fb, None);
+                deleter.request_delete(DeleteRequest::Framebuffer(fb));
             }
         }
     }
