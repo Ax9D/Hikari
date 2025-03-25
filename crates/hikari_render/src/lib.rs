@@ -26,7 +26,7 @@ pub use error::*;
 pub use gfx::Gfx;
 pub use gfx::GfxConfig;
 
-pub use crate::image::sampled_image::*;
+pub use crate::image::*;
 pub use shader::*;
 pub use shaderc;
 
@@ -38,8 +38,10 @@ mod barrier;
 mod delete;
 mod descriptor;
 mod renderpass;
+mod framebuffer;
 mod swapchain;
 mod util;
+mod cache;
 
 use renderpass::PhysicalRenderpass;
 use swapchain::Swapchain;
@@ -56,7 +58,7 @@ pub struct GfxPlugin {
 
 impl hikari_core::Plugin for GfxPlugin {
     fn build(self, game: &mut hikari_core::Game) {
-        let gfx = Gfx::new(game.window(), self.config).expect("Failed to create render context");
+        let gfx = Gfx::new(&mut game.window(), self.config).expect("Failed to create render context");
         game.add_state(gfx);
 
         #[cfg(feature = "renderdoc")]

@@ -1,5 +1,5 @@
 use lru::LruCache;
-use std::{error::Error, hash::Hash};
+use std::{hash::Hash};
 
 pub struct CacheMap<K, V> {
     cache: LruCache<K, V, crate::util::BuildHasher>,
@@ -19,11 +19,13 @@ impl<K: Hash + Eq + Clone, V: Copy> CacheMap<K, V> {
         std::ptr::copy_nonoverlapping(src as *const T, &mut dst as *mut T, 1);
         dst
     }
-    pub fn get<'a, 'b, E: Error>(
+    pub fn get<'a, 'b, E>(
         &'a mut self,
         key: &'b K,
         build_fn: impl FnOnce(&K) -> Result<V, E>,
     ) -> Result<&'a V, E> {
+        hikari_dev::profile_function!();
+        
         let value;
 
         if self.cache.get(key).is_none() {

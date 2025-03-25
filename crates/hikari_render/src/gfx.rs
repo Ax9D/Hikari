@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::ops::DerefMut;
 use std::sync::Arc;
 
 #[macro_export]
@@ -16,7 +15,6 @@ macro_rules! rawToStr {
 use std::ffi::{CStr, CString};
 
 use ash::extensions::ext::DebugUtils;
-use ash::extensions::khr::Surface;
 use ash::prelude::VkResult;
 use ash::{vk, Entry};
 use parking_lot::Mutex;
@@ -24,7 +22,6 @@ use parking_lot::Mutex;
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::window::Window;
 
-use crate::swapchain::SurfaceData;
 use crate::swapchain::Swapchain;
 
 pub struct DebugSettings {
@@ -138,11 +135,15 @@ impl Gfx {
         unsafe {
             let app_name = CString::new("Hikari").unwrap();
 
+            let engine_major_version = env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap();
+            let engine_minor_version = env!("CARGO_PKG_VERSION_MINOR").parse().unwrap();
+            let engine_patch_version = env!("CARGO_PKG_VERSION_PATCH").parse().unwrap();
+
             let app_info = vk::ApplicationInfo::builder()
                 .api_version(vk::make_api_version(0, 1, 2, 0))
                 .application_name(&app_name)
                 .engine_name(&app_name)
-                .engine_version(vk::make_api_version(0, 69, 420, 0));
+                .engine_version(vk::make_api_version(0, engine_major_version, engine_minor_version, engine_patch_version));
 
             let layer_names = if debug {
                 vec![
@@ -216,16 +217,11 @@ impl Gfx {
 
         let (device, swapchain) = if let Some(window) = window {
             let surface = Self::create_surface(&entry, &instance, window)?;
-            let surface_loader = Surface::new(&entry, &instance);
 
-            let surface_data = SurfaceData {
-                surface,
-                surface_loader,
-            };
             let device = crate::Device::create(
                 entry,
                 instance,
-                Some(&surface_data),
+                Some(surface),
                 config.features,
                 config.debug,
             )?;
@@ -235,7 +231,7 @@ impl Gfx {
                 &device,
                 window_size.width,
                 window_size.height,
-                surface_data,
+                surface,
                 None,
                 config.vsync,
             )?;
@@ -291,15 +287,7 @@ impl Gfx {
         };
         if let Some(swapchain) = self.swapchain() {
             let mut swapchain = swapchain.lock();
-            let new_swapchain = Swapchain::create(
-                &self.device,
-                new_width,
-                new_height,
-                swapchain.surface_data.clone(),
-                Some(swapchain.inner),
-                self.vsync,
-            )?;
-            let old_swapchain = std::mem::replace(swapchain.deref_mut(), new_swapchain);
+            swapchain.recreate(new_width, new_height, self.vsync)?;
 
             log::debug!("Resized swapchain width: {new_width} height: {new_height}");
         }

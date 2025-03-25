@@ -12,7 +12,7 @@ use ash::{
 use gpu_allocator::vulkan::*;
 use parking_lot::{Mutex, MutexGuard};
 
-use crate::{delete::Deleter, descriptor::DescriptorSetLayoutCache, swapchain::SurfaceData};
+use crate::{delete::Deleter, cache::ResourceCache, bindless::BindlessResources};
 
 const VK_PIPELINE_CACHE_FILE: &str = "vk_pipeline_cache";
 
@@ -59,8 +59,6 @@ impl PhysicalDevice {
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(device) };
 
-        let vk_features = unsafe { instance.get_physical_device_features(device) };
-
         let mut vk_features2 = vk::PhysicalDeviceFeatures2::default();
         unsafe {
             instance.get_physical_device_features2(device, &mut vk_features2);
@@ -81,8 +79,7 @@ impl PhysicalDevice {
 
     pub fn get_present_queue(
         &self,
-        instance: &ash::Instance,
-        surface: &vk::SurfaceKHR,
+        surface: vk::SurfaceKHR,
         surface_loader: &Surface,
     ) -> Option<u32> {
         self.queue_families
@@ -90,7 +87,7 @@ impl PhysicalDevice {
             .enumerate()
             .filter_map(|(index, prop)| unsafe {
                 match surface_loader
-                    .get_physical_device_surface_support(self.raw, index as u32, *surface)
+                    .get_physical_device_surface_support(self.raw, index as u32, surface)
                     .unwrap()
                 {
                     true => Some(index as u32),
@@ -102,7 +99,7 @@ impl PhysicalDevice {
 
     pub(crate) fn get_swapchain_support_details(
         &self,
-        surface: &vk::SurfaceKHR,
+        surface: vk::SurfaceKHR,
         surface_loader: &Surface,
     ) -> VkResult<SwapchainSupportDetails> {
         SwapchainSupportDetails::create(&self.raw, surface, surface_loader)
@@ -167,15 +164,15 @@ pub(crate) struct SwapchainSupportDetails {
 impl SwapchainSupportDetails {
     pub fn create(
         device: &vk::PhysicalDevice,
-        surface: &vk::SurfaceKHR,
+        surface: vk::SurfaceKHR,
         surface_loader: &Surface,
     ) -> VkResult<Self> {
         let formats =
-            unsafe { surface_loader.get_physical_device_surface_formats(*device, *surface) }?;
+            unsafe { surface_loader.get_physical_device_surface_formats(*device, surface) }?;
         let capabilities =
-            unsafe { surface_loader.get_physical_device_surface_capabilities(*device, *surface) }?;
+            unsafe { surface_loader.get_physical_device_surface_capabilities(*device, surface) }?;
         let present_modes =
-            unsafe { surface_loader.get_physical_device_surface_present_modes(*device, *surface) }?;
+            unsafe { surface_loader.get_physical_device_surface_present_modes(*device, surface) }?;
 
         Ok(Self {
             capabilities,
@@ -237,9 +234,13 @@ impl Drop for RawDevice {
     }
 }
 
-pub struct VkExtensions {
-    pub synchronization2: ash::extensions::khr::Synchronization2,
+pub struct InstanceExtensions {
     pub debug_utils: Option<ash::extensions::ext::DebugUtils>,
+    pub surface: Option<ash::extensions::khr::Surface>,
+}
+pub struct DeviceExtensions {
+    pub synchronization2: ash::extensions::khr::Synchronization2,
+    pub swapchain: Option<ash::extensions::khr::Swapchain>,
 }
 
 unsafe impl Send for Device {}
@@ -260,8 +261,10 @@ pub struct Device {
     shader_compiler: Mutex<shaderc::Compiler>,
 
     memory_allocator: Arc<std::sync::Mutex<gpu_allocator::vulkan::Allocator>>, //Using std::sync::Mutex for better compatibility
-    descriptor_set_layout_cache: Mutex<DescriptorSetLayoutCache>,
-    extensions: VkExtensions,
+    cache: ResourceCache,
+    bindless: Option<BindlessResources>,
+    instance_extensions: InstanceExtensions,
+    extensions: DeviceExtensions,
     pipeline_cache: vk::PipelineCache,
     #[cfg(feature = "aftermath")]
     aftermath: Option<Aftermath>,
@@ -276,20 +279,24 @@ impl Device {
     pub(crate) fn create(
         entry: ash::Entry,
         instance: ash::Instance,
-        surface_data: Option<&SurfaceData>,
+        surface: Option<vk::SurfaceKHR>,
         enable_features: Features,
         debug: bool,
     ) -> anyhow::Result<Arc<Self>> {
         let mut required_extensions = vec![vk::KhrSynchronization2Fn::name()];
 
-        if surface_data.is_some() {
+        if surface.is_some() {
             required_extensions.push(Swapchain::name());
         }
 
+        let instance_extensions = Self::setup_instance_extensions(&entry, &instance, debug, surface.is_some());
+
+        let surface_and_loader = surface.map(|surface| (surface, instance_extensions.surface.as_ref().unwrap()));
+        
         let physical_device = Self::pick_optimal(
             &entry,
             &instance,
-            surface_data,
+            surface_and_loader,
             &required_extensions,
             enable_features,
         )
@@ -316,19 +323,34 @@ impl Device {
 
         let mut sync2 =
             vk::PhysicalDeviceSynchronization2FeaturesKHR::builder().synchronization2(true);
+        
+        let mut descriptor_indexing = vk::PhysicalDeviceDescriptorIndexingFeatures::builder()
+                                  .runtime_descriptor_array(true)
+                                  .descriptor_binding_partially_bound(true)
+                                  .descriptor_binding_update_unused_while_pending(true)
+                                  
+                                  .descriptor_binding_sampled_image_update_after_bind(true)
+                                  .descriptor_binding_storage_image_update_after_bind(true)
+                                  .descriptor_binding_storage_buffer_update_after_bind(true)
+
+                                  .shader_sampled_image_array_non_uniform_indexing(true)
+                                  .shader_storage_image_array_non_uniform_indexing(true)
+                                  .shader_storage_buffer_array_non_uniform_indexing(true)
+                                  ;
+
+        let mut device_create_info = vk::DeviceCreateInfo::builder()
+        .enabled_extension_names(required_extensions)
+        .queue_create_infos(&queue_create_infos)
+        .enabled_features(&enabled_features)
+        //VK_KHR_synchronization2
+        .push_next(&mut sync2)
+        .push_next(&mut descriptor_indexing);
 
         let mut diag_config_nv = vk::DeviceDiagnosticsConfigCreateInfoNV::builder().flags(
             vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_AUTOMATIC_CHECKPOINTS
                 | vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_RESOURCE_TRACKING
                 | vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_SHADER_DEBUG_INFO,
         );
-
-        let mut device_create_info = vk::DeviceCreateInfo::builder()
-            .enabled_extension_names(required_extensions)
-            .queue_create_infos(&queue_create_infos)
-            .enabled_features(&enabled_features)
-            //VK_KHR_synchronization2
-            .push_next(&mut sync2);
         if debug {
             device_create_info = device_create_info.push_next(&mut diag_config_nv);
         }
@@ -364,11 +386,12 @@ impl Device {
                 .ok_or_else(|| anyhow::anyhow!("Failed to initialize shaderc compiler"))?,
         );
 
-        let extensions = Self::setup_extension(&entry, &instance, &ash_device, debug);
+        let extensions = Self::setup_device_extensions(&entry, &instance, &ash_device, debug, surface.is_some());
 
         let pipeline_cache = Self::create_pipeline_cache(&ash_device)?;
 
-        let descriptor_set_layout_cache = Mutex::new(DescriptorSetLayoutCache::new(&ash_device));
+        let cache = ResourceCache::new(&ash_device);
+
         let raw_device = RawDevice {
             inner: ash_device,
             instance,
@@ -387,7 +410,7 @@ impl Device {
             None
         };
 
-        Ok(Arc::new(Self {
+        let mut device = Self {
             entry,
             raw_device,
             physical_device,
@@ -399,19 +422,26 @@ impl Device {
             //present_queue,
             pipeline_cache,
             memory_allocator,
-            descriptor_set_layout_cache,
+            cache,
+            bindless: None,
 
             shader_compiler,
             extensions,
             #[cfg(feature = "aftermath")]
             aftermath,
             deleter: Deleter::new(),
-        }))
+            instance_extensions,
+        };
+        let bindless = BindlessResources::new(&device)?;
+        device.bindless = Some(bindless);
+        let device = Arc::new(device);
+
+        Ok(device)
     }
     fn pick_optimal(
         entry: &ash::Entry,
         instance: &ash::Instance,
-        surface_data: Option<&SurfaceData>,
+        surface_data: Option<(vk::SurfaceKHR, &Surface)>,
         required_extensions: &[&'static CStr],
         required_features: Features,
     ) -> Option<PhysicalDevice> {
@@ -419,22 +449,27 @@ impl Device {
         for device in physical_devices {
             let unified_queue = device.get_unified_queue().is_some();
             let features = device.features.contains(required_features);
+            let extensions = required_extensions.iter().all(|&extension| {
+                let matching_ext = device.extensions.iter().find(|test| test.as_c_str() == extension);
 
-            if let Some(surface_data) = surface_data {
+                matching_ext.is_some()
+            });
+
+            log::info!("{:?}", required_features);
+            if let Some((surface, loader)) = surface_data {
                 let present_support = device
                     .get_present_queue(
-                        instance,
-                        &surface_data.surface,
-                        &surface_data.surface_loader,
+                        surface,
+                        loader,
                     )
                     .is_some();
 
-                if unified_queue && features && present_support {
+                if unified_queue && extensions && features && present_support {
                     return Some(device);
                 }
             }
 
-            if unified_queue && features {
+            if unified_queue && extensions && features {
                 return Some(device);
             }
         }
@@ -448,13 +483,12 @@ impl Device {
     pub fn model(&self) -> &str {
         self.device_properties.name()
     }
-    fn setup_extension(
+    fn setup_instance_extensions(
         entry: &ash::Entry,
         instance: &ash::Instance,
-        device: &ash::Device,
         debug: bool,
-    ) -> VkExtensions {
-        let synchronization2 = ash::extensions::khr::Synchronization2::new(instance, device);
+        surface: bool,
+    ) -> InstanceExtensions {
 
         let debug_utils = if debug {
             Some(ash::extensions::ext::DebugUtils::new(entry, instance))
@@ -462,13 +496,41 @@ impl Device {
             None
         };
 
-        VkExtensions {
-            synchronization2,
+        let surface = if surface {
+            Some(Surface::new(entry, instance))
+        } else {
+            None
+        };
+
+        InstanceExtensions {
             debug_utils,
+            surface,
         }
     }
-    pub fn extensions(&self) -> &VkExtensions {
+    fn setup_device_extensions(
+        entry: &ash::Entry,
+        instance: &ash::Instance,
+        device: &ash::Device,
+        debug: bool,
+        surface: bool,
+    ) -> DeviceExtensions {
+        let synchronization2 = ash::extensions::khr::Synchronization2::new(instance, device);
+        let swapchain = if surface { 
+            Some(ash::extensions::khr::Swapchain::new(instance, device))
+        } else {
+            None
+        };
+
+        DeviceExtensions {
+            synchronization2,
+            swapchain,
+        }
+    }
+    pub fn extensions(&self) -> &DeviceExtensions {
         &self.extensions
+    }
+    pub fn instance_extensions(&self) -> &InstanceExtensions {
+        &self.instance_extensions
     }
     fn read_pipeline_cache_from_disk() -> Vec<u8> {
         let mut data = Vec::new();
@@ -539,8 +601,8 @@ impl Device {
     pub(crate) fn shader_compiler(&self) -> MutexGuard<'_, shaderc::Compiler> {
         self.shader_compiler.lock()
     }
-    pub(crate) fn set_layout_cache(&self) -> MutexGuard<'_, DescriptorSetLayoutCache> {
-        self.descriptor_set_layout_cache.lock()
+    pub(crate) fn cache(&self) -> &ResourceCache {
+        &self.cache
     }
 
     pub fn physical_device(&self) -> &PhysicalDevice {
@@ -681,6 +743,9 @@ impl Device {
             .or(linear_tiling)
             .expect("Device doesn't support any depth formats")
     }
+    pub fn bindless_resources(&self) -> &BindlessResources {
+        self.bindless.as_ref().unwrap()
+    }
     pub(crate) fn new_frame(&self) -> anyhow::Result<()> {
         self.deleter.new_frame(self)
     }
@@ -701,7 +766,16 @@ impl Drop for Device {
     fn drop(&mut self) {
         self.write_pipeline_cache_to_disk().unwrap();
         unsafe { self.raw().device_wait_idle().unwrap() };
+
         self.deleter().exit(self).expect("Failed to exit deleter");
+        match self.bindless.take() {
+            Some(mut bindless) => {
+                bindless.delete(self);
+            },
+            None => {
+                log::warn!("Bindless set was not created");
+            }
+        }
         log::debug!("Dropped Device");
     }
 }
@@ -765,6 +839,8 @@ bitflags::bitflags! {
         const SPARSE_RESIDENCY_ALIASED = 1 << 52;
         const VARIABLE_MULTISAMPLE_RATE = 1 << 53;
         const INHERITED_QUERIES = 1 << 54;
+        const DESCRIPTOR_BINDING_PARTIALLY_BOUND = 1 << 55;
+        const RUNTIME_DESCRIPTOR_ARRAY = 1 << 56;
 
     }
 }
@@ -775,6 +851,10 @@ impl Default for Features {
             | Features::FILL_MODE_NON_SOLID
             | Features::DEPTH_CLAMP
             | Features::WIDE_LINES
+            | Features::SHADER_SAMPLED_IMAGE_ARRAY_DYNAMIC_INDEXING
+            | Features::SHADER_STORAGE_IMAGE_ARRAY_DYNAMIC_INDEXING
+            | Features::SHADER_UNIFORM_BUFFER_ARRAY_DYNAMIC_INDEXING
+            | Features::SHADER_STORAGE_BUFFER_ARRAY_DYNAMIC_INDEXING
     }
 }
 impl From<vk::PhysicalDeviceFeatures> for Features {

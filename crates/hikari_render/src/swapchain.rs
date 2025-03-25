@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ash::{
     prelude::VkResult,
-    vk::{self, SurfaceFormatKHR},
+    vk::{self, SurfaceFormatKHR}, extensions::khr::Surface,
 };
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct SurfaceData {
     pub surface: vk::SurfaceKHR,
-    pub surface_loader: ash::extensions::khr::Surface,
+    pub surface_loader: Surface,
 }
 pub struct Swapchain {
     device: Arc<crate::device::Device>,
@@ -31,8 +31,9 @@ pub struct Swapchain {
 
     width: u32,
     height: u32,
+    vsync: bool,
 
-    pub(crate) surface_data: SurfaceData,
+    surface_data: SurfaceData,
 }
 
 impl Swapchain {
@@ -40,14 +41,21 @@ impl Swapchain {
         device: &Arc<crate::Device>,
         width: u32,
         height: u32,
-        surface_data: SurfaceData,
+        surface: vk::SurfaceKHR,
         old_swapchain: Option<vk::SwapchainKHR>,
         vsync: bool,
     ) -> anyhow::Result<Self> {
+        assert!(width != 0 && height != 0);
+
         let physical_device = device.physical_device();
 
+        let surface_data = SurfaceData {
+            surface,
+            surface_loader: device.instance_extensions().surface.clone().unwrap()
+        };
+
         let swapchain_support_details = physical_device
-            .get_swapchain_support_details(&surface_data.surface, &surface_data.surface_loader)?;
+            .get_swapchain_support_details(surface, &surface_data.surface_loader)?;
         let present_mode = Self::choose_present_mode(&swapchain_support_details, vsync);
 
         let surface_format = Self::choose_swapchain_format(&swapchain_support_details);
@@ -61,8 +69,9 @@ impl Swapchain {
             image_count = max_image_count;
         }
 
-        let swapchain_loader =
-            ash::extensions::khr::Swapchain::new(device.instance(), device.raw());
+        // image_count = 2;
+
+        let swapchain_loader = device.extensions().swapchain.clone().unwrap();
 
         let old_swapchain_vk = old_swapchain.unwrap_or(vk::SwapchainKHR::null());
 
@@ -82,9 +91,8 @@ impl Swapchain {
         let present_queue_ix = device
             .physical_device()
             .get_present_queue(
-                device.instance(),
-                &surface_data.surface,
-                &surface_data.surface_loader,
+                surface_data.surface,
+                &device.instance_extensions().surface.clone().unwrap()
             )
             .unwrap();
         let queue_family_indices = [device.unified_queue_ix, present_queue_ix];
@@ -127,7 +135,7 @@ impl Swapchain {
                 image_type: vk::ImageType::TYPE_2D,
                 image_view_type: vk::ImageViewType::TYPE_2D,
                 initial_layout: vk::ImageLayout::UNDEFINED,
-                host_readable: true,
+                ..Default::default()
             },
         )?;
 
@@ -160,9 +168,23 @@ impl Swapchain {
             depth_image: depth_stencil_image,
             renderpass,
             framebuffers,
-
+            vsync,
             surface_data,
         })
+    }
+    pub fn recreate(&mut self, width: u32, height: u32, vsync: bool) -> anyhow::Result<()> {
+        let new_swapchain = Swapchain::create(
+            &self.device,
+            width,
+            height,
+            self.surface(),
+            Some(self.inner),
+            vsync,
+        )?;
+
+        let old_swapchain = std::mem::replace(self, new_swapchain);
+
+        Ok(())
     }
     fn create_renderpass(
         device: &Arc<crate::Device>,
@@ -243,7 +265,7 @@ impl Swapchain {
     ) -> VkResult<Vec<vk::Framebuffer>> {
         let mut framebuffers = Vec::new();
         for &color_image in color_images {
-            let attachments = [color_image, depth_stencil_image.image_view(0).unwrap()];
+            let attachments = [color_image, depth_stencil_image.render_target_view().unwrap()];
 
             let create_info = vk::FramebufferCreateInfo::builder()
                 .render_pass(pass)
@@ -347,6 +369,9 @@ impl Swapchain {
         }
         Ok(image_views)
     }
+    pub fn surface(&self) -> vk::SurfaceKHR {
+        self.surface_data.surface
+    }
     pub fn depth_image(&self) -> &SampledImage {
         &self.depth_image
     }
@@ -370,16 +395,25 @@ impl Swapchain {
         timeout: u64,
         signal_semaphore: vk::Semaphore,
         signal_fence: vk::Fence,
-    ) -> VkResult<u32> {
+    ) -> anyhow::Result<u32> {
         hikari_dev::profile_function!();
         unsafe {
-            let (ix, _) = self.loader.acquire_next_image(
+            let result = self.loader.acquire_next_image(
                 self.inner,
                 timeout,
                 signal_semaphore,
                 signal_fence,
-            )?;
-            Ok(ix)
+            );
+
+            match result {
+                Ok((ix, _)) => Ok(ix),
+                Err(err) if err == vk::Result::ERROR_OUT_OF_DATE_KHR => {
+                    self.recreate(self.width, self.height, self.vsync)?;
+
+                    self.acquire_next_image_ix(timeout, signal_semaphore, signal_fence)
+                },
+                Err(err) => Err(err.into())
+            }
         }
     }
     pub fn present(&mut self, image_ix: u32, wait_semaphone: vk::Semaphore) -> VkResult<bool> {
@@ -408,34 +442,35 @@ impl Swapchain {
     pub fn height(&self) -> u32 {
         self.height
     }
+    pub fn vsync(&self) -> bool {
+        self.vsync
+    }
     pub fn size(&self) -> (u32, u32) {
         (self.width(), self.height())
     }
 }
 
+pub fn delete(loader: &ash::extensions::khr::Swapchain, swapchain: vk::SwapchainKHR) {
+    unsafe {
+        loader.destroy_swapchain(swapchain, None);
+    }
+}
+
 impl Drop for Swapchain {
     fn drop(&mut self) {
-        for &framebuffer in &self.framebuffers {
-            unsafe {
-                self.device.raw().destroy_framebuffer(framebuffer, None);
-            }
-        }
+        let deleter = self.device.deleter();
+        use crate::delete::DeleteRequest;
 
-        unsafe {
-            self.device
-                .raw()
-                .destroy_render_pass(self.renderpass.pass, None);
-        };
+        for &framebuffer in &self.framebuffers {
+            deleter.request_delete(DeleteRequest::Framebuffer(framebuffer));
+        }
+        deleter.request_delete(DeleteRequest::Renderpass(self.renderpass.pass));
 
         for image_view in self.image_views.drain(..) {
-            unsafe {
-                self.device.raw().destroy_image_view(image_view, None);
-            }
+            deleter.request_delete(DeleteRequest::ImageView(image_view));
         }
 
-        unsafe {
-            self.loader.destroy_swapchain(self.inner, None);
-        }
+        deleter.request_delete(DeleteRequest::Swapchain(self.inner));
         log::debug!("Dropped swapchain");
     }
 }

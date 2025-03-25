@@ -16,6 +16,7 @@ hikari_dev = {path = "../hikari_dev"}
 hikari_core = {path = "../hikari_core"}
 hikari_imgui = {path = "../hikari_imgui", optional = true}
 hikari_math = {path = "../hikari_math"}
+hikari_utils = {path = "../hikari_utils"}
 thiserror = "1"
 log = { version = "0.4"}
 anyhow = "1.0"
@@ -26,7 +27,8 @@ raw-window-handle = "0.5"
 winit = {version = "0.27", features = ["x11"] }
 gpu-allocator = "0.22"
 shaderc = "0.8"
-spirv-reflect = "0.2.3"
+# spirv-reflect = {git = "https://github.com/Ax9D/spirv-reflect-rs", branch = "patch-1"}
+spirv-reflect = {path = "../../../spirv-reflect-rs"}
 vk-sync-fork = { version = "0.4"}
 const-cstr = "0.3.0"
 nvidia-aftermath-rs = {version = "0.0.2", optional = true }
@@ -36,10 +38,8 @@ vec_map = "0.8"
 bitflags = "1.3"
 parking_lot = "0.12"
 lru = "0.7"
-fxhash = {version = "0.2"}
 arrayvec = "0.7"
 once_cell = "1"
-nohash-hasher = "0.2"
 flume = "0.10"
 
 [dev-dependencies]

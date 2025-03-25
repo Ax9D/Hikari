@@ -1,7 +1,5 @@
-pub mod reflect;
 use arrayvec::ArrayVec;
 use ash::{prelude::VkResult, vk};
-pub use reflect::ReflectionData;
 use shaderc::CompileOptions;
 
 use std::collections::HashMap;
@@ -44,7 +42,7 @@ impl ShaderDataType {
 
 use thiserror::Error;
 
-use crate::descriptor::DescriptorSetLayout;
+use crate::descriptor::{DescriptorSetLayout, BINDLESS_SET_ID};
 use crate::descriptor::{DescriptorSetLayoutBuilder, MAX_DESCRIPTOR_SETS};
 
 #[derive(Error, Debug)]
@@ -69,7 +67,7 @@ pub(crate) struct CompiledShaderModule {
     pub stage: vk::ShaderStageFlags,
     pub spirv: Vec<u32>,
     pub module: vk::ShaderModule,
-    pub reflection_data: reflect::ReflectionData,
+    pub reflection_data: spirv_reflect::ShaderModule,
 }
 impl std::hash::Hash for CompiledShaderModule {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -114,6 +112,7 @@ impl Shader {
         }
         stages
     }
+    #[inline]
     pub(crate) fn pipeline_layout(&self) -> &PipelineLayout {
         &self.pipeline_layout
     }
@@ -229,41 +228,102 @@ impl PipelineLayout {
 
         unsafe { device.raw().create_pipeline_layout(&create_info, None) }
     }
+    
+    fn spirv_desc_type_to_vk_desc_type(spirv_type: spirv_reflect::types::ReflectDescriptorType) -> vk::DescriptorType {
+        match spirv_type {
+            spirv_reflect::types::ReflectDescriptorType::Undefined => todo!(),
+            spirv_reflect::types::ReflectDescriptorType::Sampler => vk::DescriptorType::SAMPLER,
+            spirv_reflect::types::ReflectDescriptorType::CombinedImageSampler => {
+                vk::DescriptorType::COMBINED_IMAGE_SAMPLER
+            }
+            spirv_reflect::types::ReflectDescriptorType::SampledImage => {
+                vk::DescriptorType::SAMPLED_IMAGE
+            }
+            spirv_reflect::types::ReflectDescriptorType::StorageImage => {
+                vk::DescriptorType::STORAGE_IMAGE
+            }
+            spirv_reflect::types::ReflectDescriptorType::UniformTexelBuffer => {
+                vk::DescriptorType::UNIFORM_TEXEL_BUFFER
+            }
+            spirv_reflect::types::ReflectDescriptorType::StorageTexelBuffer => {
+                vk::DescriptorType::STORAGE_TEXEL_BUFFER
+            }
+            spirv_reflect::types::ReflectDescriptorType::UniformBuffer => {
+                vk::DescriptorType::UNIFORM_BUFFER
+            }
+            spirv_reflect::types::ReflectDescriptorType::StorageBuffer => {
+                vk::DescriptorType::STORAGE_BUFFER
+            }
+            spirv_reflect::types::ReflectDescriptorType::UniformBufferDynamic => {
+                vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC
+            }
+            spirv_reflect::types::ReflectDescriptorType::StorageBufferDynamic => {
+                vk::DescriptorType::STORAGE_BUFFER_DYNAMIC
+            }
+            spirv_reflect::types::ReflectDescriptorType::InputAttachment => {
+                vk::DescriptorType::INPUT_ATTACHMENT
+            }
+            spirv_reflect::types::ReflectDescriptorType::AccelerationStructureKHR => {
+                vk::DescriptorType::ACCELERATION_STRUCTURE_KHR
+            }
+        }
+    }
     fn generate_descriptor_set_layouts(
         device: &Arc<crate::Device>,
         stages: &[CompiledShaderModule],
-    ) -> Result<[DescriptorSetLayout; MAX_DESCRIPTOR_SETS], Box<dyn std::error::Error>> {
+    ) -> anyhow::Result<[DescriptorSetLayout; MAX_DESCRIPTOR_SETS]> {
         let mut layout_builders: [DescriptorSetLayoutBuilder; MAX_DESCRIPTOR_SETS] =
             [DescriptorSetLayout::builder(); MAX_DESCRIPTOR_SETS];
+        
+        let mut has_bindless = false;
         for stage in stages {
-            for set in &stage
+            for set_info in &stage
                 .reflection_data
-                .raw_data()
                 .enumerate_descriptor_sets(None)
                 .unwrap()
             {
-                let layout_builder = &mut layout_builders[set.set as usize];
-                for binding in &set.bindings {
-                    let descriptor_type =
-                        reflect::spirv_desc_type_to_vk_desc_type(binding.descriptor_type);
-                    //println!("{} {}", binding.name, binding.count);
-                    //println!("{:?}", descriptor_type);
+                if set_info.set == BINDLESS_SET_ID {
+                    has_bindless = true;
+                    continue;
+                }
+                
+                let layout_builder = &mut layout_builders[set_info.set as usize];
+                for binding_info in &set_info.bindings {
+                    let descriptor_type = Self::spirv_desc_type_to_vk_desc_type(binding_info.descriptor_type);
+                    //println!("{} {} {:?} {:#?}", &binding_info.name, binding_info.binding, binding_info.count, binding_info.type_description);
+
+                    let count = binding_info.count;
+                    let stage_flags = stage.stage;
+
+                    let binding_flags = vk::DescriptorBindingFlags::empty();
+
+                    // if is_bindless {
+                    //     binding_flags |= vk::DescriptorBindingFlags::PARTIALLY_BOUND; 
+                    //     binding_flags |=vk::DescriptorBindingFlags::UPDATE_AFTER_BIND; 
+                    //     binding_flags |= vk::DescriptorBindingFlags::UPDATE_UNUSED_WHILE_PENDING;
+
+                    //     layout_builder.create_flags(vk::DescriptorSetLayoutCreateFlags::UPDATE_AFTER_BIND_POOL);
+                        
+                    //     stage_flags = vk::ShaderStageFlags::ALL;
+                    //     count = MAX_BINDLESS_COUNT as u32;
+                    // }
+
                     layout_builder.with_binding(
-                        binding.binding,
+                        binding_info.binding,
                         descriptor_type,
-                        binding.count,
-                        stage.stage,
+                        count,
+                        stage_flags,
+                        binding_flags
                     );
 
-                    if let Some((existing_dt, existing_count, _)) =
-                        layout_builder.binding(binding.binding)
+                    if let Some((existing_dt, existing_count, _, _)) =
+                        layout_builder.binding(binding_info.binding)
                     {
-                        if existing_dt != descriptor_type || existing_count != binding.count {
-                            return Err(format!(
+                        if existing_dt != descriptor_type || existing_count != count {
+                            return Err(anyhow::anyhow!(
                                 "set {} binding {} is different in different stages of shader: {}",
-                                set.set, binding.binding, stage.debug_name
-                            )
-                            .into());
+                                set_info.set, binding_info.binding, stage.debug_name
+                            ));
                         }
                     }
                 }
@@ -283,6 +343,10 @@ impl PipelineLayout {
             .enumerate()
             .for_each(|(ix, builder)| layouts[ix] = builder.build(device).unwrap());
 
+        if has_bindless {
+            layouts[BINDLESS_SET_ID as usize] = *device.bindless_resources().set_layout();
+        }
+
         Ok(layouts)
     }
     fn generate_push_constant_ranges(
@@ -298,7 +362,6 @@ impl PipelineLayout {
         for stage in stages {
             for block in stage
                 .reflection_data
-                .raw_data()
                 .enumerate_push_constant_blocks(None)
                 .unwrap()
             {
@@ -333,13 +396,15 @@ impl PipelineLayout {
     }
 
     /// Get a reference to the pipeline layout's set layouts.
+    #[inline]
     pub fn set_layouts(&self) -> &[DescriptorSetLayout; MAX_DESCRIPTOR_SETS] {
         &self.set_layouts
     }
-
+    #[inline]
     pub fn set_mask(&self) -> u32 {
         self.set_mask
     }
+    #[inline]
     pub fn push_constant_stage_flags(&self) -> vk::ShaderStageFlags {
         self.push_constant_stage_flags
     }
@@ -398,7 +463,7 @@ impl ShaderStage {
 }
 pub struct ShaderProgramBuilder<'entry, 'defines> {
     name: String,
-    stages: HashMap<ShaderStage, (ShaderCode<'entry>, &'defines [&'defines str])>,
+    stages: HashMap<ShaderStage, (ShaderCode<'entry>,  Vec<&'defines str>)>,
 }
 
 // fn shaderc_to_vulkan_stage(kind: shaderc::ShaderKind) -> vk::ShaderStageFlags {
@@ -460,9 +525,9 @@ impl<'entry, 'defines> ShaderProgramBuilder<'entry, 'defines> {
         mut self,
         stage: ShaderStage,
         code: ShaderCode<'entry>,
-        defines: &'defines [&'defines str],
+        defines: &[&'defines str],
     ) -> Self {
-        self.stages.insert(stage, (code, defines));
+        self.stages.insert(stage, (code, defines.to_vec()));
 
         self
     }
@@ -491,8 +556,9 @@ impl<'entry, 'defines> ShaderProgramBuilder<'entry, 'defines> {
                 artifact.get_warning_messages()
             );
         }
+        let data = artifact.as_binary();
 
-        Ok(artifact.as_binary().to_vec())
+        Ok(data.to_vec())
     }
     fn create_vk_module(device: &ash::Device, code: &[u32]) -> VkResult<vk::ShaderModule> {
         let create_info = vk::ShaderModuleCreateInfo::builder().code(code).build();
@@ -524,17 +590,19 @@ impl<'entry, 'defines> ShaderProgramBuilder<'entry, 'defines> {
                     &debug_name,
                     options,
                 )?;
+
                 &data
             }
         };
 
-        let reflection_data = super::ReflectionData::new(spirv)
-            .map_err(|err| ShaderCreateError::ValidationError(debug_name.clone(), err))?;
-
+        
         let module = Self::create_vk_module(device.raw(), spirv).map_err(|error| {
             ShaderCreateError::CompilationError(debug_name.clone(), error.to_string())
         })?;
 
+        let reflection_data = spirv_reflect::ShaderModule::load_u32_data(spirv)
+        .map_err(|err| ShaderCreateError::ValidationError(debug_name.clone(), err.to_string()))?;
+        
         let stage = stage.vulkan_stage();
 
         Ok(CompiledShaderModule {

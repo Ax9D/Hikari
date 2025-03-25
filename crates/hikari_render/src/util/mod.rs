@@ -11,6 +11,11 @@ pub use cache_map::CacheMap;
 pub use perframe::PerFrame;
 pub use temporary_map::TemporaryMap;
 
+
+pub type BuildHasher = hikari_utils::hash::BuildHasher;
+
+pub use hikari_utils::hash::*;
+
 #[inline]
 pub fn for_each_bit_in_range(mask: u32, range: Range<usize>, mut f: impl FnMut(u32)) {
     for i in range {
@@ -24,40 +29,11 @@ pub fn for_each_bit_in_range(mask: u32, range: Range<usize>, mut f: impl FnMut(u
 
 #[inline]
 pub fn for_each_bit(mut mask: u32, mut f: impl FnMut(u32)) {
-    let mut ix = 0;
     while mask != 0 {
-        let value = mask & 1;
-
-        if value == 1 {
-            (f)(ix);
-        }
-        mask >>= 1;
-        ix += 1;
+        let t = mask & mask.wrapping_neg();
+        (f)(mask.trailing_zeros());
+        mask ^= t;
     }
-}
-
-pub type BuildHasher = fxhash::FxBuildHasher;
-
-#[inline]
-pub fn hasher_builder() -> BuildHasher {
-    fxhash::FxBuildHasher::default()
-}
-
-pub type Hasher = fxhash::FxHasher;
-
-#[inline]
-pub fn hasher() -> Hasher {
-    fxhash::FxHasher::default()
-}
-
-use std::hash::Hasher as OtherHasher;
-
-pub fn quick_hash(data: impl std::hash::Hash) -> u64 {
-    let mut state = hasher();
-
-    data.hash(&mut state);
-
-    state.finish()
 }
 
 pub fn n_workgroups(num_elements: u32, n_threads: u32) -> u32 {

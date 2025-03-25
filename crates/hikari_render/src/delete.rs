@@ -1,29 +1,50 @@
-use std::sync::atomic::AtomicUsize;
+use std::{sync::atomic::AtomicUsize};
 
 use ash::vk;
 use gpu_allocator::vulkan::Allocation;
 
+use crate::bindless::BindlessHandle;
+
 pub enum DeleteRequest {
-    VkImage(vk::Image, Allocation),
-    VkImageView(vk::ImageView),
-    VkSampler(vk::Sampler),
-    VkBuffer(vk::Buffer, Allocation),
+    Image(vk::Image, Allocation),
+    ImageView(vk::ImageView),
+    Buffer(vk::Buffer, Allocation),
+    BindlessImage(BindlessHandle<vk::ImageView>),
+    BindlessBuffer(BindlessHandle<vk::Buffer>),
+    Framebuffer(vk::Framebuffer),
+    Renderpass(vk::RenderPass),
+    Swapchain(vk::SwapchainKHR)
 }
 impl DeleteRequest {
     pub fn process(self, device: &crate::Device) -> anyhow::Result<()> {
         match self {
-            DeleteRequest::VkImage(image, allocation) => {
+            DeleteRequest::Image(image, allocation) => {
                 crate::image::delete_image(device, image, allocation)?;
             }
-            DeleteRequest::VkImageView(view) => {
-                crate::image::delete_image_view(device, view);
+            DeleteRequest::ImageView(view) => {
+                crate::image::delete_view(device, view);
             }
-            DeleteRequest::VkSampler(sampler) => {
-                crate::image::delete_sampler(device, sampler);
-            }
-            DeleteRequest::VkBuffer(buffer, allocation) => {
+            DeleteRequest::Buffer(buffer, allocation) => {
                 crate::buffer::delete_buffer(device, buffer, allocation)?;
             }
+            DeleteRequest::BindlessImage(view) => {
+                device.bindless_resources().deallocate_image(device, view);
+            },
+            DeleteRequest::BindlessBuffer(buffer) => {
+                device.bindless_resources().deallocate_buffer(device, buffer);
+            },
+            DeleteRequest::Framebuffer(framebuffer) => {
+                crate::framebuffer::delete(device, framebuffer);
+            },
+            DeleteRequest::Renderpass(renderpass) => {
+                crate::renderpass::delete(device, renderpass);
+            },
+            DeleteRequest::Swapchain(swapchain) => {
+                let extensions = device.extensions();
+                let fn_ptr = extensions.swapchain.as_ref().unwrap();
+                crate::swapchain::delete(fn_ptr, swapchain);
+            },
+
         }
 
         Ok(())
@@ -56,7 +77,7 @@ impl Deleter {
             .expect("Failed to send RequestPacket")
     }
     pub fn request_delete(&self, request: DeleteRequest) {
-        let frame_number = self.frame_number.load(std::sync::atomic::Ordering::Relaxed);
+        let frame_number = self.frame_number.load(std::sync::atomic::Ordering::Acquire);
 
         let packet = RequestPacket {
             request,
@@ -72,15 +93,22 @@ impl Deleter {
         hikari_dev::profile_function!();
         let current_frame = 1 + self
             .frame_number
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        for packet in self.deletion_queue_recv.drain() {
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+
+        let mut enqueue_again = Vec::new();
+
+        for packet in self.deletion_queue_recv.try_iter() {
             // If more than `DELETION_FRAME_DELAY` frames have passed, delete our resource
             if current_frame - packet.frame_number >= DELETION_FRAME_DELAY {
                 packet.request.process(&device)?;
             } else {
                 // Enqueue again to check next frame
-                self.send_packet(packet);
+                enqueue_again.push(packet);
             }
+        }
+
+        for packet in enqueue_again {
+            self.send_packet(packet);
         }
 
         Ok(())

@@ -1,16 +1,21 @@
-use std::sync::Arc;
-
 use ash::vk;
 use gpu_allocator::vulkan::AllocationScheme;
 use gpu_allocator::{vulkan::Allocation, vulkan::AllocationCreateDesc, AllocationError};
 
-pub mod sampled_image;
+mod sampled_image;
+mod sampler;
+mod view;
+mod config;
+mod raw;
 
-pub use sampled_image::ImageConfig;
-pub use sampled_image::SampledImage;
+pub use raw::*;
+pub use sampled_image::*;
+pub use sampler::*;
+pub use view::*;
+pub use config::*;
 
 pub fn create_image(
-    device: &Arc<crate::Device>,
+    device: &crate::Device,
     create_info: &vk::ImageCreateInfo,
     location: gpu_allocator::MemoryLocation,
 ) -> Result<(vk::Image, Allocation), anyhow::Error> {
@@ -41,14 +46,4 @@ pub fn delete_image(
         device.raw().destroy_image(image, None);
     }
     device.free_memory(allocation)
-}
-pub fn delete_image_view(device: &crate::Device, image_view: vk::ImageView) {
-    unsafe {
-        device.raw().destroy_image_view(image_view, None);
-    }
-}
-pub fn delete_sampler(device: &crate::Device, sampler: vk::Sampler) {
-    unsafe {
-        device.raw().destroy_sampler(sampler, None);
-    }
 }

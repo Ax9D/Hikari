@@ -334,9 +334,10 @@ impl TextureMap {
             vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
             1,
             vk::ShaderStageFlags::FRAGMENT,
+            vk::DescriptorBindingFlags::empty()
         );
 
-        let set_layout = device.set_layout_cache().get_layout(&set_layout)?;
+        let set_layout = device.cache().set_layout().get_layout(&set_layout)?;
 
         let set_allocator = DescriptorSetAllocator::new(device, set_layout)?;
 
@@ -350,15 +351,15 @@ impl TextureMap {
         })
     }
     pub fn register_texture_id(&mut self, image: &SampledImage, id: imgui::TextureId) {
-        self.image_to_id.insert(image.image_view(0).unwrap(), id);
+        self.image_to_id.insert(image.shader_resource_view(0).unwrap(), id);
     }
     pub fn get_texture_id(&self, image: &SampledImage) -> Option<imgui::TextureId> {
-        self.image_to_id.get(&image.image_view(0).unwrap()).cloned()
+        self.image_to_id.get(&image.shader_resource_view(0).unwrap()).cloned()
     }
     pub fn get_descriptor_set(&mut self, image: &SampledImage) -> vk::DescriptorSet {
         let set_allocator = &mut self.set_allocator;
         let set_state = &mut self.set_state;
-        let image_view = image.image_view(0).unwrap();
+        let image_view = image.shader_resource_view(0).unwrap();
         let sampler = image.sampler();
         let set = self.image_to_set.entry(image_view).or_insert_with(|| {
             set_state.set_image(0, 0, image_view, sampler);
