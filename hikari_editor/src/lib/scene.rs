@@ -5,6 +5,7 @@ use hikari::{
 use serde::{de::Visitor, ser::SerializeMap, Deserializer, Serialize, Serializer};
 
 pub const SCENE_EXTENSION: &str = "hscene";
+
 pub struct Scene {
     pub world: World,
 }
