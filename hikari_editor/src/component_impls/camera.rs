@@ -42,6 +42,8 @@ impl EditorComponent for Camera {
         Drag::new("exposure")
             .range(0.0, f32::MAX)
             .build(ui, &mut self.exposure);
+
+        ui.checkbox("Is Primary", &mut self.is_primary);
         Ok(())
     }
 }

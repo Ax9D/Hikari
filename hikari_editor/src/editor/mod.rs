@@ -10,9 +10,11 @@ mod font;
 mod icons;
 pub(crate) mod logging;
 pub mod meta;
+pub mod camera;
 mod serialize;
 mod style;
 mod windows;
+mod assets;
 
 use windows::*;
 
@@ -60,11 +62,13 @@ impl Editor {
         component_impls::register_components(&mut editor_components, &mut registry);
 
         let registry = registry.build();
-        game.add_state(registry.clone());
-        game.create_asset::<Scene>();
-        let loader = SceneLoader { registry };
-        game.register_asset_loader::<Scene, SceneLoader>(loader.clone());
-        game.register_asset_saver::<Scene, SceneLoader>(loader);
+        game.add_state(registry);
+        game.add_plugin(hikari::core::load_save::WorldLoaderPlugin);
+        //game.create_asset::<Scene>();
+        // let loader = SceneLoader { registry };
+        // game.register_asset_loader::<Scene, SceneLoader>(loader.clone());
+        // game.register_asset_saver::<Scene, SceneLoader>(loader);
+
 
         let editor = Editor {
             logging: Logging::new(config.log_listener),
@@ -78,6 +82,9 @@ impl Editor {
             project_manager: ProjectManager::default(),
             material_editor: MaterialEditor::default(),
             about: About::default(),
+            save_and_exit: SaveAndExit::default(),
+            editor_settings: EditorSettings::default(),
+            render_settings: RenderSettings::default(),
         };
 
         game.add_state(editor);
@@ -107,6 +114,14 @@ impl Editor {
                     ui.menu("Windows", || {
                         if ui.menu_item("Material Editor") {
                             MaterialEditor::open(self);
+                        }
+                    });
+                    ui.menu("Settings", || {
+                        if ui.menu_item("Render Settings") {
+                            RenderSettings::open(self);
+                        }
+                        if ui.menu_item("Editor Settings") {
+                            EditorSettings::open(self);
                         }
                     });
                     ui.menu("Tools", || {
@@ -141,7 +156,10 @@ impl Editor {
                 self.default_layout(ui);
             });
 
-        self.draw_windows(ui, state).unwrap();
+        let result = self.draw_windows(ui, state);
+        if let Err(err) = result {
+            log::error!("{}", err);
+        }
     }
     pub fn file_menu(&mut self, ui: &hikari::imgui::Ui, state: EngineState) -> anyhow::Result<()> {
         let mut open = false;
@@ -151,6 +169,12 @@ impl Editor {
         ui.menu("File", || {
             open |= ui.menu_item_config("Open").shortcut("Ctrl + O").build();
 
+            ui.text("Auto Save");
+            ui.same_line();
+            {
+            let _width_token = ui.push_item_width(-1.0);
+            ui.checkbox("###Auto Save", &mut self.editor_settings.autosave_enabled);
+            }
             save |= ui
                 .menu_item_config("Save All")
                 .shortcut("Ctrl + S")
@@ -169,14 +193,12 @@ impl Editor {
                 .add_filter("Hikari Project", &["hikari"])
                 .pick_file()
             {
-                self.project_manager.open(project_file, state)?;
-                self.load_state()?;
+                self.load(&project_file, state)?;
             }
         }
 
         if save {
-            self.project_manager.save_all(state)?;
-            self.save_state()?;
+            self.save_all(state)?;
         }
 
         Ok(())
@@ -189,6 +211,7 @@ impl Editor {
         hikari::dev::profile_function!();
         //Update render settings before render, so incase of a resize we don't use freed resources in the imgui pass
         RenderSettings::draw_if_open(ui, self, state)?;
+        EditorSettings::draw_if_open(ui, self, state)?;
 
         //content_browser::draw(ui, self, state).unwrap();
         Viewport::draw_if_open(ui, self, state)?;
@@ -201,27 +224,26 @@ impl Editor {
 
         MaterialEditor::draw_if_open(ui, self, state)?;
 
+
+        SaveAndExit::draw(ui, self, state)?;
+
         if self.show_demo {
             ui.show_demo_window(&mut self.show_demo);
         }
 
         Ok(())
     }
-    fn save_state(&self) -> anyhow::Result<()> {
-        if let Some(project_path) = self.project_manager.current_project_path() {
-            let path = project_path.join("editor.yaml");
-            let file = std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(path)?;
-            let mut serializer = serde_yaml::Serializer::new(file);
-            self.serialize(&mut serializer)?;
-        }
-        Ok(())
+    pub fn load(&mut self, project_file: &std::path::Path, state: EngineState) -> anyhow::Result<()> {
+        self.project_manager.open(project_file, state)?;
+        self.load_state()
+    }
+    pub fn save_all(&mut self, state: EngineState) -> anyhow::Result<()> {
+        self.project_manager.save_all(state)?;
+        self.save_state()
     }
     fn load_state(&mut self) -> anyhow::Result<()> {
         if let Some(project_path) = self.project_manager.current_project_path() {
+            let project_path = project_path.to_path_buf();
             let path = project_path.join("editor.yaml");
 
             if !path.exists() {
@@ -231,8 +253,29 @@ impl Editor {
 
             let file = std::fs::OpenOptions::new().read(true).open(path)?;
             let deserializer = serde_yaml::Deserializer::from_reader(file);
+
             self.deserialize(deserializer)?;
+
+            if let Some(settings) = std::fs::read_to_string(project_path.join("imgui.ini")).ok() {
+                self.save_and_exit.trigger_load_imgui_settings(settings);
+            }
         }
+        Ok(())
+    }
+    fn save_state(&mut self) -> anyhow::Result<()> {
+        if let Some(project_path) = self.project_manager.current_project_path() {
+            let path = project_path.join("editor.yaml");
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(path)?;
+            let mut serializer = serde_yaml::Serializer::new(file);
+            self.serialize(&mut serializer)?;
+            
+            self.save_and_exit.trigger_save_imgui_settings();
+        }
+        
         Ok(())
     }
     pub fn pre_update(
@@ -246,8 +289,14 @@ impl Editor {
         _window: &winit::window::Window,
         context: &mut hikari::imgui::Context,
     ) {
-        self.project_manager.load_imgui_settings(context);
-        self.project_manager.save_imgui_settings(context);
+        SaveAndExit::load_imgui_settings(self, context);
+        SaveAndExit::save_imgui_settings(self, context);
+    }
+    pub fn should_close(&self) -> bool {
+        self.save_and_exit.should_close
+    }
+    pub fn request_close(&mut self) {
+        self.save_and_exit.close_requested = true;
     }
     pub fn handle_exit(&mut self) {
         log::info!("Editor Exiting");

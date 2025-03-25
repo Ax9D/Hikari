@@ -1,6 +1,5 @@
 mod about;
 mod asset_editors;
-mod camera;
 mod content_browser;
 mod debugger;
 mod logging;
@@ -9,10 +8,11 @@ mod project;
 mod properties;
 mod render_settings;
 mod viewport;
+mod save_and_exit;
+mod editor_settings;
 
 pub use about::*;
 pub use asset_editors::*;
-pub use camera::*;
 pub use content_browser::*;
 pub use debugger::*;
 use hikari_editor::EngineState;
@@ -22,6 +22,8 @@ pub use project::*;
 pub use properties::*;
 pub use render_settings::*;
 pub use viewport::*;
+pub use save_and_exit::*;
+pub use editor_settings::*;
 
 use crate::widgets::RenameState;
 
@@ -53,6 +55,9 @@ pub struct Editor {
     pub project_manager: ProjectManager,
     pub about: About,
     pub material_editor: MaterialEditor,
+    pub save_and_exit: SaveAndExit,
+    pub editor_settings: EditorSettings,
+    pub render_settings: RenderSettings,
     pub show_demo: bool,
 }
 impl Editor {

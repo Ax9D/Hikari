@@ -1,8 +1,8 @@
-use crate::editor::meta::EditorOnly;
+
 use crate::imgui;
 use crate::imgui::gizmo::*;
 use hikari::asset::AssetManager;
-use hikari::core::{Entity, Time};
+use hikari::core::{Time};
 use hikari::g3d::{Light, LightKind};
 use hikari::math::*;
 use hikari::{
@@ -14,10 +14,12 @@ use hikari::{
 };
 use hikari_editor::*;
 
-use super::camera::ViewportCamera;
+use crate::editor::camera::ViewportCamera;
 use crate::editor::{icons, Editor, EditorWindow};
 
+#[derive(serde::Serialize, serde::Deserialize)]
 struct GizmoState {
+    #[serde(skip)]
     context: GizmoContext,
     operation: Option<Operation>,
     mode: Mode,
@@ -31,10 +33,10 @@ impl Default for GizmoState {
         }
     }
 }
-#[derive(Default)]
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct Viewport {
     gizmo_state: GizmoState,
-    viewport_camera: ViewportCamera,
 }
 fn gizmo_toolbar(
     ui: &imgui::Ui,
@@ -196,7 +198,7 @@ fn draw_dir_light(ui: &imgui::Ui, world: &mut World, viewport_min: Vec2, viewpor
         ))
     }
 
-    let camera_entity = get_editor_camera(world);
+    let camera_entity = ViewportCamera::get_entity(world);
     if let Some((_, (transform, _))) = world
         .query::<(&Transform, &Light)>()
         .iter()
@@ -227,39 +229,38 @@ fn draw_dir_light(ui: &imgui::Ui, world: &mut World, viewport_min: Vec2, viewpor
         }
     }
 }
-fn get_editor_camera(world: &mut World) -> Entity {
-    let create_camera;
+fn shortcuts(ui: &imgui::Ui, world: &mut World, editor: &mut Editor, _state: EngineState) {
+    use imgui::Key;
+    let current = editor.outliner.selected();
+    if ui.is_window_focused() {
+        // if ui.io().key_ctrl && ui.is_key_pressed_no_repeat(Key::D) {
+        //     let Some(current) = current else {return};
 
-    if let Some((entity, _)) = world.query::<(&EditorOnly, &mut Camera)>().iter().next() {
-        return entity;
-    } else {
-        create_camera = true;
-    }
-
-    if create_camera {
-        let camera_entity = world.create_entity_with((EditorOnly, Camera::default()));
-        return camera_entity;
-    } else {
-        unreachable!()
+        //     let registry = state.get::<Registry>().unwrap();
+        //     editor.outliner.duplicate_entity(world, current, &registry).unwrap();
+        // }
     }
 }
 impl EditorWindow for Viewport {
     fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
         hikari::dev::profile_function!();
 
-        let viewport = &mut editor.viewport;
-        let outliner = &mut editor.outliner;
-
+        
         let mut renderer = state.get_mut::<WorldRenderer>().unwrap();
         let mut world = state.get_mut::<World>().unwrap();
         let shader_lib = state.get_mut::<ShaderLibrary>().unwrap();
         let asset_manager = state.get::<AssetManager>().unwrap();
-
+        
         let dt = state.get::<Time>().unwrap().dt();
         ui.window("Viewport")
             .size([950.0, 200.0], imgui::Condition::FirstUseEver)
             .resizable(true)
             .build(|| {
+                shortcuts(ui, &mut world, editor, state);
+                
+                let viewport = &mut editor.viewport;
+                let outliner = &mut editor.outliner;
+
                 let window_size_float = ui.content_region_avail();
 
                 let window_size = (window_size_float[0], window_size_float[1]);
@@ -269,7 +270,7 @@ impl EditorWindow for Viewport {
                     renderer.set_viewport(window_size.0, window_size.1);
                 }
 
-                let editor_camera = get_editor_camera(&mut world);
+                let editor_camera = ViewportCamera::get_entity(&mut world);
 
                 let viewport_min = Vec2::new(
                     ui.window_pos()[0] + ui.window_content_region_min()[0],
@@ -283,11 +284,13 @@ impl EditorWindow for Viewport {
 
                 if ui.is_window_focused() {
                     hikari::dev::profile_scope!("Camera and Viewport Border");
-                    viewport.viewport_camera.manipulate(
+
+                    let mut query = world.query_one::<(&mut Transform, &mut ViewportCamera)>(editor_camera).unwrap();
+                    let (transform, viewport_camera) = query.get().unwrap();
+
+                    viewport_camera.manipulate(
                         ui,
-                        &mut world
-                            .get_component::<&mut Transform>(editor_camera)
-                            .unwrap(),
+                        transform,
                         dt,
                     );
 
@@ -306,13 +309,14 @@ impl EditorWindow for Viewport {
 
                 {
                     draw_dir_light(ui, &mut world, viewport_min, viewport_max);
-                    let mut editor_camera =
-                        world.get_component::<&mut Camera>(editor_camera).unwrap();
+                    let mut query = world.query_one::<(&mut Camera, &mut ViewportCamera)>(editor_camera).unwrap();
+                    let (editor_camera, viewport_camera) = query.get().unwrap();
+
                     gizmo_toolbar(
                         ui,
                         &mut viewport.gizmo_state,
-                        &mut viewport.viewport_camera,
-                        &mut editor_camera,
+                        viewport_camera,
+                        editor_camera,
                     );
                 }
 

@@ -3,12 +3,13 @@ use std::path::Path;
 use hikari::{
     asset::{AssetManager, Handle, LoadStatus},
     core::{Registry, World},
-    g3d::Camera,
+    g3d::Camera
 };
-use hikari_editor::{project::Project, Scene, SCENE_EXTENSION};
+use hikari_editor::{project::Project};
+use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 
-use crate::{editor::meta::EditorOnly, imgui};
+use crate::{editor::{meta::EditorOnly, assets}, imgui};
 
 use hikari::imgui::*;
 use hikari_editor::*;
@@ -16,12 +17,12 @@ use hikari_editor::*;
 use super::{Editor, EditorWindow};
 
 #[derive(Default)]
-struct SceneCreator {
+struct WorldCreator {
     name: String,
     path: PathBuf,
 }
 
-impl SceneCreator {
+impl WorldCreator {
     pub fn draw(&mut self, ui: &Ui) -> Option<PathBuf> {
         ui.input_text("Name", &mut self.name).build();
         let mut path_string = self.path.display().to_string();
@@ -42,16 +43,16 @@ impl SceneCreator {
         }
 
         let mut valid = true;
-        let mut scene_file = PathBuf::from(&self.name);
-        scene_file.set_extension(SCENE_EXTENSION);
-        let potential_filepath = self.path.join(scene_file);
+        let mut world_file = PathBuf::from(&self.name);
+        world_file.set_extension(hikari::core::load_save::SUPPORTED_WORLD_EXTENSIONS[0]);
+        let potential_filepath = self.path.join(world_file);
         if potential_filepath.exists() {
             let _color_token = ui.push_style_color(StyleColor::Text, [1.0, 0.0, 0.0, 1.0]);
-            ui.text("Scene already exists at that location");
+            ui.text("World already exists at that location");
             valid = false;
         }
 
-        let mut new_scene = None;
+        let mut new_world = None;
 
         ui.disabled(
             !valid || path_string.is_empty() || self.name.is_empty(),
@@ -64,13 +65,13 @@ impl SceneCreator {
                     let name = self.name.clone();
 
                     let mut full_path = path.join(name);
-                    full_path.set_extension(SCENE_EXTENSION);
+                    full_path.set_extension(hikari::core::load_save::SUPPORTED_WORLD_EXTENSIONS[0]);
                     self.path.clear();
                     self.name.clear();
 
                     ui.close_current_popup();
 
-                    new_scene = Some(full_path);
+                    new_world = Some(full_path);
                 }
             },
         );
@@ -81,20 +82,16 @@ impl SceneCreator {
             return None;
         }
 
-        new_scene
+        new_world
     }
-}
-pub enum ImguiSettingsEvent {
-    LoadSettings(String),
-    SaveSettings,
 }
 #[derive(Default)]
 pub struct ProjectManager {
     current: Option<(PathBuf, Project)>,
-    current_scene: Option<Handle<Scene>>,
-    new_scene_scratch: Option<Handle<Scene>>,
-    scene_creator: SceneCreator,
-    imgui_settings_event: Option<ImguiSettingsEvent>,
+    current_world: Option<Handle<World>>,
+    current_world_ix: Option<usize>,
+    new_world_scratch: Option<usize>,
+    world_creator: WorldCreator,
 }
 
 impl ProjectManager {
@@ -113,17 +110,13 @@ impl ProjectManager {
                 let mut new_title = String::from("Hikari Editor - ");
                 new_title.push_str(&project.name);
                 state
-                    .get_mut::<&'static winit::window::Window>()
+                    .get::<winit::window::Window>()
                     .unwrap()
                     .set_title(&new_title);
 
                 self.current = Some((proj_dir.to_owned(), project));
 
-                if let Some(settings) = std::fs::read_to_string(proj_dir.join("imgui.ini")).ok() {
-                    self.imgui_settings_event = Some(ImguiSettingsEvent::LoadSettings(settings));
-                }
-                // let folder = file_clone.parent().expect("Failed to find parent folder");
-                // std::env::set_current_dir(folder).expect("Failed to set cwd");
+                self.load_render_settings(state, proj_dir)?;
             }
             Err(err) => {
                 log::error!("Failed to load project: {}", err);
@@ -132,32 +125,78 @@ impl ProjectManager {
 
         Ok(())
     }
-    pub fn set_scene(&mut self, handle: Handle<Scene>, state: EngineState) -> anyhow::Result<()> {
+    pub fn set_world(&mut self, world_ix: usize, state: EngineState) -> anyhow::Result<()> {
         let registry = state.get::<Registry>().unwrap();
-        let mut world = state.get_mut::<World>().unwrap();
+        let mut game_world = state.get_mut::<World>().unwrap();
         let manager = state.get::<AssetManager>().unwrap();
 
-        manager.request_load(&handle, None, false)?;
-        manager.wait_for_load(&handle);
+        let (_, project) = self.current.as_ref().ok_or(anyhow::anyhow!("No project open!"))?;
+        let world_path = &project.worlds()[world_ix];
 
-        let mut scenes = manager.write_assets::<Scene>().unwrap();
+        let handle = manager.load(world_path, None, false)?;
+        assert!(!handle.is_weak());
+        let status = manager.wait_for_load(&handle);
 
-        let scene = scenes.get_mut(&handle).unwrap();
+        
+        if status != LoadStatus::Loaded {
+            return Err(anyhow::anyhow!("Failed to load World"));
+        }
+        log::info!("Loaded world {:?}", world_path);
+        
+        let mut worlds = manager.write_assets::<World>().unwrap();
 
-        let mut new_world = World::new();
+        let world = worlds.get_mut(&handle).unwrap();
 
-        // for entity_ref in scene.world.entities() {
-        //     for component in entity_ref.component_types() {
-        //         if let Some(dispatch) = components.get(component) {
-        //             dispatch.clone_component(entity_ref.entity(), &scene.world, &mut new_world)?;
-        //         }
-        //     }
-        // }
+        let new_world = world.clone(&registry);
 
-        scene.world.clone_into(&registry, &mut new_world);
+        *game_world = new_world;
 
-        std::mem::swap::<World>(&mut world, &mut new_world);
-        self.current_scene = Some(handle.clone());
+        if let Some(old_world_handle) = self.current_world.replace(handle) {
+            manager.mark_unsaved(&old_world_handle);
+        }
+
+        self.current_world_ix.replace(world_ix);
+        Ok(())
+    }
+    fn load_render_settings(&self, state: EngineState, path: &Path) -> anyhow::Result<()> {
+        let settings_name = Path::new("render_settings.yaml");
+        let settings_path = path.join(settings_name);
+
+        if !settings_path.exists() {
+            return self.save_render_settings(state, path);
+        }
+
+        let file = std::fs::OpenOptions::new().read(true).open(settings_path)?;
+        let deserializer = serde_yaml::Deserializer::from_reader(file);
+        let new_settings = hikari::pbr::Settings::deserialize(deserializer)?;
+
+        let mut gfx = state.get_mut::<hikari::render::Gfx>().unwrap();
+        let mut renderer = state.get_mut::<hikari::pbr::WorldRenderer>().unwrap();
+        let mut shader_library = state.get_mut::<hikari::g3d::ShaderLibrary>().unwrap();
+
+        renderer.update_settings(&mut gfx, &mut shader_library, 
+            |settings| {
+            *settings = new_settings;
+        })?;
+        
+        Ok(())
+    }
+    fn save_render_settings(&self, state: EngineState, path: &Path) -> anyhow::Result<()> {
+        let renderer = state.get::<hikari::pbr::WorldRenderer>().unwrap();
+
+        let settings = renderer.settings();
+        
+        let settings_name = Path::new("render_settings.yaml");
+        let settings_path = path.join(settings_name);
+
+        let file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(settings_path)?;
+        let mut serializer = serde_yaml::Serializer::new(file);
+
+        settings.serialize(&mut serializer)?;
 
         Ok(())
     }
@@ -165,54 +204,27 @@ impl ProjectManager {
         let manager = state.get::<AssetManager>().unwrap();
         let registry = state.get::<Registry>().unwrap();
 
-        let world = state.get::<World>().unwrap();
-
-        if let Some(handle) = &self.current_scene {
-            let mut scenes = manager.write_assets::<Scene>().unwrap();
-            let scene = scenes.get_mut(handle).unwrap();
-            scene.world.clear();
-
-            world.clone_into(&registry, &mut scene.world);
-            // for entity_ref in world.entities() {
-            //     for component in entity_ref.component_types() {
-            //         if let Some(dispatch) = components.get(component) {
-            //             dispatch.clone_component(entity_ref.entity(), &world, &mut scene.world)?;
-            //         }
-            //     }
-            // }
-            drop(scenes);
-            manager.save(handle)?;
-        }
+        let game_world = state.get::<World>().unwrap();
+        
         if let Some((path, project)) = &self.current {
+            if let Some(handle) = &self.current_world {
+                let mut worlds = manager.write_assets::<World>().unwrap();
+                let world = worlds.get_mut(handle).unwrap();
+                world.clear();
+
+                game_world.clone_into(&registry, world);
+
+                manager.mark_unsaved(handle);
+            }
+            
+            assets::save_all(&manager, true)?;
+
             project.save(path)?;
             manager.save_db()?;
-            self.imgui_settings_event = Some(ImguiSettingsEvent::SaveSettings);
+            self.save_render_settings(state, path)?;
             log::info!("Saved Project");
         }
         Ok(())
-    }
-    pub fn load_imgui_settings(&mut self, context: &mut imgui::Context) {
-        if let Some(ImguiSettingsEvent::LoadSettings(settings)) = &self.imgui_settings_event {
-            context.load_ini_settings(&settings);
-
-            self.imgui_settings_event.take();
-        }
-    }
-    pub fn save_imgui_settings(&mut self, context: &mut imgui::Context) {
-        if let Some(ImguiSettingsEvent::SaveSettings) = &self.imgui_settings_event {
-            let mut buffer = String::new();
-
-            context.save_ini_settings(&mut buffer);
-            let (project_path, _) = self.current.as_ref().unwrap();
-
-            let result = std::fs::write(project_path.join("imgui.ini"), buffer);
-
-            if let Err(err) = result {
-                log::error!("Failed to save imgui settings: {}", err);
-            }
-
-            self.imgui_settings_event.take();
-        }
     }
     pub fn is_project_open(&self) -> bool {
         self.current.is_some()
@@ -220,23 +232,26 @@ impl ProjectManager {
     pub fn current_project_path(&self) -> Option<&Path> {
         self.current.as_ref().map(|(path, _)| path.as_path())
     }
-    pub fn current_scene(&self) -> Option<&Handle<Scene>> {
-        self.current_scene.as_ref()
+    pub fn current_world(&self) -> Option<&Handle<World>> {
+        self.current_world.as_ref()
+    }
+    pub fn current_world_ix(&self) -> Option<usize> {
+        self.current_world_ix
     }
 }
 
-fn new_scene() -> Scene {
+fn new_world() -> World {
     let mut world = World::new();
     world.create_entity_with((EditorOnly, Camera::default()));
 
-    Scene { world }
+    world
 }
 
 impl EditorWindow for ProjectManager {
     fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
         let project_manager = &mut editor.project_manager;
 
-        let mut new_scene_sure = false;
+        let mut new_world_sure = false;
         {
             let manager = state.get::<AssetManager>().unwrap();
 
@@ -244,59 +259,55 @@ impl EditorWindow for ProjectManager {
                 .size([300.0, 400.0], imgui::Condition::FirstUseEver)
                 .resizable(true)
                 .build(|| {
+                    let current_world_ix = project_manager.current_world_ix();
                     if let Some((_project_path, project)) = &mut project_manager.current {
-                        if ui.button("New Scene") {
-                            ui.open_popup("Create Scene");
+                        if ui.button("New World") {
+                            ui.open_popup("Create World");
                         }
 
-                        ui.modal_popup_config("Create Scene")
+                        ui.modal_popup_config("Create World")
                         .collapsible(false)
                         .always_auto_resize(true)
                         .build(|| {
-                                if let Some(path) = project_manager.scene_creator.draw(ui) {
-                                    let scene = new_scene();
-                                    project_manager.new_scene_scratch = Some(
-                                        project
-                                            .create_scene(path, scene, &manager)
-                                            .expect("Failed to create scene"),
-                                    );
+                                if let Some(path) = project_manager.world_creator.draw(ui) {
+                                    let (_, world_ix) = project
+                                    .add_world(path, new_world(), &manager)
+                                    .expect("Failed to create world");
+                                    project_manager.new_world_scratch = Some(world_ix);
                                 }
                             });
 
-                        for handle in project.scenes() {
-                            let erased_handle = handle.clone_erased_as_weak();
-                            let db = manager.asset_db().read();
-                            let scene_path = db.handle_to_path(&erased_handle).unwrap();
-                            let scene_name = scene_path.file_stem().unwrap().to_str().unwrap();
+                        for (ix, world_path) in project.worlds().iter().enumerate() {
+                            let world_name = world_path.file_stem().unwrap().to_str().unwrap();
 
-                            if manager.status(&erased_handle) == Some(LoadStatus::Failed) {
-                                continue;
-                            }
-                            let selected = if let Some(current_handle) = &project_manager.current_scene
+                            let selected = if let Some(current_ix) = current_world_ix
                             {
-                                current_handle == handle
+                                current_ix == ix
                             } else {
                                 false
                             };
 
-                            ui.selectable_config(scene_name).selected(selected).build();
+                            ui.selectable_config(world_name)
+                            .selected(selected)
+                            
+                            .build();
 
                             if ui.is_double_click(MouseButton::Left) {
-                                project_manager.new_scene_scratch = Some(handle.clone());
-                                ui.open_popup("Open Scene");
+                                project_manager.new_world_scratch = Some(ix);
+                                ui.open_popup("Open World");
                             }
                         }
 
-                        ui.modal_popup_config("Open Scene")
+                        ui.modal_popup_config("Open World")
                         .resizable(false)
                         .save_settings(false)
                         .collapsible(false)
                         .always_auto_resize(true)
                         .build(|| {
-                            ui.text("You may have unsaved changes. Are you sure you want to open a new scene?");
+                            ui.text("You may have unsaved changes. Are you sure you want to open a new world?");
 
                             if ui.button("Yes") {
-                                new_scene_sure = true;
+                                new_world_sure = true;
                                 ui.close_current_popup();
                             }
                             ui.same_line();
@@ -309,10 +320,11 @@ impl EditorWindow for ProjectManager {
                     }
                 });
         }
-        if new_scene_sure {
-            if let Some(new_scene) = project_manager.new_scene_scratch.take() {
-                project_manager.set_scene(new_scene, state)?;
-                editor.outliner.reset();
+        if new_world_sure {
+            if let Some(new_world) = project_manager.new_world_scratch.take() {
+                project_manager.set_world(new_world, state)?;
+                let mut world = state.get_mut::<World>().unwrap();
+                editor.outliner.on_world_loaded(&mut world);
             }
         }
         Ok(())

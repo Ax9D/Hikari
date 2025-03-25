@@ -1,4 +1,4 @@
-use crate::{components::EditorComponent, *};
+use crate::{components::EditorComponent, *, widgets::AssetSelector};
 use hikari::{
     asset::AssetManager,
     g3d::{MeshRender, MeshSource, Scene},
@@ -17,9 +17,7 @@ impl EditorComponent for MeshRender {
     where
         Self: Sized,
     {
-        MeshRender {
-            source: g3d::MeshSource::None,
-        }
+        MeshRender::default()
     }
 
     fn draw(
@@ -49,8 +47,27 @@ impl EditorComponent for MeshRender {
             {
                 assert!(path.extension().is_some());
                 let path = path.strip_prefix(ass_man.get_asset_dir())?;
-                let scene = ass_man.load::<Scene>(path, None, false)?;
+                let scene = ass_man.load::<Scene>(path, None, true)?;
                 self.source = MeshSource::Scene(scene, 0);
+            }
+        }
+
+        if let MeshSource::Scene(scene, ix) = &self.source {
+            let mut scenes = ass_man.write_assets::<Scene>().unwrap();
+            let Some(scene) = scenes.get_mut(scene) else {return Ok(())};
+            let meshes = &mut scene.meshes;
+            let mesh = &mut meshes[*ix];
+
+            for (ix, submesh) in mesh.sub_meshes.iter_mut().enumerate() {
+                let mut material = Some(submesh.material.clone());
+                let changed = AssetSelector::new(ui, &format!("MaterialSlot{}", ix), g3d::SUPPORTED_MATERIAL_EXTENSIONS)
+                .build(&mut material, &ass_man);
+
+                if changed {
+                    if let Some(material) = material {
+                        submesh.material = material;
+                    }
+                }
             }
         }
 

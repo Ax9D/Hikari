@@ -1,7 +1,14 @@
+use hikari::core::{World, Entity};
+use hikari::g3d::Camera;
 use hikari::math::{Quat, Transform, Vec2, Vec3};
 
 use hikari::imgui::*;
 
+use super::meta::EditorOnly;
+
+#[derive(Copy, Clone, serde::Serialize, serde::Deserialize, type_uuid::TypeUuid)]
+#[uuid = "a7398c5f-9c93-4d25-81d0-46d96f427117"]
+#[serde(default)]
 pub struct ViewportCamera {
     rotation: Vec2,
     pub speed: f32,
@@ -19,6 +26,23 @@ impl Default for ViewportCamera {
 }
 
 impl ViewportCamera {
+    pub fn get_entity(world: &mut World) -> Entity {
+        let create_camera;
+
+        if let Some((entity, _)) = world.query::<(&EditorOnly, &mut Camera, &mut ViewportCamera)>().iter().next() {
+            return entity;
+        } else {
+            create_camera = true;
+        }
+    
+        if create_camera {
+            let camera_entity = world.create_entity_with((EditorOnly, Camera::default(), ViewportCamera::default()));
+            return camera_entity;
+        } else {
+            unreachable!()
+        }
+    } 
+
     pub fn manipulate(&mut self, ui: &Ui, transform: &mut Transform, dt: f32) {
         hikari::dev::profile_function!();
 

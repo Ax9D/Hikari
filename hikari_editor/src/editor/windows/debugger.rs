@@ -51,7 +51,8 @@ fn human_bytes(size: u64) -> String {
     [&result, SUFFIX[base.floor() as usize]].join(" ")
 }
 fn draw_asset_db(ui: &Ui, record: &hikari::asset::Record, asset_db: &AssetDB) {
-    let unref = asset_db.uuid_to_handle(&record.uuid).is_none();
+    let handle = asset_db.uuid_to_handle(&record.uuid);
+    let unref = handle.is_none();
 
     ui.disabled(unref, || {
         ui.table_next_column();
@@ -59,6 +60,11 @@ fn draw_asset_db(ui: &Ui, record: &hikari::asset::Record, asset_db: &AssetDB) {
 
         ui.table_next_column();
         ui.text(record.uuid.to_string());
+
+        ui.table_next_column();
+        if let Some(handle) = handle {
+            ui.text(format!("Strong: {} Weak: {}", handle.strong_count(), handle.weak_count()));
+        }
     });
 }
 
@@ -88,6 +94,18 @@ impl EditorWindow for Debugger {
                             if let Some(_token) = ui.tree_node(&name) {
                                 ui.text(format!("VkImage: {:?}", image.image()));
                                 ui.text(format!("Config: {:#?}", image.config()));
+                                let Some(_token) = ui.tree_node("Image Views")  else {continue};
+
+                                if let Some(_token) = ui.tree_node("SRVs")  {
+                                    for mip_level in 0..image.config().mip_levels {
+                                        ui.text(format!("{:?}", image.shader_resource_view(mip_level).unwrap()))
+                                    }
+                                }
+                                if let Some(_token) = ui.tree_node("RTVs")  {
+                                    image.render_target_view().map(|view| {
+                                        ui.text(format!("{:?}", view));
+                                    });
+                                }
                             }
                         }
                     }
@@ -149,7 +167,12 @@ impl EditorWindow for Debugger {
                                 },
                                 TableColumnSetup {
                                     name: "UUID",
-                                    init_width_or_weight: 50.0,
+                                    init_width_or_weight: 30.0,
+                                    ..Default::default()
+                                },
+                                TableColumnSetup {
+                                    name: "RefCount",
+                                    init_width_or_weight: 20.0,
                                     ..Default::default()
                                 },
                             ],

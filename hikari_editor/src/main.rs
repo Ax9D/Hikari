@@ -73,7 +73,7 @@ fn prepare_graph(
 impl Plugin for EditorPlugin {
     fn build(self, game: &mut Game) {
         let imgui = imgui::Context::create();
-        let mut backend = imgui_support::Backend::new(game.window(), imgui)
+        let mut backend = imgui_support::Backend::new(&mut game.window(), imgui)
             .expect("Failed to create imgui context");
         let hidpi_factor = backend.hidpi_factor() as f32;
         Editor::init(
@@ -105,24 +105,20 @@ impl Plugin for EditorPlugin {
         let graph = prepare_graph(gfx.as_mut(), &backend, renderer);
         drop(gfx);
 
-        let static_window: &'static winit::window::Window =
-            unsafe { std::mem::transmute(game.window()) };
-
         game.add_state(backend);
         game.add_state(graph);
-        game.add_state(static_window);
 
         let update_task = unsafe {
             Task::with_raw_function(
                 "EditorUpdate",
                 Function::from_raw(Box::new(|state| {
-                    let window = *state.get::<&'static winit::window::Window>().unwrap();
+                    let window = state.get::<winit::window::Window>().unwrap();
                     let mut imgui = state.get_mut::<imgui_support::Backend>().expect("");
                     let mut editor = state.get_mut::<Editor>().unwrap();
 
                     editor.pre_update(&window, imgui.context());
 
-                    imgui.new_frame_shared(window, |ui| {
+                    imgui.new_frame_shared(&window, |ui| {
                         editor.update(ui, state);
                     });
 
@@ -137,7 +133,7 @@ impl Plugin for EditorPlugin {
             POST_RENDER,
             Task::new(
                 "EditorRender",
-                |gfx: &Gfx, graph: &mut EditorGraph, window: &&'static winit::window::Window| {
+                |gfx: &Gfx, graph: &mut EditorGraph, window: &winit::window::Window| {
                     hikari::dev::profile_scope!("ImGui Render");
                     let window_size = window.inner_size();
                     if window_size.width == 0 || window_size.height == 0 {
@@ -169,12 +165,22 @@ impl Plugin for EditorPlugin {
         //         asset_manager.save_db().expect("Failed to save Asset DB");
         //     }));
         // }));
-
+        game.create_exit_stage("EDITOR_EXIT");
+        game.add_exit_task("EDITOR_EXIT", Task::new("EditorGraphExit", |graph: &mut EditorGraph| {
+            graph.prepare_exit();
+        }));
+        
         game.add_platform_event_hook(|state, window, event, control| {
             state
                 .get_mut::<imgui_support::Backend>()
                 .unwrap()
                 .handle_event(window, event);
+
+            let mut editor = state.get_mut::<Editor>().unwrap();
+
+            if editor.should_close() {
+                *control = ControlFlow::Exit;
+            }
 
             match event {
                 Event::WindowEvent { event, .. } => match event {
@@ -188,15 +194,10 @@ impl Plugin for EditorPlugin {
                         }
                     }
                     WindowEvent::CloseRequested => {
-                        state.get_mut::<Editor>().unwrap().handle_exit();
-
-                        *control = ControlFlow::Exit;
+                        editor.request_close();
                     }
                     _ => {}
                 },
-                Event::LoopDestroyed => {
-                    state.get_mut::<EditorGraph>().unwrap().prepare_exit();
-                }
                 _ => {}
             }
         });
@@ -248,6 +249,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     game.add_plugin(PBRPlugin {
         width: 1920,
         height: 1080,
+        settings: pbr::Settings::default()
     });
 
     game.add_plugin(EditorPlugin { log_listener });

@@ -46,12 +46,22 @@ const ROTATE_Z_ID: u32 = 15;
 const ROTATE_SCREEN_ID: u32 = 16;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    //serde(default)
+)]
 pub enum Operation {
     Translate,
     Rotate,
     Scale,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    //serde(default)
+)]
 pub enum Direction {
     X,
     Y,
@@ -59,6 +69,10 @@ pub enum Direction {
     Screen,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+)]
 pub enum Mode {
     Local,
     World,

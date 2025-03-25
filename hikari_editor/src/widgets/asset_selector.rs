@@ -170,7 +170,7 @@ impl<'ui, L: AsRef<str>, const N: usize> AssetSelector<'ui, L, N> {
                 let existing_handle = asset_db_read.path_to_handle(path);
 
                 let handle = if let Some(existing_handle) = existing_handle {
-                    existing_handle.clone_strong().into_typed::<T>()
+                    existing_handle.clone().into_typed::<T>()
                 } else {
                     drop(asset_db_read);
                     asset_manager.load(path, None, false).ok()

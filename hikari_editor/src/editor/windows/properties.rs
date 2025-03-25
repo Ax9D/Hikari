@@ -2,7 +2,7 @@ use std::any::TypeId;
 
 use crate::{
     components::{ComponentDispatch, EditorComponents},
-    editor::meta::{EditorInfo, EditorOnly},
+    editor::meta::{EditorOnly, EditorOutlinerInfo},
     imgui,
 };
 use hikari::core::*;
@@ -102,7 +102,7 @@ fn draw_component(
 }
 impl EditorWindow for Properties {
     fn draw(ui: &imgui::Ui, editor: &mut Editor, state: EngineState) -> anyhow::Result<()> {
-        let filtered_types = [TypeId::of::<EditorInfo>(), TypeId::of::<EditorOnly>()];
+        let filtered_types = [TypeId::of::<EditorOnly>(), TypeId::of::<EditorOutlinerInfo>()];
 
         let result = ui
             .window("Properties")

@@ -15,8 +15,11 @@ once_cell = "1"
 parking_lot = "0.12"
 fxhash = "0.2"
 
+serde = {version = "1", features = ["derive"], optional = true}
+
 hikari_math = {path = "../hikari_math", features = ["mint"]}
 hikari_dev = {path = "../hikari_dev"}
 [features]
 default = []
 backend = ["imgui-rs-vulkan-renderer", "imgui-winit-support"]
+serde = ["dep:serde"]
