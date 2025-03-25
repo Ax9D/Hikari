@@ -6,6 +6,7 @@ mod manager;
 mod pool;
 mod record;
 mod save;
+mod status;
 
 #[cfg(feature = "serialize")]
 mod serialize;
@@ -19,6 +20,9 @@ pub use pool::*;
 pub use save::*;
 
 pub use record::*;
+
+pub use hikari_handle::*;
+pub use status::*;
 
 #[cfg(feature = "serialize")]
 pub use serialize::*;

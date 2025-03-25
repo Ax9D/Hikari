@@ -1,6 +1,6 @@
-use std::{any::Any, io::Write};
+use std::{any::Any, io::Write, collections::HashSet};
 
-use crate::Asset;
+use crate::{Asset, ErasedHandle};
 
 pub struct SaveContext<'a> {
     asset: &'a dyn Any,
@@ -38,4 +38,23 @@ impl<'a> SaveContext<'a> {
 pub trait Saver: Send + Sync + 'static {
     fn extensions(&self) -> &[&str];
     fn save(&self, context: &mut SaveContext, writer: &mut dyn Write) -> anyhow::Result<()>;
+}
+
+#[derive(Default)]
+pub struct Unsaved {
+    handles: HashSet<ErasedHandle>
+}
+
+impl Unsaved {
+    pub fn add_unsaved(&mut self, handle: ErasedHandle) {
+        assert!(handle.is_internal());
+        self.handles.insert(handle);
+    }
+    pub fn contains(&self, handle: &ErasedHandle) -> bool {
+        self.handles.contains(handle)
+    }
+    pub fn save(&mut self, handle: &ErasedHandle) -> bool {
+        assert!(handle.is_internal());
+        self.handles.remove(handle)
+    } 
 }

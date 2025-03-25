@@ -1,10 +1,5 @@
-mod assetdb;
-mod handle;
-mod helpers;
-mod record;
+mod serde;
+mod rkyv;
 
-pub use helpers::AnySerde;
-
-pub use assetdb::*;
-pub use handle::*;
-pub use record::*;
+pub use self::serde::*;
+pub use self::rkyv::*;

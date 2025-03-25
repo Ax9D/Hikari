@@ -1,6 +1,4 @@
 use std::marker::PhantomData;
-
-use parking_lot::RwLockUpgradableReadGuard;
 use serde::{
     de::{self, Visitor},
     ser::SerializeStruct,
@@ -99,33 +97,16 @@ impl<'de, T: Asset> Visitor<'de> for HandleVisitor<T> {
         }
 
         let uuid = uuid.ok_or_else(|| de::Error::missing_field("uuid"))?;
-        let path = path.ok_or_else(|| de::Error::missing_field("path"))?;
-
         let asset_manager = crate::manager::get_asset_manager();
 
         let handle = if self.lazy {
-            asset_manager.load_lazy(&path, None)
+            asset_manager.load_lazy(uuid, None)
         } else {
-            asset_manager.load(&path, None, false)
+            asset_manager.load(uuid, None, false)
         };
 
         let handle =
             handle.map_err(|err| de::Error::custom(&format!("Failed to load asset: {}", err)))?;
-
-        let asset_db = asset_manager.asset_db().upgradable_read();
-        let loader_uuid = asset_db
-            .handle_to_uuid(&handle.clone_erased_as_weak())
-            .unwrap()
-            .clone();
-
-        //assert!(&uuid == loader_uuid, "{}", path.display());
-
-        if uuid != loader_uuid {
-            println!("{:?}", (uuid, loader_uuid));
-            log::warn!("Inconsistent UUIDs detected for {:?}. This can happen when newly created asset metadata is not saved", path);
-            let mut asset_db = RwLockUpgradableReadGuard::upgrade(asset_db);
-            asset_db.fix_uuid(&loader_uuid, uuid.clone());
-        }
 
         Ok(handle)
     }
@@ -137,6 +118,7 @@ pub struct LazyHandle<T> {
 
 impl<T: Asset> From<Handle<T>> for LazyHandle<T> {
     fn from(inner: Handle<T>) -> Self {
+        assert!(inner.is_weak());
         Self { inner }
     }
 }

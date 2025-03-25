@@ -1,6 +1,6 @@
-use std::any::Any;
+use std::any::{Any, TypeId};
 
-use crate::{Asset, Handle, HandleAllocator};
+use crate::{Asset, ErasedHandle, Handle, HandleAllocator, RefMessage};
 use parking_lot::{
     MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
 };
@@ -11,14 +11,15 @@ pub type PoolMut<'a, T> = MappedRwLockWriteGuard<'a, AssetPool<T>>;
 pub struct AssetPool<T> {
     inner: Vec<Option<T>>,
     handle_allocator: HandleAllocator,
+    ref_count_recv: flume::Receiver<RefMessage>,
 }
 impl<T: Asset> AssetPool<T> {
     pub fn new() -> Self {
-        //TODO: Implement Reference Counting
-        let (sender, _recv) = flume::unbounded();
+        let (sender, recv) = flume::unbounded();
         Self {
             inner: Vec::new(),
             handle_allocator: HandleAllocator::new(sender),
+            ref_count_recv: recv
         }
     }
     fn ensure_length(&mut self, ix: usize) {
@@ -40,24 +41,63 @@ impl<T: Asset> AssetPool<T> {
 
         handle
     }
-    #[allow(unused)]
-    pub(crate) fn remove(&mut self, handle: Handle<T>) -> Option<T> {
-        let removed = self.inner[handle.index()].take();
-        self.handle_allocator.deallocate(handle);
+    pub fn garbage_collect(&mut self, mut dealloc_cbk: impl FnMut(usize)) {
+        for message in self.ref_count_recv.try_iter() {
+            match message {
+                RefMessage::Unload(index) => {
+                    self.inner[index].take();
 
-        removed
+                    log::debug!("Unload: {}[{}]", std::any::type_name::<T>(), index);
+                },
+                RefMessage::Deallocate(index) => {
+                    self.handle_allocator().deallocate_index(index);
+                    assert!(self.inner[index].is_none());
+                    (dealloc_cbk)(index);
+
+                    log::debug!("Deallocate handle {}[{}]", std::any::type_name::<T>(), index);
+                },
+            }
+        }
     }
-    pub fn get(&self, handle: &Handle<T>) -> Option<&T> {
-        match self.inner.get(handle.index()) {
+    pub(crate) fn get_by_index(&self, index: usize) -> Option<&T> {
+        match self.inner.get(index) {
             Some(asset) => asset.as_ref(),
             None => None,
         }
     }
-    pub fn get_mut(&mut self, handle: &Handle<T>) -> Option<&mut T> {
-        match self.inner.get_mut(handle.index()) {
+    pub(crate) fn get_mut_by_index(&mut self, index: usize) -> Option<&mut T> {
+        match self.inner.get_mut(index) {
             Some(asset) => asset.as_mut(),
             None => None,
         }
+    }
+    pub fn get(&self, handle: &Handle<T>) -> Option<&T> {
+        self.get_by_index(handle.index())
+    }
+    pub fn get_mut(&mut self, handle: &Handle<T>) -> Option<&mut T> {
+        self.get_mut_by_index(handle.index())
+    }
+    /// Takes the asset from the pool
+    /// Returns `None` if the asset is either not loaded or if there is more than 1 strong reference to asset 
+    pub fn take(&mut self, handle: &Handle<T>) -> Option<T> {
+        match self.inner.get_mut(handle.index()) {
+            Some(asset) => {
+                if handle.strong_count() == 1 {
+                    asset.take()
+                } else {
+                    None
+                }
+            },
+            None => None
+        }
+    }
+    pub fn get_erased(&self, handle: &ErasedHandle) -> Option<&T> {
+        assert!(TypeId::of::<T>() == handle.type_id_asset());
+        self.get_by_index(handle.index())
+    }
+    pub fn get_mut_erased(&mut self, handle: &ErasedHandle) -> Option<&mut T> {
+        assert!(TypeId::of::<T>() == handle.type_id_asset());
+        self.get_mut_by_index(handle.index())
     }
 }
 
