@@ -1,0 +1,15 @@
+[package]
+name = "hikari_runtime"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hikari = {path = "../", features = ["serde"]}
+log = {version = "0.4"}
+anyhow = "1"
+
+[features]
+default = []
+enable_profiling = ["hikari/profiling_tracy"]
