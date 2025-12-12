@@ -21,15 +21,14 @@ thiserror = "1"
 log = { version = "0.4"}
 anyhow = "1.0"
 
-ash = "0.37"
-ash-window = "0.12"
-raw-window-handle = "0.5"
-winit = {version = "0.27", features = ["x11"] }
-gpu-allocator = "0.22"
-shaderc = "0.8"
-# spirv-reflect = {git = "https://github.com/Ax9D/spirv-reflect-rs", branch = "patch-1"}
-spirv-reflect = {path = "../../../spirv-reflect-rs"}
-vk-sync-fork = { version = "0.4"}
+ash = "0.38"
+ash-window = "0.13"
+winit = {version = "0.30"}
+gpu-allocator = "0.28"
+shaderc = {version = "0.10" }
+spirv-reflect = {git = "https://github.com/Ax9D/spirv-reflect-rs", branch = "patch-1"}
+# spirv-reflect = {path = "../../../spirv-reflect-rs"}
+vk-sync-fork = { version = "0.5"}
 const-cstr = "0.3.0"
 nvidia-aftermath-rs = {version = "0.0.2", optional = true }
 renderdoc = { version= "0.10", optional = true }

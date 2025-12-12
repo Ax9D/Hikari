@@ -14,7 +14,7 @@ pub fn image_memory_barrier(
     src_stage: vk::PipelineStageFlags,
     dst_stage: vk::PipelineStageFlags,
 ) {
-    let barrier = [*vk::ImageMemoryBarrier::builder()
+    let barrier = [vk::ImageMemoryBarrier::default()
         .src_access_mask(src_access)
         .dst_access_mask(dst_access)
         .old_layout(initial_layout)
@@ -465,5 +465,15 @@ pub fn get_access_info(access_type: AccessType) -> AccessInfo {
             access_mask: vk::AccessFlags::TRANSFER_WRITE,
             image_layout: vk::ImageLayout::UNDEFINED,
         },
+        AccessType::MeshShaderReadUniformBuffer => todo!(),
+        AccessType::MeshShaderReadSampledImageOrUniformTexelBuffer => todo!(),
+        AccessType::MeshShaderReadOther => todo!(),
+        AccessType::TaskShaderReadUniformBuffer => todo!(),
+        AccessType::TaskShaderReadSampledImageOrUniformTexelBuffer => todo!(),
+        AccessType::TaskShaderReadOther => todo!(),
+        AccessType::DepthStencilAttachmentReadWrite => todo!(),
+        AccessType::ComputeShaderReadWrite => todo!(),
+        AccessType::MeshShaderWrite => todo!(),
+        AccessType::TaskShaderWrite => todo!(),
     }
 }

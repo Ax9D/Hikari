@@ -16,12 +16,12 @@ pub fn create_view(device: &crate::Device, image: vk::Image, image_config: &Imag
         let base_array_layer = desc.layer_range.start;
         let layer_count = desc.layer_range.clone().count() as u32;
 
-        let create_info = vk::ImageViewCreateInfo::builder()
+        let create_info = vk::ImageViewCreateInfo::default()
         .image(image)
         .format(image_config.format)
         .view_type(desc.view_type)
         .subresource_range(
-            *vk::ImageSubresourceRange::builder()
+            vk::ImageSubresourceRange::default()
                 .aspect_mask(desc.aspect)
                 .base_mip_level(base_mip_level)
                 .level_count(level_count)

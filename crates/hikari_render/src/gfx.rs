@@ -12,14 +12,14 @@ macro_rules! rawToStr {
     };
 }
 
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, c_char};
 
-use ash::extensions::ext::DebugUtils;
+use ash::ext::debug_utils;
 use ash::prelude::VkResult;
 use ash::{vk, Entry};
 use parking_lot::Mutex;
 
-use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
 
 use crate::swapchain::Swapchain;
@@ -107,12 +107,12 @@ pub struct Gfx {
     swapchain: Option<Arc<Mutex<Swapchain>>>, //
 }
 impl Gfx {
-    fn get_extensions(window: Option<&Window>, debug: bool) -> Vec<*const i8> {
+    fn get_extensions(window: Option<&Window>, debug: bool) -> Vec<*const c_char> {
         let mut extensions = Vec::new();
 
         if let Some(window) = window {
             let window_extensions =
-                ash_window::enumerate_required_extensions(window.raw_display_handle()).unwrap();
+                ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw()).unwrap();
 
             for extension in window_extensions {
                 extensions.push(unsafe { CStr::from_ptr(*extension) });
@@ -120,12 +120,12 @@ impl Gfx {
         }
 
         if debug {
-            extensions.push(DebugUtils::name());
+            extensions.push(ash::ext::debug_utils::NAME);
         }
 
         log::debug!("Instance extensions: \n {:?}", extensions);
 
-        extensions.iter().map(|x| x.as_ptr()).collect()
+        extensions.iter().map(|&x| x.as_ptr() as *const c_char).collect()
     }
     fn create_instance(
         entry: &Entry,
@@ -139,7 +139,7 @@ impl Gfx {
             let engine_minor_version = env!("CARGO_PKG_VERSION_MINOR").parse().unwrap();
             let engine_patch_version = env!("CARGO_PKG_VERSION_PATCH").parse().unwrap();
 
-            let app_info = vk::ApplicationInfo::builder()
+            let app_info = vk::ApplicationInfo::default()
                 .api_version(vk::make_api_version(0, 1, 2, 0))
                 .application_name(&app_name)
                 .engine_name(&app_name)
@@ -157,7 +157,7 @@ impl Gfx {
 
             let extension_names = Self::get_extensions(window, debug);
 
-            let create_info = vk::InstanceCreateInfo::builder()
+            let create_info = vk::InstanceCreateInfo::default()
                 .application_info(&app_info)
                 .enabled_extension_names(&extension_names);
 
@@ -173,11 +173,11 @@ impl Gfx {
     ) -> VkResult<vk::DebugUtilsMessengerEXT> {
         use vk::DebugUtilsMessageSeverityFlagsEXT as severity;
         use vk::DebugUtilsMessageTypeFlagsEXT as mtype;
-        let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
+        let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
             .message_severity(severity::INFO | severity::ERROR | severity::WARNING)
             .message_type(mtype::GENERAL | mtype::PERFORMANCE | mtype::VALIDATION)
             .pfn_user_callback(callback);
-        let debug_utils_loader = DebugUtils::new(entry, instance);
+        let debug_utils_loader = debug_utils::Instance::new(entry, instance);
 
         unsafe { debug_utils_loader.create_debug_utils_messenger(&debug_info, None) }
     }
@@ -190,8 +190,8 @@ impl Gfx {
             ash_window::create_surface(
                 entry,
                 instance,
-                window.raw_display_handle(),
-                window.raw_window_handle(),
+                window.display_handle().unwrap().as_raw(),
+                window.window_handle().unwrap().as_raw(),
                 None,
             )
         }
@@ -200,8 +200,8 @@ impl Gfx {
         let entry = unsafe { Entry::load() }?;
 
         log::debug!("Available instance extension properties: ");
-        entry
-            .enumerate_instance_extension_properties(None)?
+        unsafe {entry
+            .enumerate_instance_extension_properties(None)? }
             .iter()
             .for_each(|prop| {
                 log::debug!("{:?}", unsafe {

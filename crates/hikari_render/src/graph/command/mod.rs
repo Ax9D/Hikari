@@ -240,7 +240,7 @@ impl<'a> CommandBuffer<'a> {
     #[inline]
     pub fn begin(&self) -> VkResult<()> {
         hikari_dev::profile_function!();
-        let begin_info = vk::CommandBufferBeginInfo::builder()
+        let begin_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         unsafe {
@@ -383,7 +383,7 @@ impl<'a> CommandBuffer<'a> {
             },
         ) = vk_sync_fork::get_image_memory_barrier(&barrier);
 
-        let barrier = [*vk::ImageMemoryBarrier2KHR::builder()
+        let barrier = [vk::ImageMemoryBarrier2KHR::default()
             .image(image)
             .subresource_range(range)
             .src_access_mask(barrier::to_sync2_access_flags(src_access_mask))
@@ -393,7 +393,7 @@ impl<'a> CommandBuffer<'a> {
             .old_layout(old_layout)
             .new_layout(new_layout)];
 
-        let dependency_info = vk::DependencyInfoKHR::builder()
+        let dependency_info = vk::DependencyInfoKHR::default()
             .image_memory_barriers(&barrier)
             .dependency_flags(vk::DependencyFlags::BY_REGION);
 
@@ -436,12 +436,12 @@ impl<'a> CommandBuffer<'a> {
         name: impl AsRef<str>,
         color: hikari_math::Vec4,
     ) {
-        if let Some(debug_utils) = &self.device.instance_extensions().debug_utils {
+        if let Some(debug_utils) = &self.device.extensions().debug_utils {
             let name = name.as_ref();
             let name_cstring =
                 std::ffi::CString::new(name).expect("Debug Label is not a valid CString");
 
-            let label = vk::DebugUtilsLabelEXT::builder()
+            let label = vk::DebugUtilsLabelEXT::default()
                 .label_name(&name_cstring)
                 .color(color.to_array());
 
@@ -451,7 +451,7 @@ impl<'a> CommandBuffer<'a> {
         }
     }
     pub(crate) fn end_debug_region<'cmd>(&'cmd mut self) {
-        if let Some(debug_utils) = &self.device.instance_extensions().debug_utils {
+        if let Some(debug_utils) = &self.device.extensions().debug_utils {
             unsafe {
                 debug_utils.cmd_end_debug_utils_label(self.cmd);
             }
@@ -544,10 +544,9 @@ impl PipelineLookup {
         shader: &Arc<crate::Shader>,
     ) -> VkResult<vk::Pipeline> {
         let pipeline = self.compute_pipelines.get(shader, |shader| unsafe {
-            let create_info = vk::ComputePipelineCreateInfo::builder()
+            let create_info = vk::ComputePipelineCreateInfo::default()
                 .stage(shader.vk_stages()[0])
-                .layout(shader.pipeline_layout().raw())
-                .build();
+                .layout(shader.pipeline_layout().raw());
             unsafe {
                 let pipelines = self
                     .device

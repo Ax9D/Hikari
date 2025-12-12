@@ -216,7 +216,7 @@ impl BindlessResources {
         self.update_buffer(device, binding, handle.index(), buffer, buffer_size_bytes, desc_type);
     }
     fn update_buffer(&self, device: &crate::Device, binding: u32, index: usize, buffer: vk::Buffer, buffer_size_bytes: u64, desc_type: vk::DescriptorType) {
-        let buffer_info = [*vk::DescriptorBufferInfo::builder()
+        let buffer_info = [vk::DescriptorBufferInfo::default()
         .buffer(buffer)
         .offset(0)
         .range(buffer_size_bytes)
@@ -224,7 +224,7 @@ impl BindlessResources {
 
         let set = self.set.lock();
 
-        let descriptor_writes = [*vk::WriteDescriptorSet::builder()
+        let descriptor_writes = [vk::WriteDescriptorSet::default()
         .dst_set(*set)
         .buffer_info(&buffer_info)
         .dst_binding(binding)
@@ -236,7 +236,7 @@ impl BindlessResources {
         }
     }
     fn update_image_view(&self, device: &crate::Device, binding: u32, index: usize, image_view: vk::ImageView, sampler: vk::Sampler, layout: vk::ImageLayout, desc_type: vk::DescriptorType) {
-        let image_info = [*vk::DescriptorImageInfo::builder()
+        let image_info = [vk::DescriptorImageInfo::default()
         .image_view(image_view)
         .sampler(sampler)
         .image_layout(layout)
@@ -244,7 +244,7 @@ impl BindlessResources {
 
         let set = self.set.lock();
 
-        let descriptor_writes = [*vk::WriteDescriptorSet::builder()
+        let descriptor_writes = [vk::WriteDescriptorSet::default()
         .dst_set(*set)
         .image_info(&image_info)
         .dst_binding(binding)

@@ -262,7 +262,7 @@ impl DescriptorSetLayoutCache {
         for binding in 0..MAX_BINDINGS_PER_SET {
             if let Some((desc_type, count, stage_flags, binding_flags)) = layout_builder.binding(binding as u32) {
                 bindings.push(
-                    *vk::DescriptorSetLayoutBinding::builder()
+                    vk::DescriptorSetLayoutBinding::default()
                         .binding(binding as u32)
                         .stage_flags(stage_flags)
                         .descriptor_type(desc_type)
@@ -275,10 +275,10 @@ impl DescriptorSetLayoutCache {
             }
         }
 
-        let mut binding_flags = *vk::DescriptorSetLayoutBindingFlagsCreateInfo::builder()
+        let mut binding_flags = vk::DescriptorSetLayoutBindingFlagsCreateInfo::default()
         .binding_flags(&binding_flags_vec);
 
-        let create_info = vk::DescriptorSetLayoutCreateInfo::builder()
+        let create_info = vk::DescriptorSetLayoutCreateInfo::default()
             .bindings(&bindings)
             .flags(layout_builder.create_flags)
             .push_next(&mut binding_flags);
@@ -482,7 +482,7 @@ impl RawDescriptorSetAllocator {
         pool_sizes_map
             .iter()
             .map(|(ty, n)| {
-                *DescriptorPoolSize::builder()
+                DescriptorPoolSize::default()
                     .ty(*ty)
                     .descriptor_count((count_per_binding * (*n)) as u32)
             })
@@ -495,7 +495,7 @@ impl RawDescriptorSetAllocator {
             pool_create_flags |= vk::DescriptorPoolCreateFlags::UPDATE_AFTER_BIND;
         }
 
-        let create_info = vk::DescriptorPoolCreateInfo::builder()
+        let create_info = vk::DescriptorPoolCreateInfo::default()
             .max_sets(self.max_sets)
             .pool_sizes(&self.pool_sizes)
             .flags(pool_create_flags);
@@ -509,7 +509,7 @@ impl RawDescriptorSetAllocator {
         hikari_dev::profile_function!();
         unsafe {
             let layouts = [layout.raw()];
-            let create_info = vk::DescriptorSetAllocateInfo::builder()
+            let create_info = vk::DescriptorSetAllocateInfo::default()
                 .descriptor_pool(self.current_pool())
                 .set_layouts(&layouts);
 
@@ -565,7 +565,7 @@ impl RawDescriptorSetAllocator {
                         image_writes.push(ImageWrite {
                             binding,
                             ix: image_ix,
-                            image_info: *vk::DescriptorImageInfo::builder()
+                            image_info: vk::DescriptorImageInfo::default()
                                 .image_view(image_view)
                                 .sampler(sampler)
                                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL),
@@ -590,7 +590,7 @@ impl RawDescriptorSetAllocator {
                         storage_image_writes.push(ImageWrite {
                             binding,
                             ix: image_ix,
-                            image_info: *vk::DescriptorImageInfo::builder()
+                            image_info: vk::DescriptorImageInfo::default()
                                 .image_view(image_view)
                                 .sampler(sampler)
                                 .image_layout(vk::ImageLayout::GENERAL),
@@ -609,7 +609,7 @@ impl RawDescriptorSetAllocator {
                 if buffer_state.buffer != vk::Buffer::null() {
                     ubo_writes.push(BufferWrite {
                         binding,
-                        buffer_info: *vk::DescriptorBufferInfo::builder()
+                        buffer_info: vk::DescriptorBufferInfo::default()
                             .buffer(buffer_state.buffer)
                             .offset(buffer_state.offset)
                             .range(buffer_state.range),
@@ -627,7 +627,7 @@ impl RawDescriptorSetAllocator {
                 if buffer_state.buffer != vk::Buffer::null() {
                     storage_buffer_writes.push(BufferWrite {
                         binding,
-                        buffer_info: *vk::DescriptorBufferInfo::builder()
+                        buffer_info: vk::DescriptorBufferInfo::default()
                             .buffer(buffer_state.buffer)
                             .offset(buffer_state.offset)
                             .range(buffer_state.range),
@@ -639,7 +639,7 @@ impl RawDescriptorSetAllocator {
         let mut writes = ArrayVecCopy::<vk::WriteDescriptorSet, MAX_WRITES>::new();
 
         for write in &image_writes {
-            let mut vk_write = *vk::WriteDescriptorSet::builder()
+            let mut vk_write = vk::WriteDescriptorSet::default()
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .dst_set(set)
                 .dst_binding(write.binding)
@@ -652,7 +652,7 @@ impl RawDescriptorSetAllocator {
         }
 
         for write in &storage_image_writes {
-            let mut vk_write = *vk::WriteDescriptorSet::builder()
+            let mut vk_write = vk::WriteDescriptorSet::default()
                 .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
                 .dst_set(set)
                 .dst_binding(write.binding)
@@ -665,7 +665,7 @@ impl RawDescriptorSetAllocator {
         }
 
         for write in &ubo_writes {
-            let mut vk_write = *vk::WriteDescriptorSet::builder()
+            let mut vk_write = vk::WriteDescriptorSet::default()
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .dst_set(set)
                 .dst_binding(write.binding)
@@ -678,7 +678,7 @@ impl RawDescriptorSetAllocator {
         }
 
         for write in &storage_buffer_writes {
-            let mut vk_write = *vk::WriteDescriptorSet::builder()
+            let mut vk_write = vk::WriteDescriptorSet::default()
                 .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                 .dst_set(set)
                 .dst_binding(write.binding)

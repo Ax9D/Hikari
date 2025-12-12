@@ -76,11 +76,10 @@ impl std::hash::Hash for CompiledShaderModule {
 }
 impl CompiledShaderModule {
     pub fn create_info(&self) -> vk::PipelineShaderStageCreateInfo {
-        vk::PipelineShaderStageCreateInfo::builder()
+        vk::PipelineShaderStageCreateInfo::default()
             .name(const_cstr!("main").as_cstr())
             .stage(self.stage)
             .module(self.module)
-            .build()
     }
     pub unsafe fn delete(&self, device: &crate::Device) {
         log::debug!("Deleting shader module");
@@ -222,7 +221,7 @@ impl PipelineLayout {
         vk_set_layouts: &[vk::DescriptorSetLayout],
         push_constant_ranges: &[vk::PushConstantRange],
     ) -> VkResult<vk::PipelineLayout> {
-        let create_info = vk::PipelineLayoutCreateInfo::builder()
+        let create_info = vk::PipelineLayoutCreateInfo::default()
             .set_layouts(vk_set_layouts)
             .push_constant_ranges(push_constant_ranges);
 
@@ -383,11 +382,10 @@ impl PipelineLayout {
         push_constant_ranges
             .iter()
             .map(|range| {
-                vk::PushConstantRange::builder()
+                vk::PushConstantRange::default()
                     .size(range.size)
                     .offset(range.offset)
                     .stage_flags(range.stage_flags)
-                    .build()
             })
             .collect()
     }
@@ -561,7 +559,7 @@ impl<'entry, 'defines> ShaderProgramBuilder<'entry, 'defines> {
         Ok(data.to_vec())
     }
     fn create_vk_module(device: &ash::Device, code: &[u32]) -> VkResult<vk::ShaderModule> {
-        let create_info = vk::ShaderModuleCreateInfo::builder().code(code).build();
+        let create_info = vk::ShaderModuleCreateInfo::default().code(code);
 
         unsafe { device.create_shader_module(&create_info, None) }
     }
@@ -623,7 +621,7 @@ impl<'entry, 'defines> ShaderProgramBuilder<'entry, 'defines> {
         let compile_options = options.unwrap_or_else(|| CompileOptions::new().unwrap());
 
         for (stage, (code, defines)) in self.stages.drain() {
-            let mut compile_options = compile_options.clone().unwrap();
+            let mut compile_options = compile_options.clone();
 
             for define in defines {
                 compile_options.add_macro_definition(define, None);

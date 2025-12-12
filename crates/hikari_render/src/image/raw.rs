@@ -175,7 +175,7 @@ impl RawSampledImage {
         gpu_allocator::vulkan::Allocation,
         vk::Sampler,
     )> {
-        let image_create_info = vk::ImageCreateInfo::builder()
+        let image_create_info = vk::ImageCreateInfo::default()
             .image_type(vkconfig.image_type)
             .format(vkconfig.format)
             .mip_levels(vkconfig.mip_levels)
@@ -328,7 +328,7 @@ impl RawSampledImage {
             &mut render_target_views
         )?;
 
-        let subresource_range = *vk::ImageSubresourceRange::builder()
+        let subresource_range = vk::ImageSubresourceRange::default()
             .aspect_mask(format_to_aspect_flags(vkconfig.format))
             .base_mip_level(0)
             .level_count(vkconfig.mip_levels)
@@ -365,9 +365,9 @@ impl RawSampledImage {
                     vk::PipelineStageFlags::TRANSFER,
                 );
 
-                let buffer_copy_region = [*vk::BufferImageCopy::builder()
+                let buffer_copy_region = [vk::BufferImageCopy::default()
                     .image_subresource(
-                        *vk::ImageSubresourceLayers::builder()
+                        vk::ImageSubresourceLayers::default()
                             .aspect_mask(format_to_aspect_flags(vkconfig.format))
                             .mip_level(0)
                             .base_array_layer(0)
@@ -512,9 +512,9 @@ impl RawSampledImage {
                         mip_depth
                     };
 
-                    let image_blit = [*vk::ImageBlit::builder()
+                    let image_blit = [vk::ImageBlit::default()
                         .src_subresource(
-                            *vk::ImageSubresourceLayers::builder()
+                            vk::ImageSubresourceLayers::default()
                                 .aspect_mask(format_to_aspect_flags(config.format))
                                 .layer_count(1)
                                 .mip_level(level - 1)
@@ -529,7 +529,7 @@ impl RawSampledImage {
                             },
                         ])
                         .dst_subresource(
-                            *vk::ImageSubresourceLayers::builder()
+                            vk::ImageSubresourceLayers::default()
                                 .aspect_mask(format_to_aspect_flags(config.format))
                                 .layer_count(1)
                                 .mip_level(level)
@@ -544,7 +544,7 @@ impl RawSampledImage {
                             },
                         ])];
 
-                    let mip_sub_range = *vk::ImageSubresourceRange::builder()
+                    let mip_sub_range = vk::ImageSubresourceRange::default()
                         .aspect_mask(format_to_aspect_flags(config.format))
                         .base_mip_level(level)
                         .level_count(1)

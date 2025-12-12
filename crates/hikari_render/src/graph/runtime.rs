@@ -30,25 +30,25 @@ struct FrameData {
 impl FrameData {
     pub fn new(device: &Arc<crate::Device>) -> VkResult<Self> {
         unsafe {
-            let create_info = vk::CommandPoolCreateInfo::builder()
+            let create_info = vk::CommandPoolCreateInfo::default()
                 .queue_family_index(device.unified_queue_ix)
                 .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
 
             let command_pool = device.raw().create_command_pool(&create_info, None)?;
 
-            let create_info = vk::CommandBufferAllocateInfo::builder()
+            let create_info = vk::CommandBufferAllocateInfo::default()
                 .command_pool(command_pool)
                 .command_buffer_count(1)
                 .level(vk::CommandBufferLevel::PRIMARY);
 
             let command_buffer = device.raw().allocate_command_buffers(&create_info)?[0];
 
-            let create_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+            let create_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
 
             let render_finished_fence = device.raw().create_fence(&create_info, None)?;
 
             let create_info =
-                vk::SemaphoreCreateInfo::builder().flags(vk::SemaphoreCreateFlags::empty());
+                vk::SemaphoreCreateInfo::default().flags(vk::SemaphoreCreateFlags::empty());
 
             let render_semaphore = device.raw().create_semaphore(&create_info, None)?;
             let present_semaphore = device.raw().create_semaphore(&create_info, None)?;
@@ -462,13 +462,13 @@ impl GraphExecutor {
             device.raw().reset_fences(&[fence])?;
         }
         let cbs = [cmd.raw()];
-        let submit_info = vk::SubmitInfo::builder()
+        let submit_info = vk::SubmitInfo::default()
             .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
             .wait_semaphores(wait_semaphores)
             .signal_semaphores(signal_semaphores)
             .command_buffers(&cbs);
 
-        let result = device.graphics_queue_submit(&[*submit_info], fence);
+        let result = device.graphics_queue_submit(&[submit_info], fence);
         match result {
             Ok(_) => {}
             Err(err) => {

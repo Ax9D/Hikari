@@ -160,7 +160,7 @@ impl<T: Copy> RawBuffer<T> {
         usage: vk::BufferUsageFlags,
         location: gpu_allocator::MemoryLocation,
     ) -> Result<Self, anyhow::Error> {
-        let create_info = vk::BufferCreateInfo::builder()
+        let create_info = vk::BufferCreateInfo::default()
             .size((std::mem::size_of::<T>() * len) as u64)
             .usage(usage)
             .queue_family_indices(&[0])

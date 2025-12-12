@@ -159,7 +159,7 @@ impl SampledImage {
             unsafe {
             let device = self.device.raw();
 
-            let subresource_range = *vk::ImageSubresourceRange::builder()
+            let subresource_range = vk::ImageSubresourceRange::default()
                 .layer_count(1)
                 .level_count(mip_level)
                 .aspect_mask(format_to_aspect_flags(self.raw.config().format));
@@ -177,12 +177,12 @@ impl SampledImage {
                 vk::PipelineStageFlags::TRANSFER,
             );
 
-            let regions = [*vk::BufferImageCopy::builder()
+            let regions = [vk::BufferImageCopy::default()
                 .buffer_offset(0)
                 .buffer_row_length(0)
                 .buffer_image_height(0)
                 .image_subresource(
-                    *vk::ImageSubresourceLayers::builder()
+                    vk::ImageSubresourceLayers::default()
                         .mip_level(0)
                         .aspect_mask(format_to_aspect_flags(self.config().format))
                         .base_array_layer(0)
@@ -216,7 +216,7 @@ impl SampledImage {
                 vk::PipelineStageFlags::TRANSFER,
             );
 
-            let dep_info = vk::DependencyInfo::builder();
+            let dep_info = vk::DependencyInfo::default();
             device.cmd_set_event2(cmd, trigger_event, &dep_info);
             }
             let slice = download_buffer.mapped_slice();

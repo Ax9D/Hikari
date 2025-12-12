@@ -232,7 +232,7 @@ impl HDRLoader {
                     &[AccessType::TransferRead],
                     ImageLayout::Optimal,
                     ImageLayout::Optimal,
-                    *vk::ImageSubresourceRange::builder()
+                    *vk::ImageSubresourceRange::new()
                         .aspect_mask(vk::ImageAspectFlags::COLOR)
                         .base_mip_level(0)
                         .level_count(vk::REMAINING_MIP_LEVELS)

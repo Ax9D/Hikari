@@ -5,7 +5,7 @@ use vec_map::VecMap;
 use vk_sync_fork::AccessType;
 
 use crate::{
-    graph::pass::AttachmentKind, image::SampledImage, renderpass::PhysicalRenderpass, Buffer,
+    Buffer, barrier, graph::pass::AttachmentKind, image::SampledImage, renderpass::PhysicalRenderpass
 };
 
 use super::{pass::AnyPass, resources::GraphResources, Renderpass};
@@ -13,9 +13,63 @@ use super::{pass::AnyPass, resources::GraphResources, Renderpass};
 unsafe impl Sync for BarrierStorage {}
 unsafe impl Send for BarrierStorage {}
 
+struct ImageMemoryBarrierProxy {
+    src_stage_mask: vk::PipelineStageFlags2,
+    dst_stage_mask: vk::PipelineStageFlags2,
+    src_access_mask: vk::AccessFlags2,
+    dst_access_mask: vk::AccessFlags2,
+    old_layout: vk::ImageLayout,
+    new_layout: vk::ImageLayout,
+    src_queue_family_index: u32,
+    dst_queue_family_index: u32,
+    image: vk::Image,
+    subresource_range: vk::ImageSubresourceRange
+}
+impl ImageMemoryBarrierProxy {
+    fn into_vk(&self) -> vk::ImageMemoryBarrier2 {
+        vk::ImageMemoryBarrier2KHR::default()
+            .image(self.image)
+            .subresource_range(self.subresource_range)
+            .src_access_mask(self.src_access_mask)
+            .dst_access_mask(self.dst_access_mask)
+            .src_stage_mask(self.src_stage_mask)
+            .dst_stage_mask(self.dst_stage_mask)
+            .src_queue_family_index(self.src_queue_family_index)
+            .dst_queue_family_index(self.dst_queue_family_index)
+            .old_layout(self.old_layout)
+            .new_layout(self.new_layout)
+    }
+}
+struct BufferMemoryBarrierProxy {
+    src_stage_mask: vk::PipelineStageFlags2,
+    dst_stage_mask: vk::PipelineStageFlags2,
+    src_access_mask: vk::AccessFlags2,
+    dst_access_mask: vk::AccessFlags2,
+    src_queue_family_index: u32,
+    dst_queue_family_index: u32,
+    buffer: vk::Buffer,
+    offset: vk::DeviceSize,
+    size: vk::DeviceSize,
+}
+
+impl BufferMemoryBarrierProxy {
+    fn into_vk(&self) -> vk::BufferMemoryBarrier2 {
+        vk::BufferMemoryBarrier2::default()
+            .buffer(self.buffer)
+            .offset(self.offset)
+            .size(self.size)
+            .src_access_mask(self.src_access_mask)
+            .dst_access_mask(self.dst_access_mask)
+            .src_stage_mask(self.src_stage_mask)
+            .dst_stage_mask(self.dst_stage_mask)
+            .src_queue_family_index(self.src_queue_family_index)
+            .dst_queue_family_index(self.dst_queue_family_index)
+    }
+}
+
 pub struct BarrierStorage {
-    image_barriers: Vec<vk::ImageMemoryBarrier2KHR>,
-    buffer_barriers: Vec<vk::BufferMemoryBarrier2KHR>,
+    image_barriers: Vec<ImageMemoryBarrierProxy>,
+    buffer_barriers: Vec<BufferMemoryBarrierProxy>,
 }
 impl BarrierStorage {
     pub fn new() -> Self {
@@ -80,17 +134,18 @@ impl BarrierStorage {
 
         // log::info!("\n");
 
-        use crate::barrier;
-
-        let barrier = *vk::ImageMemoryBarrier2KHR::builder()
-            .image(image)
-            .subresource_range(subresource_range)
-            .src_access_mask(barrier::to_sync2_access_flags(src_access_mask))
-            .dst_access_mask(barrier::to_sync2_access_flags(dst_access_mask))
-            .src_stage_mask(barrier::to_sync2_stage_flags(src_stage_mask))
-            .dst_stage_mask(barrier::to_sync2_stage_flags(dst_stage_mask))
-            .old_layout(old_layout)
-            .new_layout(new_layout);
+        let barrier = ImageMemoryBarrierProxy {
+            src_stage_mask: barrier::to_sync2_stage_flags(src_stage_mask),
+            dst_stage_mask: barrier::to_sync2_stage_flags(dst_stage_mask),
+            src_access_mask: barrier::to_sync2_access_flags(src_access_mask),
+            dst_access_mask: barrier::to_sync2_access_flags(dst_access_mask),
+            old_layout,
+            new_layout,
+            src_queue_family_index,
+            dst_queue_family_index,
+            image,
+            subresource_range,
+        };
 
         self.image_barriers.push(barrier);
     }
@@ -122,19 +177,24 @@ impl BarrierStorage {
                 dst_access_mask,
                 size,
                 offset,
+                src_queue_family_index,
+                dst_queue_family_index,
                 ..
             },
         ) = sync::get_buffer_memory_barrier(&barrier);
 
         use crate::barrier;
-        let barrier = *vk::BufferMemoryBarrier2KHR::builder()
-            .buffer(buffer)
-            .size(size)
-            .offset(offset)
-            .src_access_mask(barrier::to_sync2_access_flags(src_access_mask))
-            .dst_access_mask(barrier::to_sync2_access_flags(dst_access_mask))
-            .src_stage_mask(barrier::to_sync2_stage_flags(src_stage_mask))
-            .dst_stage_mask(barrier::to_sync2_stage_flags(dst_stage_mask));
+        let barrier = BufferMemoryBarrierProxy {
+            buffer,
+            size,
+            offset,
+            src_access_mask: barrier::to_sync2_access_flags(src_access_mask),
+            dst_access_mask: barrier::to_sync2_access_flags(dst_access_mask),
+            src_stage_mask: barrier::to_sync2_stage_flags(src_stage_mask),
+            dst_stage_mask: barrier::to_sync2_stage_flags(dst_stage_mask),
+            src_queue_family_index,
+            dst_queue_family_index
+        };
 
         self.buffer_barriers.push(barrier);
     }
@@ -142,9 +202,13 @@ impl BarrierStorage {
         if self.image_barriers.is_empty() && self.buffer_barriers.is_empty() {
             return;
         }
-        let dependency_info = vk::DependencyInfoKHR::builder()
-            .image_memory_barriers(&self.image_barriers)
-            .buffer_memory_barriers(&self.buffer_barriers)
+        // FIXME: Avoid allocations
+        let image_barriers: Vec<_> = self.image_barriers.iter().map(|barrier|barrier.into_vk()).collect();
+        let buffer_barrires: Vec<_> = self.buffer_barriers.iter().map(|barrier|barrier.into_vk()).collect();
+
+        let dependency_info = vk::DependencyInfoKHR::default()
+            .image_memory_barriers(&image_barriers)
+            .buffer_memory_barriers(&buffer_barrires)
             .dependency_flags(vk::DependencyFlags::BY_REGION);
 
         device
@@ -242,7 +306,7 @@ impl AllocationData {
                 let (final_layout, clear_value) = match attachment_config.kind {
                     AttachmentKind::Color(location) => {
                         color_attachment_refs[location as usize] =
-                            *vk::AttachmentReference::builder()
+                            vk::AttachmentReference::default()
                                 .attachment(attachments.len() as u32)
                                 .layout(access_info.image_layout);
 
@@ -257,7 +321,7 @@ impl AllocationData {
                     }
                     AttachmentKind::DepthStencil => {
                         depth_attachment_ref.replace(
-                            *vk::AttachmentReference::builder()
+                            vk::AttachmentReference::default()
                                 .attachment(attachments.len() as u32)
                                 .layout(access_info.image_layout),
                         );
@@ -274,7 +338,7 @@ impl AllocationData {
                     }
                     AttachmentKind::DepthOnly => {
                         depth_attachment_ref.replace(
-                            *vk::AttachmentReference::builder()
+                            vk::AttachmentReference::default()
                                 .attachment(attachments.len() as u32)
                                 .layout(access_info.image_layout),
                         );
@@ -306,7 +370,7 @@ impl AllocationData {
                     .unwrap_or(vk::ImageLayout::UNDEFINED);
                 println!("{:?} {:?}", initial_layout, final_layout);
                 clear_values.push(clear_value);
-                let attachment = *vk::AttachmentDescription::builder()
+                let attachment = vk::AttachmentDescription::default()
                     .format(image.config().format)
                     .load_op(attachment_config.load_op)
                     .store_op(attachment_config.store_op)
@@ -320,7 +384,7 @@ impl AllocationData {
             }
         }
 
-        let mut subpass_desc = *vk::SubpassDescription::builder()
+        let mut subpass_desc = vk::SubpassDescription::default()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_attachment_refs);
 
@@ -329,7 +393,7 @@ impl AllocationData {
         }
 
         let subpass_descs = [subpass_desc];
-        let create_info = vk::RenderPassCreateInfo::builder()
+        let create_info = vk::RenderPassCreateInfo::default()
             .attachments(&attachments)
             .subpasses(&subpass_descs);
 

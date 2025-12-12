@@ -35,7 +35,7 @@ impl<'cmd, 'graph> RenderpassCommands<'cmd, 'graph> {
             hikari_dev::profile_scope!("vkBeginRenderPass");
             debug_assert!(begin_info.renderpass.pass != vk::RenderPass::null());
 
-            let begin_info = vk::RenderPassBeginInfo::builder()
+            let begin_info = vk::RenderPassBeginInfo::default()
                 .render_pass(begin_info.renderpass.pass)
                 .render_area(begin_info.area)
                 .framebuffer(begin_info.framebuffer)

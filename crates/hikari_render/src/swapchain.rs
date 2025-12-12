@@ -2,13 +2,16 @@ use std::sync::Arc;
 
 use ash::{
     prelude::VkResult,
-    vk::{self, SurfaceFormatKHR}, extensions::khr::Surface,
+    vk::{self, SurfaceFormatKHR},
 };
 
 use crate::{
     image::{ImageConfig, SampledImage},
     renderpass::PhysicalRenderpass,
 };
+
+type Surface = ash::khr::surface::Instance;
+type SwapchainLoader = ash::khr::swapchain::Device;
 
 #[derive(Clone)]
 pub(crate) struct SurfaceData {
@@ -18,7 +21,7 @@ pub(crate) struct SurfaceData {
 pub struct Swapchain {
     device: Arc<crate::device::Device>,
     pub(crate) inner: vk::SwapchainKHR,
-    loader: ash::extensions::khr::Swapchain,
+    loader: SwapchainLoader,
     present_queue: Option<vk::Queue>,
 
     images: Vec<vk::Image>,
@@ -75,7 +78,7 @@ impl Swapchain {
 
         let old_swapchain_vk = old_swapchain.unwrap_or(vk::SwapchainKHR::null());
 
-        let mut swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
+        let mut swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface_data.surface)
             .min_image_count(image_count)
             .image_format(surface_format.format)
@@ -191,10 +194,10 @@ impl Swapchain {
         color_format: vk::Format,
         depth_stencil_image: &SampledImage,
     ) -> VkResult<PhysicalRenderpass> {
-        let create_info = vk::RenderPassCreateInfo::builder();
+        let create_info = vk::RenderPassCreateInfo::default();
 
         let attachments = [
-            *vk::AttachmentDescription::builder()
+            vk::AttachmentDescription::default()
                 .format(color_format)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
                 .store_op(vk::AttachmentStoreOp::STORE)
@@ -203,7 +206,7 @@ impl Swapchain {
                 .samples(vk::SampleCountFlags::TYPE_1)
                 .initial_layout(vk::ImageLayout::UNDEFINED)
                 .final_layout(vk::ImageLayout::PRESENT_SRC_KHR),
-            *vk::AttachmentDescription::builder()
+            vk::AttachmentDescription::default()
                 .format(depth_stencil_image.config().format)
                 .load_op(vk::AttachmentLoadOp::CLEAR)
                 .store_op(vk::AttachmentStoreOp::STORE)
@@ -214,21 +217,21 @@ impl Swapchain {
                 .final_layout(vk::ImageLayout::DEPTH_STENCIL_READ_ONLY_OPTIMAL),
         ];
 
-        let color_attachment_refs = [*vk::AttachmentReference::builder()
+        let color_attachment_refs = [vk::AttachmentReference::default()
             .attachment(0)
             .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
 
-        let depth_stencil_attachment_ref = *vk::AttachmentReference::builder()
+        let depth_stencil_attachment_ref = vk::AttachmentReference::default()
             .attachment(1)
             .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        let subpass_desc = *vk::SubpassDescription::builder()
+        let subpass_desc = vk::SubpassDescription::default()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_attachment_refs)
             .depth_stencil_attachment(&depth_stencil_attachment_ref);
 
         let subpass_descs = [subpass_desc];
-        let create_info = vk::RenderPassCreateInfo::builder()
+        let create_info = vk::RenderPassCreateInfo::default()
             .attachments(&attachments)
             .subpasses(&subpass_descs);
 
@@ -267,7 +270,7 @@ impl Swapchain {
         for &color_image in color_images {
             let attachments = [color_image, depth_stencil_image.render_target_view().unwrap()];
 
-            let create_info = vk::FramebufferCreateInfo::builder()
+            let create_info = vk::FramebufferCreateInfo::default()
                 .render_pass(pass)
                 .attachments(&attachments)
                 .width(width)
@@ -307,10 +310,14 @@ impl Swapchain {
             .iter()
             .for_each(|format| log::debug!("{:?}", format.format));
 
+        fn pick_suitable_format(format: vk::Format) -> bool {
+            matches!(format, vk::Format::R8G8B8A8_UNORM | vk::Format::B8G8R8A8_UNORM)    
+        }
+
         swapchain_support_details
             .formats
             .iter()
-            .find(|format| format.format == vk::Format::B8G8R8A8_UNORM)
+            .find(|format| pick_suitable_format(format.format))
             .expect("B8G8R8A8_UNORM surface format is not supported by device")
     }
     fn choose_swap_extent(
@@ -322,7 +329,7 @@ impl Swapchain {
         if capabilities.current_extent.width != u32::MAX {
             capabilities.current_extent
         } else {
-            vk::Extent2D::builder()
+            vk::Extent2D::default()
                 .width(width.clamp(
                     capabilities.min_image_extent.width,
                     capabilities.max_image_extent.width,
@@ -331,7 +338,6 @@ impl Swapchain {
                     capabilities.min_image_extent.height,
                     capabilities.max_image_extent.height,
                 ))
-                .build()
         }
     }
     fn create_image_views(
@@ -341,26 +347,24 @@ impl Swapchain {
     ) -> VkResult<Vec<vk::ImageView>> {
         let mut image_views = Vec::new();
         for image in images {
-            let create_info = vk::ImageViewCreateInfo::builder()
+            let create_info = vk::ImageViewCreateInfo::default()
                 .image(*image)
                 .format(format)
                 .view_type(vk::ImageViewType::TYPE_2D)
                 .components(
-                    vk::ComponentMapping::builder()
+                    vk::ComponentMapping::default()
                         .r(vk::ComponentSwizzle::IDENTITY)
                         .g(vk::ComponentSwizzle::IDENTITY)
                         .b(vk::ComponentSwizzle::IDENTITY)
-                        .a(vk::ComponentSwizzle::IDENTITY)
-                        .build(),
+                        .a(vk::ComponentSwizzle::IDENTITY),
                 )
                 .subresource_range(
-                    vk::ImageSubresourceRange::builder()
+                    vk::ImageSubresourceRange::default()
                         .aspect_mask(vk::ImageAspectFlags::COLOR)
                         .base_mip_level(0)
                         .level_count(1)
                         .base_array_layer(0)
-                        .layer_count(1)
-                        .build(),
+                        .layer_count(1),
                 );
 
             let image_view = unsafe { device.raw().create_image_view(&create_info, None)? };
@@ -422,7 +426,7 @@ impl Swapchain {
         let swapchains = [self.inner];
         let wait_semaphones = [wait_semaphone];
         let image_ixs = [image_ix];
-        let present_info = vk::PresentInfoKHR::builder()
+        let present_info = vk::PresentInfoKHR::default()
             .swapchains(&swapchains)
             .wait_semaphores(&wait_semaphones)
             .image_indices(&image_ixs);
@@ -450,7 +454,7 @@ impl Swapchain {
     }
 }
 
-pub fn delete(loader: &ash::extensions::khr::Swapchain, swapchain: vk::SwapchainKHR) {
+pub fn delete(loader: &SwapchainLoader, swapchain: vk::SwapchainKHR) {
     unsafe {
         loader.destroy_swapchain(swapchain, None);
     }

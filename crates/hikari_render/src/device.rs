@@ -5,7 +5,6 @@ use std::{
 };
 
 use ash::{
-    extensions::khr::{Surface, Swapchain},
     prelude::VkResult,
     vk::{self, QueueFamilyProperties},
 };
@@ -22,7 +21,6 @@ pub struct PhysicalDevice {
     pub properties: vk::PhysicalDeviceProperties,
     pub extensions: Vec<CString>,
     pub mem_properties: vk::PhysicalDeviceMemoryProperties,
-    pub vk_features: vk::PhysicalDeviceFeatures2,
     pub features: Features,
 }
 impl PhysicalDevice {
@@ -70,7 +68,6 @@ impl PhysicalDevice {
             raw: device,
             properties,
             queue_families,
-            vk_features: vk_features2,
             features,
             mem_properties,
             extensions,
@@ -80,7 +77,7 @@ impl PhysicalDevice {
     pub fn get_present_queue(
         &self,
         surface: vk::SurfaceKHR,
-        surface_loader: &Surface,
+        surface_loader: &ash::khr::surface::Instance,
     ) -> Option<u32> {
         self.queue_families
             .iter()
@@ -100,7 +97,7 @@ impl PhysicalDevice {
     pub(crate) fn get_swapchain_support_details(
         &self,
         surface: vk::SurfaceKHR,
-        surface_loader: &Surface,
+        surface_loader: &ash::khr::surface::Instance,
     ) -> VkResult<SwapchainSupportDetails> {
         SwapchainSupportDetails::create(&self.raw, surface, surface_loader)
     }
@@ -165,7 +162,7 @@ impl SwapchainSupportDetails {
     pub fn create(
         device: &vk::PhysicalDevice,
         surface: vk::SurfaceKHR,
-        surface_loader: &Surface,
+        surface_loader: &ash::khr::surface::Instance,
     ) -> VkResult<Self> {
         let formats =
             unsafe { surface_loader.get_physical_device_surface_formats(*device, surface) }?;
@@ -235,12 +232,13 @@ impl Drop for RawDevice {
 }
 
 pub struct InstanceExtensions {
-    pub debug_utils: Option<ash::extensions::ext::DebugUtils>,
-    pub surface: Option<ash::extensions::khr::Surface>,
+    pub debug_utils: Option<ash::ext::debug_utils::Instance>,
+    pub surface: Option<ash::khr::surface::Instance>,
 }
 pub struct DeviceExtensions {
-    pub synchronization2: ash::extensions::khr::Synchronization2,
-    pub swapchain: Option<ash::extensions::khr::Swapchain>,
+    pub debug_utils: Option<ash::ext::debug_utils::Device>,
+    pub synchronization2: ash::khr::synchronization2::Device,
+    pub swapchain: Option<ash::khr::swapchain::Device>,
 }
 
 unsafe impl Send for Device {}
@@ -283,10 +281,10 @@ impl Device {
         enable_features: Features,
         debug: bool,
     ) -> anyhow::Result<Arc<Self>> {
-        let mut required_extensions = vec![vk::KhrSynchronization2Fn::name()];
+        let mut required_extensions = vec![ash::vk::KHR_SYNCHRONIZATION2_NAME];
 
         if surface.is_some() {
-            required_extensions.push(Swapchain::name());
+            required_extensions.push(ash::vk::KHR_SWAPCHAIN_NAME);
         }
 
         let instance_extensions = Self::setup_instance_extensions(&entry, &instance, debug, surface.is_some());
@@ -310,7 +308,7 @@ impl Device {
 
         let unified_queue_ix = physical_device.get_unified_queue().unwrap();
 
-        let queue_create_infos = [*vk::DeviceQueueCreateInfo::builder()
+        let queue_create_infos = [vk::DeviceQueueCreateInfo::default()
             .queue_family_index(unified_queue_ix)
             .queue_priorities(&QUEUE_PRIORITIES)];
 
@@ -322,9 +320,9 @@ impl Device {
         let enabled_features = enable_features.into();
 
         let mut sync2 =
-            vk::PhysicalDeviceSynchronization2FeaturesKHR::builder().synchronization2(true);
+            vk::PhysicalDeviceSynchronization2FeaturesKHR::default().synchronization2(true);
         
-        let mut descriptor_indexing = vk::PhysicalDeviceDescriptorIndexingFeatures::builder()
+        let mut descriptor_indexing = vk::PhysicalDeviceDescriptorIndexingFeatures::default()
                                   .runtime_descriptor_array(true)
                                   .descriptor_binding_partially_bound(true)
                                   .descriptor_binding_update_unused_while_pending(true)
@@ -338,7 +336,7 @@ impl Device {
                                   .shader_storage_buffer_array_non_uniform_indexing(true)
                                   ;
 
-        let mut device_create_info = vk::DeviceCreateInfo::builder()
+        let mut device_create_info = vk::DeviceCreateInfo::default()
         .enabled_extension_names(required_extensions)
         .queue_create_infos(&queue_create_infos)
         .enabled_features(&enabled_features)
@@ -346,7 +344,7 @@ impl Device {
         .push_next(&mut sync2)
         .push_next(&mut descriptor_indexing);
 
-        let mut diag_config_nv = vk::DeviceDiagnosticsConfigCreateInfoNV::builder().flags(
+        let mut diag_config_nv = vk::DeviceDiagnosticsConfigCreateInfoNV::default().flags(
             vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_AUTOMATIC_CHECKPOINTS
                 | vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_RESOURCE_TRACKING
                 | vk::DeviceDiagnosticsConfigFlagsNV::ENABLE_SHADER_DEBUG_INFO,
@@ -367,10 +365,8 @@ impl Device {
             instance: instance.clone(),
             device: ash_device.clone(),
             physical_device: physical_device.raw,
-            debug_settings: gpu_allocator::AllocatorDebugSettings {
-                log_leaks_on_shutdown: true,
-                ..Default::default()
-            },
+            allocation_sizes: Default::default(),
+            debug_settings: Default::default(),
             buffer_device_address: false,
         })?);
 
@@ -383,7 +379,7 @@ impl Device {
 
         let shader_compiler = Mutex::new(
             shaderc::Compiler::new()
-                .ok_or_else(|| anyhow::anyhow!("Failed to initialize shaderc compiler"))?,
+                .map_err(|_| anyhow::anyhow!("Failed to initialize shaderc compiler"))?,
         );
 
         let extensions = Self::setup_device_extensions(&entry, &instance, &ash_device, debug, surface.is_some());
@@ -441,7 +437,7 @@ impl Device {
     fn pick_optimal(
         entry: &ash::Entry,
         instance: &ash::Instance,
-        surface_data: Option<(vk::SurfaceKHR, &Surface)>,
+        surface_data: Option<(vk::SurfaceKHR, &ash::khr::surface::Instance)>,
         required_extensions: &[&'static CStr],
         required_features: Features,
     ) -> Option<PhysicalDevice> {
@@ -456,6 +452,8 @@ impl Device {
             });
 
             log::info!("{:?}", required_features);
+            log::info!("Has unified queue: {}", unified_queue);
+            log::info!("Hash features: {}", features);
             if let Some((surface, loader)) = surface_data {
                 let present_support = device
                     .get_present_queue(
@@ -491,13 +489,13 @@ impl Device {
     ) -> InstanceExtensions {
 
         let debug_utils = if debug {
-            Some(ash::extensions::ext::DebugUtils::new(entry, instance))
+            Some(ash::ext::debug_utils::Instance::new(entry, instance))
         } else {
             None
         };
 
         let surface = if surface {
-            Some(Surface::new(entry, instance))
+            Some(ash::khr::surface::Instance::new(entry, instance))
         } else {
             None
         };
@@ -514,16 +512,21 @@ impl Device {
         debug: bool,
         surface: bool,
     ) -> DeviceExtensions {
-        let synchronization2 = ash::extensions::khr::Synchronization2::new(instance, device);
+        let synchronization2 = ash::khr::synchronization2::Device::new(instance, device);
         let swapchain = if surface { 
-            Some(ash::extensions::khr::Swapchain::new(instance, device))
+            Some(ash::khr::swapchain::Device::new(instance, device))
         } else {
             None
+        };
+
+        let debug_utils = if debug { Some(ash::ext::debug_utils::Device::new(instance, device)) } else { 
+            None 
         };
 
         DeviceExtensions {
             synchronization2,
             swapchain,
+            debug_utils
         }
     }
     pub fn extensions(&self) -> &DeviceExtensions {
@@ -532,27 +535,34 @@ impl Device {
     pub fn instance_extensions(&self) -> &InstanceExtensions {
         &self.instance_extensions
     }
-    fn read_pipeline_cache_from_disk() -> Vec<u8> {
+    fn read_pipeline_cache_from_disk() -> Option<Vec<u8>> {
         let mut data = Vec::new();
         std::fs::OpenOptions::new()
             .create(true)
             .read(true)
             .write(true)
             .open(VK_PIPELINE_CACHE_FILE)
-            .expect("Couldn't create pipeline cache file")
+            .ok()?
             .read_to_end(&mut data)
-            .expect("Failed to read pipeline cache file");
+            .ok()?;
 
         log::debug!(
             "Read {} bytes from pipeline cache, {}",
             data.len(),
             VK_PIPELINE_CACHE_FILE
         );
-        data
+        
+        Some(data)
     }
     fn create_pipeline_cache(device: &ash::Device) -> VkResult<vk::PipelineCache> {
         let pipeline_cache_data = Self::read_pipeline_cache_from_disk();
-        let create_info = vk::PipelineCacheCreateInfo::builder().initial_data(&pipeline_cache_data);
+        let mut create_info = vk::PipelineCacheCreateInfo::default();
+
+        let cache_data_buffer;
+        if let Some(pipeline_cache_data) = pipeline_cache_data {
+            cache_data_buffer = pipeline_cache_data;
+            create_info = create_info.initial_data(&cache_data_buffer);
+        }
 
         let cache_from_previous_data = unsafe { device.create_pipeline_cache(&create_info, None) };
         match cache_from_previous_data {
@@ -562,7 +572,7 @@ impl Device {
             Err(_) => {
                 log::debug!("Pipeline cache from disk seems to be unusable, creating empty cache");
 
-                let create_info = vk::PipelineCacheCreateInfo::builder().initial_data(&[]);
+                let create_info = vk::PipelineCacheCreateInfo::default().initial_data(&[]);
 
                 unsafe { device.create_pipeline_cache(&create_info, None) }
             }
@@ -577,13 +587,18 @@ impl Device {
             VK_PIPELINE_CACHE_FILE
         );
 
-        std::fs::OpenOptions::new()
+        let Ok(mut file) = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
-            .open(VK_PIPELINE_CACHE_FILE)
-            .expect("Couldn't create pipeline cache file")
-            .write_all(&data)
-            .expect("Couldn't write to pipeline cache file");
+            .open(VK_PIPELINE_CACHE_FILE) else {
+                return Ok(());
+            };
+        
+        let result = file.write_all(&data);
+
+        if result.is_err() {
+            log::error!("Couldn't write to pipeline cache file");
+        }
 
         //std::fs::write(VK_PIPELINE_CACHE_FILE, &data).expect("Couldn't write to pipeline cache file");
 
@@ -647,7 +662,7 @@ impl Device {
     ) -> VkResult<()> {
         let device = self.raw();
 
-        let create_info = vk::CommandPoolCreateInfo::builder()
+        let create_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(self.unified_queue_ix)
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
 
@@ -657,13 +672,13 @@ impl Device {
 
         //println!("Command pool creation took: {:?}", now.elapsed());
 
-        let create_info = vk::CommandBufferAllocateInfo::builder()
+        let create_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(cmd_pool)
             .command_buffer_count(1);
 
         let cmd = self.raw().allocate_command_buffers(&create_info)?[0];
 
-        let begin_info = vk::CommandBufferBeginInfo::builder()
+        let begin_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
 
         device.begin_command_buffer(cmd, &begin_info)?;
@@ -673,12 +688,12 @@ impl Device {
         device.end_command_buffer(cmd)?;
 
         let cmd = [cmd];
-        let submit_info = vk::SubmitInfo::builder().command_buffers(&cmd);
+        let submit_info = vk::SubmitInfo::default().command_buffers(&cmd);
 
         let now = std::time::Instant::now();
 
-        let fence = device.create_fence(&vk::FenceCreateInfo::builder(), None)?;
-        self.graphics_queue_submit(&[*submit_info], fence)?;
+        let fence = device.create_fence(&vk::FenceCreateInfo::default(), None)?;
+        self.graphics_queue_submit(&[submit_info], fence)?;
 
         let fences = [fence];
         device.wait_for_fences(&fences, true, 10_000_000_000)?;

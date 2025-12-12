@@ -31,7 +31,7 @@ pub(super) fn from_allocation_data(
         .map(|image| image.height())
         .unwrap_or(0);
 
-    let create_info = vk::FramebufferCreateInfo::builder()
+    let create_info = vk::FramebufferCreateInfo::default()
         .render_pass(renderpass)
         .attachments(&image_views)
         .width(width)

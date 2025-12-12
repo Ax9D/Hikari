@@ -48,9 +48,9 @@ impl Eq for SamplerCreateInfo {}
 impl SamplerCreateInfo {
     fn create_sampler(&self, device: &ash::Device) -> vk::Sampler {
 
-        let mut reduce_info = vk::SamplerReductionModeCreateInfo::builder();
+        let mut reduce_info = vk::SamplerReductionModeCreateInfo::default();
 
-        let create_info = vk::SamplerCreateInfo::builder()
+        let create_info = vk::SamplerCreateInfo::default()
                                                     .min_filter(self.min_filter)
                                                     .mag_filter(self.mag_filter)
                                                     .mipmap_mode(self.mipmap_mode)

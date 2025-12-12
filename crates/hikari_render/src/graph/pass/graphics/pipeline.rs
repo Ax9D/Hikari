@@ -150,7 +150,7 @@ impl Eq for DepthStencilState {}
 
 impl DepthStencilState {
     pub fn into_vk(&self) -> vk::PipelineDepthStencilStateCreateInfo {
-        let stencil_op = *vk::StencilOpState::builder()
+        let stencil_op = vk::StencilOpState::default()
             .compare_op(self.stencil_test_compare_op.into_vk())
             .fail_op(self.stencil_test_fail_op.into_vk())
             .depth_fail_op(self.stencil_test_depth_fail_op.into_vk())
@@ -159,7 +159,7 @@ impl DepthStencilState {
             .write_mask(self.stencil_test_write_mask)
             .reference(self.stencil_test_reference);
 
-        *vk::PipelineDepthStencilStateCreateInfo::builder()
+        vk::PipelineDepthStencilStateCreateInfo::default()
             .depth_test_enable(self.depth_test_enabled)
             .depth_write_enable(self.depth_write_enabled)
             .depth_compare_op(self.depth_compare_op.into_vk())
@@ -202,7 +202,7 @@ impl Default for RasterizerState {
 }
 impl RasterizerState {
     pub fn into_vk(&self) -> vk::PipelineRasterizationStateCreateInfo {
-        *vk::PipelineRasterizationStateCreateInfo::builder()
+        vk::PipelineRasterizationStateCreateInfo::default()
             .depth_clamp_enable(self.depth_clamp_enable)
             .rasterizer_discard_enable(self.rasterizer_discard_enable)
             .polygon_mode(self.polygon_mode.into_vk())
@@ -287,7 +287,7 @@ pub struct BlendState {
 
 impl BlendState {
     pub fn into_vk(&self) -> vk::PipelineColorBlendAttachmentState {
-        *vk::PipelineColorBlendAttachmentState::builder()
+        vk::PipelineColorBlendAttachmentState::default()
             .color_write_mask(
                 vk::ColorComponentFlags::R
                     | vk::ColorComponentFlags::G
@@ -358,7 +358,7 @@ impl Hash for VertexInputLayout {
 
 impl VertexInputLayout {
     pub fn into_vk(&self) -> vk::PipelineVertexInputStateCreateInfo {
-        *vk::PipelineVertexInputStateCreateInfo::builder()
+        vk::PipelineVertexInputStateCreateInfo::default()
             .vertex_attribute_descriptions(&self.attribute_descs)
             .vertex_binding_descriptions(&self.binding_descs)
     }
@@ -407,7 +407,7 @@ impl VertexInputLayoutBuilder {
         let mut location = 0;
         for (binding, (layout, step_mode)) in self.layouts.iter().enumerate() {
             binding_descs.push(
-                *vk::VertexInputBindingDescription::builder()
+                vk::VertexInputBindingDescription::default()
                     .binding(binding as u32)
                     .stride(layout.iter().fold(0, |acc, x| acc + x.size() as u32))
                     .input_rate((*step_mode).into()), //
@@ -416,7 +416,7 @@ impl VertexInputLayoutBuilder {
             let mut offset = 0;
             for field in layout {
                 attribute_descs.push(
-                    *vk::VertexInputAttributeDescription::builder()
+                    vk::VertexInputAttributeDescription::default()
                         .binding(binding as u32)
                         .location(location)
                         .format(field.vk_format())
@@ -471,31 +471,31 @@ impl PipelineState {
 
         let input_state = self.input_layout.into_vk();
 
-        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::builder()
+        let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(self.primitive_topology.into_vk())
             .primitive_restart_enable(false);
 
         let rasterizer = self.rasterizer_state.into_vk();
         let blend_attachment = vec![self.blend_state.into_vk(); n_color_attachments];
 
-        let color_blend = *vk::PipelineColorBlendStateCreateInfo::builder()
+        let color_blend = vk::PipelineColorBlendStateCreateInfo::default()
             .logic_op_enable(false)
             .logic_op(vk::LogicOp::COPY)
             .attachments(&blend_attachment)
             .blend_constants([0.0; 4]);
 
-        let multi_sample = vk::PipelineMultisampleStateCreateInfo::builder()
+        let multi_sample = vk::PipelineMultisampleStateCreateInfo::default()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1)
             .flags(vk::PipelineMultisampleStateCreateFlags::empty());
 
-        let viewport = vk::PipelineViewportStateCreateInfo::builder()
+        let viewport = vk::PipelineViewportStateCreateInfo::default()
             .viewport_count(1)
             .scissor_count(1)
             .flags(vk::PipelineViewportStateCreateFlags::empty());
 
         let dynamic_state = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
 
-        let dynamic_state = vk::PipelineDynamicStateCreateInfo::builder()
+        let dynamic_state = vk::PipelineDynamicStateCreateInfo::default()
             .dynamic_states(&dynamic_state)
             .flags(vk::PipelineDynamicStateCreateFlags::empty());
 
@@ -505,7 +505,7 @@ impl PipelineState {
 
         let layout = shader.pipeline_layout().raw();
 
-        let create_info = vk::GraphicsPipelineCreateInfo::builder()
+        let create_info = vk::GraphicsPipelineCreateInfo::default()
             .input_assembly_state(&input_assembly)
             .stages(&stages)
             .render_pass(renderpass)
@@ -518,7 +518,7 @@ impl PipelineState {
             .dynamic_state(&dynamic_state)
             .layout(layout);
 
-        let create_infos = [*create_info];
+        let create_infos = [create_info];
         let pipeline = device
             .raw()
             .create_graphics_pipelines(pipeline_cache, &create_infos, None)
