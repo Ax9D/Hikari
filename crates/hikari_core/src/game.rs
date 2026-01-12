@@ -1,13 +1,13 @@
-use std::{sync::Arc, path::Path};
+use std::{ path::Path, sync::Arc};
 
 use hikari_asset::{Asset, AssetManager, Loader, Saver, AssetManagerBuilder};
 use hikari_systems::*;
 
 use rayon::ThreadPoolBuilder;
 use winit::{
-    event::Event,
+    event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
+    window::{Window},
 };
 
 use crate::Plugin;
@@ -116,8 +116,8 @@ impl Game {
         self
     }
     pub fn set_asset_dir(&mut self, path: impl AsRef<Path>) -> &mut Self {
-        self.asset_manager_builder.set_asset_dir(path);
-
+        // self.asset_manager_builder.set(path);
+        unimplemented!();
         self
     }
     pub fn window(&mut self) -> SysRefMut<Window> {
@@ -155,28 +155,35 @@ impl Game {
             result.expect("Failed to Initialize Game");
         }
 
-        event_loop.run(move |event, _, control_flow| {
+        event_loop.run(move |event, loop_| {
             {
                 let mut window = state.get_mut::<Window>().unwrap();
                 for hook in &mut hooks {
-                    (hook)(&state, &mut window, &event, control_flow);
+                    let mut control_flow = loop_.control_flow();
+                    (hook)(&state, &mut window, &event, &mut control_flow);
+                    if loop_.control_flow() != control_flow {
+                        loop_.set_control_flow(control_flow);
+                    }
                 }
             }
             match &event {
-                Event::RedrawRequested(_) => {
+                
+                Event::WindowEvent { window_id: _, event }=> if *event == WindowEvent::RedrawRequested {
                     hikari_dev::profile_scope!("Gameloop");
                     update.execute(&mut state);
                     hikari_dev::finish_frame!();
                 }
-                Event::MainEventsCleared => {
+                Event::AboutToWait => {
                     let window = state.get_mut::<Window>().unwrap();
+                    window.pre_present_notify();
                     window.request_redraw();
                 }
-                Event::LoopDestroyed => {
+                Event::LoopExiting => {
                     exit.execute(&mut state);
                 }
                 _ => {}
             }
-        })
+        }).unwrap();
+        unreachable!()
     }
 }

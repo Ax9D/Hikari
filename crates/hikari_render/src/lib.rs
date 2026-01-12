@@ -56,34 +56,35 @@ pub struct GfxPlugin {
     pub config: GfxConfig,
 }
 
-impl hikari_core::Plugin for GfxPlugin {
-    fn build(self, game: &mut hikari_core::Game) {
-        let gfx = Gfx::new(&mut game.window(), self.config).expect("Failed to create render context");
-        game.add_state(gfx);
+// #[cfg(not(target_os = "android"))]
+// impl hikari_core::Plugin for GfxPlugin {
+//     fn build(self, game: &mut hikari_core::Game) {
+//         let gfx = Gfx::new(&mut game.window(), self.config).expect("Failed to create render context");
+//         game.add_state(gfx);
 
-        #[cfg(feature = "renderdoc")]
-        game.add_plugin(renderdoc::RenderdocPlugin);
+//         #[cfg(feature = "renderdoc")]
+//         game.add_plugin(renderdoc::RenderdocPlugin);
 
-        game.add_task(
-            hikari_core::FIRST,
-            hikari_core::Task::new("Gfx New Frame", |gfx: &mut Gfx| {
-                gfx.new_frame().expect("Failed to update gfx");
-            }),
-        );
-        game.add_platform_event_hook(|state, window, event, _control| match event {
-            winit::event::Event::WindowEvent { window_id, event } => match event {
-                winit::event::WindowEvent::Resized(size) => {
-                    if !(size.width == 0 || size.height == 0) {
-                        state
-                            .get_mut::<Gfx>()
-                            .unwrap()
-                            .resize(size.width, size.height)
-                            .expect("Failed to resize swapchain");
-                    }
-                }
-                _ => {}
-            },
-            _ => {}
-        });
-    }
-}
+//         game.add_task(
+//             hikari_core::FIRST,
+//             hikari_core::Task::new("Gfx New Frame", |gfx: &mut Gfx| {
+//                 gfx.new_frame().expect("Failed to update gfx");
+//             }),
+//         );
+//         game.add_platform_event_hook(|state, window, event, _control| match event {
+//             winit::event::Event::WindowEvent { window_id, event } => match event {
+//                 winit::event::WindowEvent::Resized(size) => {
+//                     if !(size.width == 0 || size.height == 0) {
+//                         state
+//                             .get_mut::<Gfx>()
+//                             .unwrap()
+//                             .resize(size.width, size.height)
+//                             .expect("Failed to resize swapchain");
+//                     }
+//                 }
+//                 _ => {}
+//             },
+//             _ => {}
+//         });
+//     }
+// }

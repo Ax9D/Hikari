@@ -110,7 +110,7 @@ impl PhysicalDevice {
             .find(|(_, props)| {
                 props
                     .queue_flags
-                    .contains(qf::GRAPHICS | qf::COMPUTE | qf::TRANSFER)
+                    .contains(qf::GRAPHICS )
             })
             .map(|(ix, _)| ix as u32)
     }
@@ -862,11 +862,11 @@ bitflags::bitflags! {
 
 impl Default for Features {
     fn default() -> Self {
-        Features::SAMPLER_ANISOTROPY
-            | Features::FILL_MODE_NON_SOLID
-            | Features::DEPTH_CLAMP
-            | Features::WIDE_LINES
-            | Features::SHADER_SAMPLED_IMAGE_ARRAY_DYNAMIC_INDEXING
+        // Features::SAMPLER_ANISOTROPY
+            // | Features::FILL_MODE_NON_SOLID
+            // | Features::DEPTH_CLAMP
+            // | Features::WIDE_LINES
+             Features::SHADER_SAMPLED_IMAGE_ARRAY_DYNAMIC_INDEXING
             | Features::SHADER_STORAGE_IMAGE_ARRAY_DYNAMIC_INDEXING
             | Features::SHADER_UNIFORM_BUFFER_ARRAY_DYNAMIC_INDEXING
             | Features::SHADER_STORAGE_BUFFER_ARRAY_DYNAMIC_INDEXING

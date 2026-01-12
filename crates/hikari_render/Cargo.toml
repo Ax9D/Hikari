@@ -6,14 +6,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-
-
 [[example]]
 name = "simplegraph"
 
 [dependencies]
 hikari_dev = {path = "../hikari_dev"}
-hikari_core = {path = "../hikari_core"}
 hikari_imgui = {path = "../hikari_imgui", optional = true}
 hikari_math = {path = "../hikari_math"}
 hikari_utils = {path = "../hikari_utils"}
@@ -52,7 +49,7 @@ image = "0.24"
 rayon = "1"
 
 [features]
-default = ["imgui-support"]
+default = []
 imgui-support = ["hikari_imgui/backend"]
 aftermath = ["nvidia-aftermath-rs"]
 renderdoc = ["dep:renderdoc"]
